@@ -1,4 +1,4 @@
-import { Workflow, WorkflowFormData, WorkflowStatus } from '@/types'
+import { Workflow, WorkflowFormData, WorkflowStatus, Job } from '@/types/workflow'
 
 // Simulate API delays
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -16,6 +16,7 @@ export class WorkflowService {
       owner: data.team,
       status: data.workflowType === 'manual' ? 'manual' : 'scheduled',
       type: data.workflowType,
+      jobs: [], // Initialize with empty jobs array
       lastRun: undefined,
       nextRun: data.workflowType === 'scheduled' ? new Date(Date.now() + 24 * 60 * 60 * 1000) : undefined,
       createdAt: new Date(),
@@ -103,5 +104,73 @@ export class WorkflowService {
         error: 'Connection timeout to external API'
       }
     ]
+  }
+
+  // Create a new job within a workflow
+  static async createJob(job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>): Promise<Job> {
+    await delay(1000)
+    
+    const newJob: Job = {
+      ...job,
+      id: `job-${Date.now()}`,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }
+    
+    console.log(`Created new job: ${newJob.name} in workflow ${newJob.workflowId}`)
+    return newJob
+  }
+
+  // Update job configuration
+  static async updateJob(jobId: string, updates: Partial<Job>): Promise<Job> {
+    await delay(800)
+    
+    const updatedJob: Job = {
+      id: jobId,
+      workflowId: updates.workflowId || '',
+      name: updates.name || 'Updated Job',
+      description: updates.description || 'Updated description',
+      type: updates.type || 'file-based',
+      order: updates.order || 1,
+      sourceConfig: updates.sourceConfig || {
+        id: '',
+        name: '',
+        type: 'csv',
+        connection: {}
+      },
+      destinationConfig: updates.destinationConfig || {
+        bronzeConfig: { enabled: true, tableName: '', storageFormat: 'parquet' }
+      },
+      transformationConfig: updates.transformationConfig,
+      validationConfig: updates.validationConfig,
+      status: updates.status || 'configured',
+      lastRun: updates.lastRun,
+      createdAt: updates.createdAt || new Date(),
+      updatedAt: new Date()
+    }
+    
+    console.log(`Updated job ${jobId}`)
+    return updatedJob
+  }
+
+  // Delete a job
+  static async deleteJob(jobId: string): Promise<void> {
+    await delay(600)
+    console.log(`Deleted job ${jobId}`)
+  }
+
+  // Test data source connection
+  static async testDataSourceConnection(sourceConfig: any): Promise<{ success: boolean; message: string }> {
+    await delay(2000)
+    
+    // Mock connection test
+    const success = Math.random() > 0.2 // 80% success rate
+    
+    return {
+      success,
+      message: success 
+        ? 'Connection successful' 
+        : 'Connection failed: Unable to reach host'
+    }
   }
 }

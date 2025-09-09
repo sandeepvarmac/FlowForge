@@ -240,7 +240,7 @@ export default function WorkflowsPage() {
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 text-sm border-t border-border pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 text-sm border-t border-border pt-4">
                   <div>
                     <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
                     <p className="font-semibold text-foreground mt-1">{workflow.application}</p>
@@ -248,6 +248,10 @@ export default function WorkflowsPage() {
                   <div>
                     <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Owner</span>
                     <p className="font-semibold text-foreground mt-1">{workflow.owner}</p>
+                  </div>
+                  <div>
+                    <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Jobs</span>
+                    <p className="font-semibold text-foreground mt-1">{workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''}</p>
                   </div>
                   <div>
                     <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Created</span>

@@ -1,7 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useReducer, ReactNode } from 'react'
-import { Workflow, DashboardMetrics } from '@/types'
+import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react'
+import { DashboardMetrics } from '@/types'
+import { Workflow, Job } from '@/types/workflow'
+import { mockWorkflows } from '@/lib/mock-data'
 
 interface AppState {
   workflows: Workflow[]
@@ -17,6 +19,9 @@ type AppAction =
   | { type: 'ADD_WORKFLOW'; payload: Workflow }
   | { type: 'UPDATE_WORKFLOW'; payload: Workflow }
   | { type: 'DELETE_WORKFLOW'; payload: string }
+  | { type: 'ADD_JOB'; payload: { workflowId: string; job: Job } }
+  | { type: 'UPDATE_JOB'; payload: { workflowId: string; job: Job } }
+  | { type: 'DELETE_JOB'; payload: { workflowId: string; jobId: string } }
   | { type: 'SET_DASHBOARD_METRICS'; payload: DashboardMetrics }
 
 const initialState: AppState = {
@@ -48,6 +53,38 @@ function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         workflows: state.workflows.filter(w => w.id !== action.payload)
       }
+    case 'ADD_JOB':
+      return {
+        ...state,
+        workflows: state.workflows.map(w => 
+          w.id === action.payload.workflowId 
+            ? { ...w, jobs: [...w.jobs, action.payload.job] }
+            : w
+        )
+      }
+    case 'UPDATE_JOB':
+      return {
+        ...state,
+        workflows: state.workflows.map(w => 
+          w.id === action.payload.workflowId 
+            ? { 
+                ...w, 
+                jobs: w.jobs.map(j => 
+                  j.id === action.payload.job.id ? action.payload.job : j
+                )
+              }
+            : w
+        )
+      }
+    case 'DELETE_JOB':
+      return {
+        ...state,
+        workflows: state.workflows.map(w => 
+          w.id === action.payload.workflowId 
+            ? { ...w, jobs: w.jobs.filter(j => j.id !== action.payload.jobId) }
+            : w
+        )
+      }
     case 'SET_DASHBOARD_METRICS':
       return { ...state, dashboardMetrics: action.payload }
     default:
@@ -62,6 +99,11 @@ const AppContext = createContext<{
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
+
+  useEffect(() => {
+    // Initialize with mock data
+    dispatch({ type: 'SET_WORKFLOWS', payload: mockWorkflows })
+  }, [])
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

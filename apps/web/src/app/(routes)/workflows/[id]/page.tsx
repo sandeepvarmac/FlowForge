@@ -4,9 +4,10 @@ import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
 import { useAppContext } from '@/lib/context/app-context'
-import { useWorkflowActions } from '@/hooks'
+import { useWorkflowActions, useJobActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
-import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle } from 'lucide-react'
+import { CreateJobModal } from '@/components/jobs'
+import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
 
 const getStatusVariant = (status: string) => {
   switch (status) {
@@ -38,8 +39,10 @@ export default function WorkflowDetailPage() {
   const router = useRouter()
   const { state } = useAppContext()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, isLoading } = useWorkflowActions()
+  const { createJob } = useJobActions()
   const [executions, setExecutions] = React.useState<WorkflowExecution[]>([])
   const [loadingExecutions, setLoadingExecutions] = React.useState(false)
+  const [createJobModalOpen, setCreateJobModalOpen] = React.useState(false)
   
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
@@ -208,6 +211,151 @@ export default function WorkflowDetailPage() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Job Pipeline */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              Job Pipeline ({workflow.jobs.length} jobs)
+            </CardTitle>
+            <Button 
+              variant="outline"
+              onClick={() => setCreateJobModalOpen(true)}
+            >
+              <span className="mr-2">+</span>
+              Add Job
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {workflow.jobs.length === 0 ? (
+              <div className="text-center py-8 text-foreground-muted">
+                <Activity className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                <p>No jobs configured</p>
+                <p className="text-sm">Add jobs to define your data pipeline</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {workflow.jobs
+                  .sort((a, b) => a.order - b.order)
+                  .map((job, index) => (
+                    <div key={job.id} className="relative">
+                      {/* Job Card */}
+                      <div className="border border-border rounded-lg p-4 hover:bg-background-secondary transition-colors">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 bg-primary-50 rounded-lg flex items-center justify-center mt-1">
+                              {job.type === 'file-based' && <FileText className="w-4 h-4 text-primary" />}
+                              {job.type === 'database' && <Database className="w-4 h-4 text-primary" />}
+                              {job.type === 'api' && <Cloud className="w-4 h-4 text-primary" />}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-semibold text-foreground">{job.name}</h4>
+                                <Badge variant={
+                                  job.status === 'completed' ? 'success' :
+                                  job.status === 'failed' ? 'destructive' :
+                                  job.status === 'running' ? 'default' :
+                                  'secondary'
+                                }>
+                                  {job.status}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-foreground-muted mb-2">{job.description}</p>
+                              
+                              {/* Source Info */}
+                              <div className="text-xs text-foreground-muted">
+                                <span className="font-medium">Source:</span> {job.sourceConfig.name} ({job.sourceConfig.type})
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right text-xs text-foreground-muted">
+                            <div>Order: {job.order}</div>
+                            {job.lastRun && (
+                              <div className="mt-1">
+                                Last run: {new Intl.DateTimeFormat('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                }).format(job.lastRun)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Pipeline Layers */}
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                            <span className="text-foreground-muted">Bronze</span>
+                            {job.destinationConfig.bronzeConfig.enabled && (
+                              <CheckCircle className="w-3 h-3 text-green-600" />
+                            )}
+                          </div>
+                          
+                          {job.destinationConfig.silverConfig?.enabled && (
+                            <>
+                              <ArrowRight className="w-3 h-3 text-foreground-muted" />
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                                <span className="text-foreground-muted">Silver</span>
+                                <CheckCircle className="w-3 h-3 text-green-600" />
+                              </div>
+                            </>
+                          )}
+                          
+                          {job.destinationConfig.goldConfig?.enabled && (
+                            <>
+                              <ArrowRight className="w-3 h-3 text-foreground-muted" />
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                <span className="text-foreground-muted">Gold</span>
+                                <CheckCircle className="w-3 h-3 text-green-600" />
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Validation & Transformation Info */}
+                        {(job.transformationConfig || job.validationConfig) && (
+                          <div className="mt-3 pt-3 border-t border-border text-xs">
+                            <div className="flex gap-4">
+                              {job.transformationConfig && (
+                                <div className="text-foreground-muted">
+                                  <span className="font-medium">Transformations:</span> {job.transformationConfig.columnMappings.length} mappings
+                                  {job.transformationConfig.lookups && job.transformationConfig.lookups.length > 0 && (
+                                    <span>, {job.transformationConfig.lookups.length} lookups</span>
+                                  )}
+                                </div>
+                              )}
+                              {job.validationConfig && (
+                                <div className="text-foreground-muted">
+                                  <span className="font-medium">Validations:</span> 
+                                  {job.validationConfig.dataQualityRules?.length || 0} DQ rules,
+                                  {job.validationConfig.reconciliationRules?.length || 0} reconciliation rules
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Connector Arrow (except for last job) */}
+                      {index < workflow.jobs.length - 1 && (
+                        <div className="flex justify-center my-2">
+                          <div className="w-6 h-6 bg-primary-50 rounded-full flex items-center justify-center">
+                            <ArrowRight className="w-4 h-4 text-primary" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -403,6 +551,14 @@ export default function WorkflowDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Create Job Modal */}
+      <CreateJobModal
+        open={createJobModalOpen}
+        onOpenChange={setCreateJobModalOpen}
+        workflowId={workflowId}
+        onJobCreate={createJob}
+      />
     </div>
   )
 }
