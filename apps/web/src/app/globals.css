@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 255 255 255;
+  --fg: 17 24 39;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 17 24 39;
+    --fg: 243 244 246;
+  }
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
+}
+

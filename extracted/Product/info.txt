@@ -1,0 +1,10 @@
+Title:          Untitled document
+Producer:       Skia/PDF m141 Google Docs Renderer
+Tagged:         yes
+Form:           none
+Pages:          13
+Encrypted:      no
+Page size:      596 x 842 pts (A4) (rotated 0 degrees)
+File size:      296796 bytes
+Optimized:      no
+PDF version:    1.4
