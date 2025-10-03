@@ -11,6 +11,10 @@ export interface Workflow {
   nextRun?: Date
   createdAt: Date
   updatedAt: Date
+  // EDP-specific fields
+  businessUnit?: string
+  notificationEmail?: string
+  tags?: string[]
 }
 
 export type WorkflowStatus = 

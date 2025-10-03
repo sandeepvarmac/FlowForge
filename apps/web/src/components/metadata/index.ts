@@ -1,0 +1,1 @@
+export { MetadataCatalog } from './metadata-catalog'

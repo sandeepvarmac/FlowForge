@@ -56,7 +56,7 @@ export function FormError({ children, className }: FormErrorProps) {
   if (!children) return null
   
   return (
-    <p className={cn("text-sm text-red-600", className)}>
+    <p className={cn("text-sm text-error", className)}>
       {children}
     </p>
   )

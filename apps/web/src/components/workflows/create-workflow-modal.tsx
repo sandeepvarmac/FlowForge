@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Button, Input } from "@/components/ui"
+import { Button, Input, Badge } from "@/components/ui"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { FormField, FormLabel, FormError, FormDescription, Select, Textarea } from "@/components/ui/form"
+import { X } from "lucide-react"
 import { WorkflowFormData, WorkflowType } from "@/types"
 import { useAppContext } from "@/lib/context/app-context"
 
@@ -19,24 +20,62 @@ const workflowTypes: { value: WorkflowType; label: string; description: string }
 ]
 
 const businessUnits = [
-  'Finance',
-  'Marketing', 
+  'Fund Accounting',
+  'Investment Management',
+  'Portfolio Analytics',
+  'Risk Management',
   'Operations',
+  'Marketing',
   'IT',
-  'HR',
-  'Sales',
+  'Finance',
   'Legal',
-  'Product'
+  'Compliance'
 ]
 
 const applications = [
-  'MDM',
-  'Salesforce',
-  'SAP',
+  'ILPA',
+  'Investran',
+  'Mailchimp',
+  'SharePoint',
+  'SQL Server',
   'Oracle',
-  'ServiceNow',
-  'Workday',
-  'Custom Application'
+  'Snowflake',
+  'Salesforce',
+  'Custom Application',
+  'CRM Analytics',
+  'Trade Processing'
+]
+
+const teams = [
+  'Data Engineering',
+  'Fund Accounting Team',
+  'Marketing Team',
+  'Operations Team',
+  'Investment Analytics',
+  'Risk Analytics',
+  'Portfolio Management',
+  'Data Science',
+  'IT Operations'
+]
+
+const tags = [
+  'daily',
+  'weekly',
+  'monthly',
+  'real-time',
+  'batch',
+  'csv',
+  'database',
+  'api',
+  'validation',
+  'reconciliation',
+  'reporting',
+  'analytics',
+  'etl',
+  'customers',
+  'trades',
+  'nav',
+  'performance'
 ]
 
 export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalProps) {
@@ -44,6 +83,8 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
   const [loading, setLoading] = React.useState(false)
   const [step, setStep] = React.useState(1)
   const [errors, setErrors] = React.useState<Partial<WorkflowFormData>>({})
+  const [tagInput, setTagInput] = React.useState('')
+  const [showTagSuggestions, setShowTagSuggestions] = React.useState(false)
   
   const [formData, setFormData] = React.useState<WorkflowFormData>({
     name: '',
@@ -77,6 +118,9 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
       if (!formData.businessUnit) newErrors.businessUnit = 'Business unit is required'
       if (!formData.team.trim()) newErrors.team = 'Team is required'
       if (!formData.workflowType) newErrors.workflowType = 'Workflow type is required'
+      if (formData.notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.notificationEmail)) {
+        newErrors.notificationEmail = 'Please enter a valid email address'
+      }
     }
 
     setErrors(newErrors)
@@ -110,10 +154,15 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
         owner: formData.team,
         status: 'manual' as const,
         type: formData.workflowType,
+        jobs: [], // Initialize empty jobs array
         lastRun: undefined,
         nextRun: undefined,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        // Add missing EDP fields
+        businessUnit: formData.businessUnit,
+        notificationEmail: formData.notificationEmail,
+        tags: formData.tags
       }
 
       dispatch({ type: 'ADD_WORKFLOW', payload: newWorkflow })
@@ -142,8 +191,34 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
   const handleClose = () => {
     setStep(1)
     setErrors({})
+    setTagInput('')
+    setShowTagSuggestions(false)
     onOpenChange(false)
   }
+
+  const addTag = (tag: string) => {
+    if (tag && !formData.tags.includes(tag)) {
+      updateField('tags', [...formData.tags, tag])
+    }
+    setTagInput('')
+    setShowTagSuggestions(false)
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    updateField('tags', formData.tags.filter(tag => tag !== tagToRemove))
+  }
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault()
+      addTag(tagInput.trim().toLowerCase())
+    }
+  }
+
+  const filteredTagSuggestions = tags.filter(tag => 
+    tag.toLowerCase().includes(tagInput.toLowerCase()) && 
+    !formData.tags.includes(tag)
+  )
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -172,7 +247,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6">
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
           {step === 1 && (
             <div className="space-y-6">
               <div className="text-sm font-medium text-foreground mb-4">
@@ -242,12 +317,16 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
 
               <FormField>
                 <FormLabel htmlFor="team" required>Team</FormLabel>
-                <Input
+                <Select
                   id="team"
-                  placeholder="Enter team name"
                   value={formData.team}
                   onChange={(e) => updateField('team', e.target.value)}
-                />
+                >
+                  <option value="">Select team</option>
+                  {teams.map((team) => (
+                    <option key={team} value={team}>{team}</option>
+                  ))}
+                </Select>
                 <FormError>{errors.team}</FormError>
               </FormField>
 
@@ -275,12 +354,73 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
                 <Input
                   id="notificationEmail"
                   type="email"
-                  placeholder="Enter notification email"
+                  placeholder="Enter notification email (e.g., team@company.com)"
                   value={formData.notificationEmail}
                   onChange={(e) => updateField('notificationEmail', e.target.value)}
                 />
                 <FormDescription>
-                  Optional: Email address for workflow notifications
+                  Optional: Email address for workflow failure notifications
+                </FormDescription>
+                <FormError>{errors.notificationEmail}</FormError>
+              </FormField>
+
+              <FormField>
+                <FormLabel htmlFor="tags">Tags</FormLabel>
+                <div className="space-y-2">
+                  {/* Tag display */}
+                  {formData.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded-md border border-primary-200"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => removeTag(tag)}
+                            className="ml-1 text-primary-500 hover:text-primary-700 focus:outline-none"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Tag input */}
+                  <div className="relative">
+                    <Input
+                      id="tags"
+                      placeholder="Type to add tags (e.g., daily, csv, customers)"
+                      value={tagInput}
+                      onChange={(e) => {
+                        setTagInput(e.target.value)
+                        setShowTagSuggestions(e.target.value.length > 0)
+                      }}
+                      onKeyDown={handleTagInputKeyDown}
+                      onFocus={() => setShowTagSuggestions(tagInput.length > 0)}
+                    />
+                    
+                    {/* Tag suggestions */}
+                    {showTagSuggestions && filteredTagSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-border rounded-md shadow-lg max-h-32 overflow-y-auto">
+                        {filteredTagSuggestions.slice(0, 6).map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-background-secondary focus:outline-none focus:bg-background-secondary"
+                            onClick={() => addTag(tag)}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <FormDescription>
+                  Optional: Add tags to categorize and filter workflows
                 </FormDescription>
               </FormField>
             </div>

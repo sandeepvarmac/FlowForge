@@ -102,17 +102,17 @@ export default function Page() {
 
       {/* Performance and Activity Row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
-        <div className="xl:col-span-2 order-2 xl:order-1">
+        <div className="xl:col-span-2">
           <SimpleLineChart
             title="System Performance (Last 24 Hours)"
             data={mockPerformanceData}
             dataKey="responseTime"
             color="#059669"
-            height={300}
+            height={350}
           />
         </div>
-        
-        <Card className="shadow-corporate-lg order-1 xl:order-2">
+
+        <Card className="shadow-corporate-lg">
           <CardHeader className="border-b border-border">
             <CardTitle className="flex items-center gap-2 text-base md:text-lg">
               <Clock className="w-4 h-4 md:w-5 md:h-5 text-primary" />
@@ -120,11 +120,11 @@ export default function Page() {
               <div className="w-2 h-2 md:w-3 md:h-3 bg-primary rounded-full animate-pulse"></div>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 max-h-[300px] md:max-h-[350px] overflow-y-auto">
+          <CardContent className="p-0 max-h-[350px] overflow-y-auto">
             <div className="space-y-0">
               {mockRecentActivities.slice(0, 6).map((activity, index) => (
-                <div 
-                  key={activity.id} 
+                <div
+                  key={activity.id}
                   className="flex items-center space-x-3 p-3 md:p-4 hover:bg-background-tertiary transition-colors border-b border-border last:border-b-0"
                 >
                   <div className={`w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -154,7 +154,7 @@ export default function Page() {
                   <div className={`text-xs px-2 py-1 rounded-full font-medium border flex-shrink-0 ${
                     activity.status === 'success' ? 'text-success bg-green-50 border-green-200' :
                     activity.status === 'failed' ? 'text-error bg-red-50 border-red-200' :
-                    activity.status === 'running' ? 'text-primary bg-primary-50 border-primary-200' : 
+                    activity.status === 'running' ? 'text-primary bg-primary-50 border-primary-200' :
                     'text-gray-600 bg-gray-50 border-gray-200'
                   }`}>
                     {activity.status}

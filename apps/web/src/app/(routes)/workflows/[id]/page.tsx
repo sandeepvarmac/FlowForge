@@ -6,7 +6,8 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/compo
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions, useJobActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
-import { CreateJobModal } from '@/components/jobs'
+import { CreateJobModal, JobExecutionModal } from '@/components/jobs'
+import { MetadataCatalog } from '@/components/metadata'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
 
 const getStatusVariant = (status: string) => {
@@ -43,6 +44,10 @@ export default function WorkflowDetailPage() {
   const [executions, setExecutions] = React.useState<WorkflowExecution[]>([])
   const [loadingExecutions, setLoadingExecutions] = React.useState(false)
   const [createJobModalOpen, setCreateJobModalOpen] = React.useState(false)
+  const [runningJobs, setRunningJobs] = React.useState<Set<string>>(new Set())
+  const [executionModalOpen, setExecutionModalOpen] = React.useState(false)
+  const [selectedExecution, setSelectedExecution] = React.useState<{ jobId: string; jobName: string; executionId: string } | null>(null)
+  const [metadataCatalogOpen, setMetadataCatalogOpen] = React.useState(false)
   
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
@@ -96,6 +101,57 @@ export default function WorkflowDetailPage() {
     }
   }
 
+  const handleRunJob = async (jobId: string) => {
+    if (runningJobs.has(jobId)) return
+    
+    // Add job to running state
+    setRunningJobs(prev => new Set([...prev, jobId]))
+    
+    try {
+      // Simulate job execution process
+      console.log(`Starting job execution: ${jobId}`)
+      
+      // Update job status to running
+      // This would typically call an API endpoint
+      console.log('Job processing through Bronze/Silver/Gold layers...')
+      
+      // Simulate processing time (3 seconds)
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      // Job completed successfully
+      console.log(`Job ${jobId} completed successfully`)
+      
+      // Generate execution ID and show results
+      const executionId = `exec_${Date.now()}`
+      const job = workflow?.jobs.find(j => j.id === jobId)
+      
+      if (job) {
+        setSelectedExecution({
+          jobId,
+          jobName: job.name,
+          executionId
+        })
+        setExecutionModalOpen(true)
+      }
+      
+      // Here you would typically:
+      // 1. Update job status to 'completed' 
+      // 2. Update lastRun timestamp
+      // 3. Generate execution logs
+      // 4. Store execution results
+      
+    } catch (error) {
+      console.error(`Job ${jobId} failed:`, error)
+    } finally {
+      // Remove job from running state
+      setRunningJobs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(jobId)
+        return newSet
+      })
+    }
+  }
+
   return (
     <div className="space-y-6 md:space-y-8">
       {/* Header */}
@@ -135,6 +191,10 @@ export default function WorkflowDetailPage() {
               Resume
             </Button>
           )}
+          <Button variant="outline" onClick={() => setMetadataCatalogOpen(true)}>
+            <Database className="w-4 h-4 mr-2" />
+            Metadata Catalog
+          </Button>
           <Button variant="outline">
             <Settings className="w-4 h-4 mr-2" />
             Configure
@@ -272,18 +332,39 @@ export default function WorkflowDetailPage() {
                             </div>
                           </div>
                           
-                          <div className="text-right text-xs text-foreground-muted">
-                            <div>Order: {job.order}</div>
-                            {job.lastRun && (
-                              <div className="mt-1">
-                                Last run: {new Intl.DateTimeFormat('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                }).format(job.lastRun)}
-                              </div>
-                            )}
+                          <div className="flex flex-col gap-2">
+                            <div className="text-right text-xs text-foreground-muted">
+                              <div>Order: {job.order}</div>
+                              {job.lastRun && (
+                                <div className="mt-1">
+                                  Last run: {new Intl.DateTimeFormat('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  }).format(job.lastRun)}
+                                </div>
+                              )}
+                            </div>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleRunJob(job.id)}
+                              disabled={runningJobs.has(job.id)}
+                              className="text-xs"
+                            >
+                              {runningJobs.has(job.id) ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  Running
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3 h-3 mr-1" />
+                                  Run Job
+                                </>
+                              )}
+                            </Button>
                           </div>
                         </div>
 
@@ -558,6 +639,22 @@ export default function WorkflowDetailPage() {
         onOpenChange={setCreateJobModalOpen}
         workflowId={workflowId}
         onJobCreate={createJob}
+      />
+
+      {/* Job Execution Results Modal */}
+      {selectedExecution && (
+        <JobExecutionModal
+          open={executionModalOpen}
+          onOpenChange={setExecutionModalOpen}
+          jobName={selectedExecution.jobName}
+          executionId={selectedExecution.executionId}
+        />
+      )}
+
+      {/* Metadata Catalog Modal */}
+      <MetadataCatalog
+        open={metadataCatalogOpen}
+        onOpenChange={setMetadataCatalogOpen}
       />
     </div>
   )
