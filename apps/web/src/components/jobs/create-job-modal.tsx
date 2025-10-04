@@ -43,6 +43,8 @@ const initialFormData: JobFormData = {
     connection: {},
     fileConfig: {
       filePath: '',
+      filePattern: '',
+      uploadMode: 'single',
       encoding: 'utf-8',
       delimiter: ',',
       hasHeader: true,
@@ -54,17 +56,24 @@ const initialFormData: JobFormData = {
     bronzeConfig: {
       enabled: true,
       tableName: '',
-      storageFormat: 'parquet'
+      storageFormat: 'parquet',
+      loadStrategy: 'append',
+      auditColumns: true
     },
     silverConfig: {
       enabled: true,
       tableName: '',
-      storageFormat: 'parquet'
+      storageFormat: 'parquet',
+      mergeStrategy: 'merge',
+      surrogateKeyStrategy: 'auto_increment',
+      primaryKey: ''
     },
     goldConfig: {
       enabled: true,
       tableName: '',
-      storageFormat: 'iceberg'
+      storageFormat: 'parquet',
+      refreshStrategy: 'full_rebuild',
+      compression: 'zstd'
     }
   }
 }
@@ -308,7 +317,45 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                 </h3>
 
                 <FormField>
-                  <FormLabel required>CSV File</FormLabel>
+                  <FormLabel>Upload Mode</FormLabel>
+                  <Select
+                    value={formData.sourceConfig.fileConfig?.uploadMode || 'single'}
+                    onChange={(e) => updateSourceConfig({
+                      fileConfig: {
+                        ...formData.sourceConfig.fileConfig!,
+                        uploadMode: e.target.value as any
+                      }
+                    })}
+                  >
+                    <option value="single">Single File (Upload one CSV file)</option>
+                    <option value="pattern">Pattern Matching (e.g., customer_*.csv)</option>
+                    <option value="directory" disabled>Directory (Coming Soon)</option>
+                  </Select>
+                </FormField>
+
+                {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' && (
+                  <FormField>
+                    <FormLabel required>File Pattern</FormLabel>
+                    <Input
+                      value={formData.sourceConfig.fileConfig?.filePattern || ''}
+                      onChange={(e) => updateSourceConfig({
+                        fileConfig: {
+                          ...formData.sourceConfig.fileConfig!,
+                          filePattern: e.target.value
+                        }
+                      })}
+                      placeholder="customer_*.csv"
+                    />
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Example: customer_*.csv will match customer_2024.csv, customer_jan.csv, etc.
+                    </div>
+                  </FormField>
+                )}
+
+                <FormField>
+                  <FormLabel required>
+                    {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' ? 'Sample CSV File (for schema detection)' : 'CSV File'}
+                  </FormLabel>
                   <CSVFileUpload
                     onFileUpload={(file, schema, preview) => {
                       // Auto-generate table names from filename
@@ -554,14 +601,52 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   </FormField>
 
                   <FormField>
-                    <FormLabel>Partitioning</FormLabel>
+                    <FormLabel>Merge Strategy</FormLabel>
                     <Select
-                      value={(formData.destinationConfig.silverConfig?.partitionKeys && formData.destinationConfig.silverConfig.partitionKeys.length > 0) ? 'yes' : 'none'}
-                      disabled
+                      value={formData.destinationConfig.silverConfig?.mergeStrategy || 'merge'}
+                      onChange={(e) => updateDestinationConfig({
+                        silverConfig: { ...formData.destinationConfig.silverConfig!, mergeStrategy: e.target.value as any }
+                      })}
+                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
                     >
-                      <option value="none">None (Coming Soon)</option>
-                      <option value="date" disabled>By Date (Coming Soon)</option>
-                      <option value="custom" disabled>Custom (Coming Soon)</option>
+                      <option value="merge">Merge/Upsert (Recommended)</option>
+                      <option value="full_refresh">Full Refresh</option>
+                      <option value="append">Append Only</option>
+                    </Select>
+                  </FormField>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField>
+                    <FormLabel>Primary Key (for Merge)</FormLabel>
+                    <Select
+                      value={formData.destinationConfig.silverConfig?.primaryKey || ''}
+                      onChange={(e) => updateDestinationConfig({
+                        silverConfig: { ...formData.destinationConfig.silverConfig!, primaryKey: e.target.value }
+                      })}
+                      disabled={formData.destinationConfig.silverConfig?.enabled === false || formData.destinationConfig.silverConfig?.mergeStrategy !== 'merge'}
+                    >
+                      <option value="">Select primary key...</option>
+                      {formData._detectedSchema?.map(col => (
+                        <option key={col.name} value={col.name}>
+                          {col.name} ({col.type})
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+
+                  <FormField>
+                    <FormLabel>Surrogate Key Strategy</FormLabel>
+                    <Select
+                      value={formData.destinationConfig.silverConfig?.surrogateKeyStrategy || 'auto_increment'}
+                      onChange={(e) => updateDestinationConfig({
+                        silverConfig: { ...formData.destinationConfig.silverConfig!, surrogateKeyStrategy: e.target.value as any }
+                      })}
+                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                    >
+                      <option value="auto_increment">Auto Increment (Recommended)</option>
+                      <option value="uuid">UUID</option>
+                      <option value="use_existing">Use Existing Column</option>
                     </Select>
                   </FormField>
                 </div>
