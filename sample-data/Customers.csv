@@ -1,0 +1,31 @@
+customer_id,first_name,last_name,email,phone,registration_date,status,country,revenue,last_purchase_date,acquisition_channel,customer_segment
+1,John,Smith,john.smith@email.com,+1-555-123-4567,2023-01-15,active,USA,12500.00,2024-08-15,website,enterprise
+2,jane,DOE,jane.doe@gmail.com,(555) 234-5678,2023-02-20,active,usa,8750.50,2024-09-01,referral,premium
+3,MICHAEL,johnson,michael@company.com,555.345.6789,2023-03-10,inactive,Canada,0.00,,email,standard
+4,Sarah,Wilson,sarah.wilson@invalid-email,+1 555 456 7890,2023-04-05,active,UK,25000.75,2024-09-10,social_media,enterprise
+5,David,Brown,,555-567-8901,2023-05-12,pending,Germany,3200.25,2024-07-22,advertisement,standard
+6,Emily,Davis,emily.davis@email.com,+44 20 1234 5678,2023-06-18,active,UK,15750.00,2024-09-05,website,premium
+7,Robert,Miller,robert.miller@gmail.com,555123456,2023-07-25,active,USA,45000.00,2024-09-12,partnership,enterprise
+8,Lisa,Taylor,lisa@company.org,(044) 123-456-789,2023-08-30,inactive,Switzerland,0.00,2024-05-10,email,standard
+9,James,Anderson,james.anderson@email.com,+1-555-678-9012,2023-09-14,active,Canada,18500.50,2024-09-08,referral,premium
+10,Michelle,White,michelle.white@gmail.com,555 789 0123,2023-10-22,active,USA,8900.25,2024-09-11,website,premium
+11,Christopher,Martin,chris@invalid.domain,+49 30 12345678,2023-11-07,pending,Germany,0.00,,social_media,standard
+12,Amanda,Garcia,amanda.garcia@email.com,(555) 890-1234,2023-12-15,active,Mexico,12750.75,2024-08-28,advertisement,premium
+13,Daniel,Rodriguez,daniel@company.com,555-901-2345,2024-01-20,active,Spain,22000.00,2024-09-09,partnership,enterprise
+14,Jessica,Lewis,jessica.lewis@gmail.com,+34 91 123 4567,2024-02-28,active,Spain,16800.50,2024-09-07,website,premium
+15,Matthew,Lee,,555.012.3456,2024-03-15,inactive,South Korea,0.00,2024-06-30,email,standard
+16,Ashley,Walker,ashley.walker@email.com,+82 2 1234 5678,2024-04-10,active,South Korea,31000.25,2024-09-06,referral,enterprise
+17,Joshua,Hall,joshua@company.org,(555) 123-4567,2024-05-05,pending,USA,5500.00,2024-08-20,social_media,standard
+18,Stephanie,Allen,stephanie.allen@gmail.com,555-234-5678,2024-06-12,active,Canada,19250.75,2024-09-04,website,premium
+19,Ryan,Young,ryan.young@invalid,+1 (555) 345-6789,2024-07-18,active,USA,27500.00,2024-09-03,advertisement,enterprise
+20,Nicole,King,nicole.king@email.com,555 456 7890,2024-08-25,active,Australia,14200.50,2024-09-02,partnership,premium
+21,Brandon,Wright,brandon@company.com,+61 2 1234 5678,2024-09-01,active,Australia,38000.00,2024-09-10,website,enterprise
+22,Samantha,Lopez,,555.567.8901,2024-09-10,pending,Mexico,0.00,,referral,standard
+23,Eric,Hill,eric.hill@gmail.com,(555) 678-9012,2024-09-05,active,USA,11750.25,2024-09-08,email,premium
+24,Rachel,Scott,rachel@invalid-domain.com,555-789-0123,2024-08-15,inactive,UK,0.00,2024-07-15,social_media,standard
+25,Kevin,Green,kevin.green@email.com,+44 20 9876 5432,2024-07-22,active,UK,21500.75,2024-09-01,advertisement,enterprise
+26,John,Smith,john.smith.duplicate@email.com,+1-555-999-8888,2024-06-30,active,USA,9800.00,2024-08-25,website,premium
+27,Maria,Gonzalez,maria.gonzalez@gmail.com,+52 55 1234 5678,2024-05-18,active,Mexico,13400.50,2024-09-06,partnership,premium
+28,Thomas,Adams,thomas@company.org,(555) 000-1111,2024-04-12,pending,Germany,2100.00,2024-07-08,referral,standard
+29,Jennifer,Baker,jennifer.baker@email.com,555.111.2222,2024-03-28,active,USA,35500.25,2024-09-09,website,enterprise
+30,Andrew,Nelson,andrew@invalid,+1-555-222-3333,2024-02-14,inactive,Canada,0.00,2024-04-20,email,standard
