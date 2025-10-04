@@ -13,8 +13,13 @@ export interface Workflow {
   updatedAt: Date
   // EDP-specific fields
   businessUnit?: string
+  team?: string
+  environment?: 'dev' | 'qa' | 'prod'
+  dataClassification?: 'public' | 'internal' | 'confidential' | 'pii'
+  priority?: 'critical' | 'high' | 'medium' | 'low'
   notificationEmail?: string
   tags?: string[]
+  retentionDays?: number
 }
 
 export type WorkflowStatus = 
@@ -37,8 +42,12 @@ export interface WorkflowFormData {
   businessUnit: string
   team: string
   workflowType: WorkflowType
-  notificationEmail: string
-  tags: string[]
+  environment?: 'dev' | 'qa' | 'prod'
+  dataClassification?: 'public' | 'internal' | 'confidential' | 'pii'
+  priority?: 'critical' | 'high' | 'medium' | 'low'
+  notificationEmail?: string
+  tags?: string[]
+  retentionDays?: number
 }
 
 export interface WorkflowExecution {
@@ -77,10 +86,12 @@ export interface Job {
   updatedAt: Date
 }
 
-export type JobType = 
+export type JobType =
   | 'file-based'
   | 'database'
+  | 'nosql'
   | 'api'
+  | 'gold-analytics' // Special type for Gold layer that reads from multiple Silver tables
 
 export type JobStatus = 
   | 'configured'
@@ -101,15 +112,22 @@ export interface DataSourceConfig {
   apiConfig?: ApiSourceConfig
 }
 
-export type DataSourceType = 
+export type DataSourceType =
   | 'csv'
   | 'excel'
   | 'json'
+  | 'parquet'
   | 'sql-server'
   | 'postgresql'
   | 'oracle'
+  | 'mysql'
   | 'snowflake'
+  | 'mongodb'
+  | 'cassandra'
+  | 'documentdb'
   | 's3'
+  | 'azure-blob'
+  | 'gcs'
   | 'sftp'
   | 'api'
 
@@ -128,6 +146,8 @@ export interface ConnectionConfig {
 export interface FileSourceConfig {
   filePath: string
   filePattern?: string
+  uploadMode?: 'single' | 'pattern' | 'directory' // Single file, pattern match, or directory watch
+  matchedFiles?: string[] // List of files matched by pattern (populated after scan)
   encoding?: string
   delimiter?: string
   hasHeader: boolean
@@ -166,6 +186,16 @@ export interface LayerConfig {
   partitionKeys?: string[]
   storageFormat: 'parquet' | 'iceberg' | 'delta'
   retentionDays?: number
+  // Bronze-specific
+  loadStrategy?: 'append' | 'overwrite' // Bronze: timestamp-based append or overwrite
+  auditColumns?: boolean // Add _ingested_at, _source_file, _row_number
+  // Silver-specific
+  primaryKey?: string // Column to use for deduplication/merge
+  mergeStrategy?: 'merge' | 'full_refresh' | 'append' // Silver: upsert, truncate, or append
+  surrogateKeyStrategy?: 'auto_increment' | 'uuid' | 'use_existing' // How to generate _sk_id
+  // Gold-specific
+  refreshStrategy?: 'incremental' | 'full_rebuild' // Gold: incremental or full
+  compression?: 'snappy' | 'gzip' | 'zstd' | 'none'
 }
 
 // Transformation Configuration

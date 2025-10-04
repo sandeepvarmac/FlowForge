@@ -1,0 +1,21 @@
+product_id,product_name,category,subcategory,price,cost,stock_quantity,supplier,manufacturer_country
+P001,Laptop Pro 15,Electronics,Computers,1299.99,850.00,45,TechCorp,CN
+P002,Wireless Mouse,Electronics,Accessories,29.99,12.50,230,GadgetCo,CN
+P003,Office Chair Deluxe,Furniture,Office,449.99,220.00,18,ComfortSeating,US
+P004,Standing Desk,Furniture,Office,599.99,310.00,12,ErgoSolutions,DE
+P005,USB-C Hub,Electronics,Accessories,79.99,35.00,150,ConnectTech,CN
+P006,Mechanical Keyboard,Electronics,Accessories,149.99,65.00,85,TypeMaster,JP
+P007,4K Monitor 27,Electronics,Displays,499.99,280.00,32,ScreenPro,KR
+P008,Desk Lamp LED,Furniture,Lighting,59.99,22.00,95,BrightLife,CN
+P009,Webcam HD,Electronics,Accessories,89.99,42.00,110,VisionTech,TW
+P010,Noise Cancelling Headphones,Electronics,Audio,279.99,135.00,68,AudioMax,US
+P011,Portable SSD 1TB,Electronics,Storage,179.99,95.00,125,DataVault,KR
+P012,Ergonomic Footrest,Furniture,Office,39.99,15.00,75,ComfortZone,CN
+P013,Cable Management Box,Furniture,Accessories,24.99,8.50,200,OrganiPro,US
+P014,Laptop Stand,Electronics,Accessories,49.99,18.00,140,ElevateIT,CN
+P015,Wireless Charger,Electronics,Accessories,39.99,16.00,180,ChargeFast,CN
+P016,Smart Pen,Electronics,Accessories,99.99,48.00,55,WriteTech,JP
+P017,Document Scanner,Electronics,Office,249.99,130.00,28,ScanPro,JP
+P018,Desk Organizer,Furniture,Accessories,34.99,12.00,165,NeatSpace,CN
+P019,Blue Light Glasses,Health,Accessories,49.99,18.00,90,EyeCare,US
+P020,Air Purifier Desktop,Health,Office,129.99,65.00,42,BreatheEasy,KR

@@ -160,7 +160,7 @@ export async function executeJob(
 }
 
 /**
- * Bronze Layer: Read CSV and convert to Parquet (raw data)
+ * Bronze Layer: Read CSV and convert to Parquet (raw data with timestamp versioning)
  */
 async function processBronzeLayer(
   job: Job,
@@ -178,35 +178,71 @@ async function processBronzeLayer(
     dynamicTyping: false // Keep as strings for Bronze
   })
 
-  const data = parseResult.data as any[]
+  let data = parseResult.data as any[]
   const headers = parseResult.meta.fields || []
 
   addLog(`  → Parsed ${data.length} rows, ${headers.length} columns`)
 
-  // Create schema (all strings in Bronze)
-  const schema: ColumnSchema[] = headers.map(name => ({
-    name,
-    type: 'string'
-  }))
+  // Add audit columns if enabled (Bronze layer tracking)
+  const bronzeConfig = job.destinationConfig.bronzeConfig
+  if (bronzeConfig?.auditColumns !== false) {
+    const timestamp = new Date().toISOString()
+    const sourceFileName = sourceFilePath.split(/[\\/]/).pop() || 'unknown'
 
-  // Write to Parquet
-  const tableName = job.destinationConfig.bronzeConfig.tableName || 'bronze_data'
+    data = data.map((row, index) => ({
+      ...row,
+      _ingested_at: timestamp,
+      _source_file: sourceFileName,
+      _row_number: index + 1
+    }))
+
+    addLog(`  → Added audit columns: _ingested_at, _source_file, _row_number`)
+  }
+
+  // Create schema (all strings in Bronze + audit columns)
+  const schema: ColumnSchema[] = [
+    ...headers.map(name => ({ name, type: 'string' as const })),
+    ...(bronzeConfig?.auditColumns !== false ? [
+      { name: '_ingested_at', type: 'string' as const },
+      { name: '_source_file', type: 'string' as const },
+      { name: '_row_number', type: 'integer' as const }
+    ] : [])
+  ]
+
+  // Write to Parquet with timestamp versioning
+  const tableName = bronzeConfig?.tableName || 'bronze_data'
   const outputPath = `data/bronze/${job.workflowId}/${job.id}/${tableName}.parquet`
 
   writeParquet(data, schema, outputPath)
 
-  addLog(`  ✓ Bronze layer saved: ${data.length} records`)
+  // Save with versioning strategy
+  const fs = require('fs')
+  const parquetBuffer = fs.readFileSync(outputPath)
+  const { saveParquetFile } = require('../storage')
+  const versionedPath = saveParquetFile(
+    'bronze',
+    job.workflowId,
+    job.id,
+    tableName,
+    parquetBuffer,
+    { versioningStrategy: 'timestamp' }
+  )
+
+  // Remove temp file
+  fs.unlinkSync(outputPath)
+
+  addLog(`  ✓ Bronze layer saved with versioning: ${data.length} records`)
 
   return {
     data,
     schema,
     recordCount: data.length,
-    filePath: outputPath
+    filePath: versionedPath
   }
 }
 
 /**
- * Silver Layer: Apply transformations and data quality rules
+ * Silver Layer: Apply transformations, surrogate keys, and upsert logic
  */
 async function processSilverLayer(
   job: Job,
@@ -218,6 +254,7 @@ async function processSilverLayer(
 
   let data = [...bronzeData]
   const transformConfig = job.transformationConfig
+  const silverConfig = job.destinationConfig.silverConfig
 
   // Apply column mappings and type conversions
   if (transformConfig?.columnMappings) {
@@ -240,6 +277,13 @@ async function processSilverLayer(
                 break
               case 'trim':
                 value = value?.toString().trim()
+                break
+              case 'email_normalize':
+                value = value?.toString().toLowerCase().trim()
+                break
+              case 'phone_format':
+                // Basic E.164 formatting
+                value = value?.toString().replace(/\D/g, '')
                 break
             }
           })
@@ -289,27 +333,101 @@ async function processSilverLayer(
     }
   }
 
-  // Create schema with proper types
-  const schema: ColumnSchema[] = transformConfig?.columnMappings
-    ? transformConfig.columnMappings.map(mapping => ({
-        name: mapping.targetColumn,
-        type: mapping.dataType as any
-      }))
-    : bronzeSchema
+  // Read existing Silver data for upsert/merge logic
+  const { getCurrentSilverFile, readParquet: readParquetFile } = require('../storage')
+  const tableName = silverConfig?.tableName || 'silver_data'
+  const existingSilverPath = getCurrentSilverFile(job.workflowId, job.id, tableName)
 
-  // Write to Parquet
-  const tableName = job.destinationConfig.silverConfig?.tableName || 'silver_data'
+  let existingData: any[] = []
+  let nextSurrogateKey = 1
+
+  if (existingSilverPath) {
+    try {
+      existingData = readParquetFile(existingSilverPath)
+      // Find max surrogate key
+      const maxKey = Math.max(...existingData.map(r => r._sk_id || 0), 0)
+      nextSurrogateKey = maxKey + 1
+      addLog(`  → Loaded ${existingData.length} existing records (max SK: ${maxKey})`)
+    } catch (error) {
+      addLog(`  ⚠ Could not read existing Silver file, starting fresh`)
+    }
+  }
+
+  // Add surrogate keys to new records
+  const primaryKeyCol = silverConfig?.primaryKey || 'id'
+  const dataWithSK = validRecords.map((row, index) => ({
+    _sk_id: nextSurrogateKey + index,
+    ...row
+  }))
+
+  addLog(`  → Generated surrogate keys: ${nextSurrogateKey} - ${nextSurrogateKey + validRecords.length - 1}`)
+
+  // Perform upsert/merge
+  let mergedData: any[]
+
+  if (existingData.length > 0 && silverConfig?.loadStrategy === 'merge') {
+    // Create a map of existing records by primary key
+    const existingMap = new Map(existingData.map(r => [r[primaryKeyCol], r]))
+
+    // Upsert logic: Update existing, insert new
+    dataWithSK.forEach(newRow => {
+      const key = newRow[primaryKeyCol]
+      if (existingMap.has(key)) {
+        // Update existing record (keep same SK)
+        const existing = existingMap.get(key)
+        existingMap.set(key, { ...existing, ...newRow, _sk_id: existing._sk_id })
+      } else {
+        // Insert new record
+        existingMap.set(key, newRow)
+      }
+    })
+
+    mergedData = Array.from(existingMap.values())
+    addLog(`  → Merged: ${mergedData.length} total records (${dataWithSK.length} new/updated)`)
+  } else {
+    // Full refresh mode
+    mergedData = dataWithSK
+    addLog(`  → Full refresh: ${mergedData.length} records`)
+  }
+
+  // Create schema with surrogate key + proper types
+  const schema: ColumnSchema[] = [
+    { name: '_sk_id', type: 'integer' },
+    ...(transformConfig?.columnMappings
+      ? transformConfig.columnMappings.map(mapping => ({
+          name: mapping.targetColumn,
+          type: mapping.dataType as any
+        }))
+      : bronzeSchema.filter(s => !s.name.startsWith('_'))) // Exclude Bronze audit columns
+  ]
+
+  // Write to Parquet with 'current' versioning
   const outputPath = `data/silver/${job.workflowId}/${job.id}/${tableName}.parquet`
+  writeParquet(mergedData, schema, outputPath)
 
-  writeParquet(validRecords, schema, outputPath)
+  // Save with current + archive strategy
+  const fs = require('fs')
+  const parquetBuffer = fs.readFileSync(outputPath)
+  const { saveParquetFile } = require('../storage')
+  const versionedPath = saveParquetFile(
+    'silver',
+    job.workflowId,
+    job.id,
+    tableName,
+    parquetBuffer,
+    { versioningStrategy: 'current' }
+  )
 
-  addLog(`  ✓ Silver layer saved: ${validRecords.length} records`)
+  // Remove temp file
+  fs.unlinkSync(outputPath)
+
+  addLog(`  ✓ Silver layer saved: ${mergedData.length} records`)
 
   return {
-    data: validRecords,
+    data: mergedData,
     schema,
-    recordCount: validRecords.length,
-    filePath: outputPath
+    recordCount: mergedData.length,
+    filePath: versionedPath
   }
 }
 
