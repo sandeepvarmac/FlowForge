@@ -1,226 +1,233 @@
-"use client"
+'use client'
 
-import { MetricCard, SimpleLineChart, SimpleAreaChart, SimpleBarChart, SimplePieChart, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
-import { Activity, TrendingUp, AlertTriangle, CheckCircle, Clock, Server } from 'lucide-react'
-import { 
-  mockDashboardMetrics, 
-  mockRecentActivities, 
-  mockWorkflowTrends, 
-  mockPerformanceData, 
-  mockStatusDistribution,
-  generateMiniTrend 
-} from '@/lib/mock-data'
-import { formatDate } from '@/lib/utils'
+import * as React from 'react'
+import { useRouter } from 'next/navigation'
+import { Button, Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
+import { ArrowRight, Zap, Database, GitBranch, Sparkles, Shield, BarChart3, CheckCircle2, Clock, Eye } from 'lucide-react'
+import Image from 'next/image'
+import { CreateWorkflowModal } from '@/components/workflows'
 
-export default function Page() {
+export default function HomePage() {
+  const router = useRouter()
+  const [showCreateModal, setShowCreateModal] = React.useState(false)
+
+  const features = [
+    {
+      title: 'Medallion Architecture',
+      description: 'Automated Bronze, Silver, Gold data layers with full lineage tracking',
+      icon: Database,
+      status: 'available',
+      gradient: 'from-blue-500 to-cyan-500'
+    },
+    {
+      title: 'AI-Powered Intelligence',
+      description: 'Automatic schema detection, primary key analysis, and transformation suggestions',
+      icon: Sparkles,
+      status: 'available',
+      gradient: 'from-purple-500 to-pink-500'
+    },
+    {
+      title: 'Pattern Matching',
+      description: 'Process multiple files with glob patterns (e.g., customer_*.csv)',
+      icon: GitBranch,
+      status: 'available',
+      gradient: 'from-indigo-500 to-purple-500'
+    },
+    {
+      title: 'DuckDB Integration',
+      description: 'Build Snowflake schemas with dimensions and fact tables',
+      icon: BarChart3,
+      status: 'available',
+      gradient: 'from-green-500 to-emerald-500'
+    },
+    {
+      title: 'Data Reconciliation',
+      description: 'Automated validation, row counts, and drift detection',
+      icon: CheckCircle2,
+      status: 'coming-soon',
+      gradient: 'from-orange-500 to-red-500'
+    },
+    {
+      title: 'Downstream Feeds',
+      description: 'Push data to SFTP, databases, APIs, and cloud storage',
+      icon: Zap,
+      status: 'coming-soon',
+      gradient: 'from-yellow-500 to-orange-500'
+    },
+    {
+      title: 'Real-time Monitoring',
+      description: 'Track job executions, performance metrics, and data quality',
+      icon: Eye,
+      status: 'coming-soon',
+      gradient: 'from-teal-500 to-cyan-500'
+    },
+    {
+      title: 'Enterprise Security',
+      description: 'Role-based access control, audit logs, and compliance tracking',
+      icon: Shield,
+      status: 'coming-soon',
+      gradient: 'from-red-500 to-pink-500'
+    }
+  ]
+
+  const stats = [
+    { label: 'Data Layers', value: '3', description: 'Bronze, Silver, Gold' },
+    { label: 'Job Types', value: '5+', description: 'File, DB, API, Analytics' },
+    { label: 'AI Features', value: '4', description: 'Schema, Keys, Quality' },
+    { label: 'Integrations', value: '10+', description: 'Coming Soon' }
+  ]
+
   return (
-    <div className="space-y-6 md:space-y-8">
-      {/* Header */}
-      <div className="border-l-4 border-primary pl-6">
-        <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-foreground-secondary mt-2 text-lg">
-          Welcome to FlowForge - Your Workflow Management Platform
-        </p>
-        <p className="text-xs text-foreground-muted mt-1">
-          Last updated: {formatDate(mockDashboardMetrics.lastUpdated)}
-        </p>
-      </div>
-      
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <MetricCard
-          title="Workflow Runs Today"
-          value={mockDashboardMetrics.runsToday}
-          change={{
-            value: 12,
-            type: 'increase',
-            period: 'yesterday'
-          }}
-          icon={Activity}
-          trend={generateMiniTrend()}
-          variant="default"
-        />
-        
-        <MetricCard
-          title="Active Workflows"
-          value={mockDashboardMetrics.activeWorkflows}
-          change={{
-            value: 8,
-            type: 'increase',
-            period: 'last week'
-          }}
-          icon={CheckCircle}
-          trend={generateMiniTrend()}
-          variant="success"
-        />
-        
-        <MetricCard
-          title="Failed Runs"
-          value={mockDashboardMetrics.failures}
-          change={{
-            value: 15,
-            type: 'decrease',
-            period: 'yesterday'
-          }}
-          icon={AlertTriangle}
-          trend={generateMiniTrend()}
-          variant="error"
-        />
-        
-        <MetricCard
-          title="DQ Violations"
-          value={mockDashboardMetrics.dqViolations}
-          change={{
-            value: 5,
-            type: 'decrease',
-            period: 'yesterday'
-          }}
-          icon={TrendingUp}
-          trend={generateMiniTrend()}
-          variant="warning"
-        />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Hero Section */}
+      <div className="relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6">
-        <SimpleAreaChart
-          title="Workflow Executions (Last 7 Days)"
-          data={mockWorkflowTrends}
-          dataKey="executions"
-          color="#2563eb"
-          height={280}
-        />
-        
-        <SimplePieChart
-          title="Workflow Status Distribution"
-          data={mockStatusDistribution}
-          dataKey="value"
-          nameKey="name"
-          height={280}
-        />
-      </div>
+        <div className="max-w-7xl mx-auto px-6 py-24 sm:py-32">
+          <div className="text-center">
+            {/* Large Logo */}
+            <div className="flex justify-center mb-8">
+              <div className="relative w-48 h-48">
+                <Image
+                  src="/logo-large.svg"
+                  alt="FlowForge Logo"
+                  width={240}
+                  height={240}
+                  priority
+                />
+              </div>
+            </div>
 
-      {/* Performance and Activity Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
-        <div className="xl:col-span-2">
-          <SimpleLineChart
-            title="System Performance (Last 24 Hours)"
-            data={mockPerformanceData}
-            dataKey="responseTime"
-            color="#059669"
-            height={350}
-          />
-        </div>
+            {/* Hero Text */}
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-6">
+              FlowForge
+            </h1>
 
-        <Card className="shadow-corporate-lg">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="flex items-center gap-2 text-base md:text-lg">
-              <Clock className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-              Recent Activity
-              <div className="w-2 h-2 md:w-3 md:h-3 bg-primary rounded-full animate-pulse"></div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 max-h-[350px] overflow-y-auto">
-            <div className="space-y-0">
-              {mockRecentActivities.slice(0, 6).map((activity, index) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center space-x-3 p-3 md:p-4 hover:bg-background-tertiary transition-colors border-b border-border last:border-b-0"
-                >
-                  <div className={`w-6 h-6 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    activity.status === 'success' ? 'bg-green-50' :
-                    activity.status === 'failed' ? 'bg-red-50' :
-                    activity.status === 'running' ? 'bg-blue-50' : 'bg-gray-50'
-                  }`}>
-                    <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${
-                      activity.status === 'success' ? 'bg-success' :
-                      activity.status === 'failed' ? 'bg-error' :
-                      activity.status === 'running' ? 'bg-primary' : 'bg-gray-400'
-                    }`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs md:text-sm font-medium text-foreground truncate">
-                      {activity.workflowName}
-                    </p>
-                    <p className="text-xs text-foreground-muted">
-                      {formatDate(activity.timestamp)}
-                    </p>
-                    {activity.message && (
-                      <p className="text-xs text-foreground-muted mt-1 line-clamp-2 hidden md:block">
-                        {activity.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className={`text-xs px-2 py-1 rounded-full font-medium border flex-shrink-0 ${
-                    activity.status === 'success' ? 'text-success bg-green-50 border-green-200' :
-                    activity.status === 'failed' ? 'text-error bg-red-50 border-red-200' :
-                    activity.status === 'running' ? 'text-primary bg-primary-50 border-primary-200' :
-                    'text-gray-600 bg-gray-50 border-gray-200'
-                  }`}>
-                    {activity.status}
-                  </div>
+            <p className="text-xl sm:text-2xl text-slate-600 font-medium mb-4">
+              Enterprise Data Orchestration Platform
+            </p>
+
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-12">
+              Build robust data pipelines with Medallion Architecture. Transform raw data into business-ready insights with AI-powered automation.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-6 text-lg"
+                onClick={() => setShowCreateModal(true)}
+              >
+                Create Your First Workflow
+                <ArrowRight className="ml-2 w-5 h-5" />
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-2 border-slate-300 hover:border-blue-500 px-8 py-6 text-lg"
+                onClick={() => router.push('/workflows')}
+              >
+                View Demo Workflow
+              </Button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16 max-w-4xl mx-auto">
+              {stats.map((stat, index) => (
+                <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">{stat.value}</div>
+                  <div className="text-sm font-semibold text-slate-700">{stat.label}</div>
+                  <div className="text-xs text-slate-500 mt-1">{stat.description}</div>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* System Overview */}
-      <Card className="shadow-corporate-lg">
-        <CardHeader className="border-b border-border">
-          <CardTitle className="flex items-center gap-3 text-lg">
-            <Server className="w-5 h-5 text-primary" />
-            System Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground-muted">Total Workflows</span>
-                <span className="font-semibold text-foreground">{mockDashboardMetrics.totalWorkflows}</span>
-              </div>
-              <div className="w-full bg-background-tertiary rounded-full h-2">
-                <div 
-                  className="bg-primary h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${(mockDashboardMetrics.activeWorkflows / mockDashboardMetrics.totalWorkflows) * 100}%` }}
-                />
-              </div>
-              <p className="text-xs text-foreground-muted">
-                {mockDashboardMetrics.activeWorkflows} active workflows
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground-muted">Success Rate</span>
-                <span className="font-semibold text-success">91.7%</span>
-              </div>
-              <div className="w-full bg-background-tertiary rounded-full h-2">
-                <div className="bg-success h-2 rounded-full transition-all duration-300" style={{ width: '91.7%' }} />
-              </div>
-              <p className="text-xs text-foreground-muted">
-                22 successful runs today
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground-muted">Avg Response Time</span>
-                <span className="font-semibold text-foreground">287ms</span>
-              </div>
-              <div className="w-full bg-background-tertiary rounded-full h-2">
-                <div className="bg-secondary h-2 rounded-full transition-all duration-300" style={{ width: '65%' }} />
-              </div>
-              <p className="text-xs text-foreground-muted">
-                15% faster than last week
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Features Section */}
+      <div className="max-w-7xl mx-auto px-6 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl font-bold text-slate-900 mb-3">
+            Powerful Features
+          </h2>
+          <p className="text-lg text-slate-600">
+            Everything you need for enterprise-grade data orchestration
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {features.map((feature, index) => {
+            const Icon = feature.icon
+            return (
+              <Card
+                key={index}
+                className={`relative overflow-hidden border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
+                  feature.status === 'available'
+                    ? 'border-blue-200 hover:border-blue-400'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className={`p-3 rounded-lg bg-gradient-to-br ${feature.gradient}`} style={{ opacity: 0.1 }}>
+                      <Icon className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <Badge
+                      variant={feature.status === 'available' ? 'success' : 'secondary'}
+                      className="text-xs"
+                    >
+                      {feature.status === 'available' ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Available
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3 h-3 mr-1" />
+                          Coming Soon
+                        </>
+                      )}
+                    </Badge>
+                  </div>
+                  <CardTitle className="text-lg font-semibold text-slate-900">
+                    {feature.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {feature.description}
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Vision Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-16">
+        <div className="max-w-4xl mx-auto px-6 text-center text-white">
+          <h2 className="text-3xl font-bold mb-4">
+            Our Vision
+          </h2>
+          <p className="text-xl text-blue-100 mb-6">
+            Democratize enterprise data engineering with intelligent automation and best practices built-in.
+          </p>
+          <p className="text-lg text-blue-50">
+            FlowForge empowers data teams to build production-ready pipelines in minutes, not weeks.
+            From raw data ingestion to analytics-ready datasets, we handle the complexity so you can focus on insights.
+          </p>
+        </div>
+      </div>
+
+      {/* Create Workflow Modal */}
+      <CreateWorkflowModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+      />
     </div>
   )
 }
-

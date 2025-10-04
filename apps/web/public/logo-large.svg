@@ -1,0 +1,69 @@
+<svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle with Gradient -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a78bfa;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Circle -->
+  <circle cx="120" cy="120" r="110" fill="url(#logoGradient)" opacity="0.1"/>
+
+  <!-- Flow Symbol - Data Pipeline Arrows -->
+  <g transform="translate(40, 90)">
+    <!-- Bronze Flow -->
+    <path d="M 0 0 L 40 0 L 50 10 L 40 20 L 0 20 Z" fill="url(#flowGradient)" opacity="0.6"/>
+    <circle cx="55" cy="10" r="3" fill="#60a5fa"/>
+
+    <!-- Silver Flow -->
+    <path d="M 60 0 L 100 0 L 110 10 L 100 20 L 60 20 Z" fill="url(#flowGradient)" opacity="0.8"/>
+    <circle cx="115" cy="10" r="3" fill="#8b5cf6"/>
+
+    <!-- Gold Flow -->
+    <path d="M 120 0 L 160 0 L 170 10 L 160 20 L 120 20 Z" fill="url(#flowGradient)"/>
+    <circle cx="175" cy="10" r="3" fill="#a78bfa"/>
+  </g>
+
+  <!-- Forge Symbol - Hammer/Anvil representing transformation -->
+  <g transform="translate(80, 130)">
+    <!-- Anvil Base -->
+    <rect x="20" y="40" width="60" height="10" rx="2" fill="#6366f1"/>
+    <rect x="30" y="30" width="40" height="12" rx="2" fill="#8b5cf6"/>
+
+    <!-- Hammer -->
+    <g transform="rotate(-30 50 25)">
+      <rect x="35" y="10" width="8" height="25" rx="2" fill="#3b82f6"/>
+      <rect x="30" y="8" width="18" height="8" rx="2" fill="#60a5fa"/>
+    </g>
+
+    <!-- Sparks - representing data transformation -->
+    <circle cx="45" cy="28" r="2" fill="#fbbf24" opacity="0.8"/>
+    <circle cx="55" cy="32" r="1.5" fill="#fbbf24" opacity="0.6"/>
+    <circle cx="50" cy="35" r="1" fill="#fbbf24" opacity="0.5"/>
+  </g>
+
+  <!-- Data Nodes - representing medallion architecture -->
+  <g transform="translate(60, 60)">
+    <!-- Bronze Node -->
+    <circle cx="30" cy="30" r="8" fill="none" stroke="#cd7f32" stroke-width="2" opacity="0.7"/>
+    <circle cx="30" cy="30" r="4" fill="#cd7f32" opacity="0.5"/>
+
+    <!-- Silver Node -->
+    <circle cx="60" cy="30" r="8" fill="none" stroke="#c0c0c0" stroke-width="2" opacity="0.7"/>
+    <circle cx="60" cy="30" r="4" fill="#c0c0c0" opacity="0.5"/>
+
+    <!-- Gold Node -->
+    <circle cx="90" cy="30" r="8" fill="none" stroke="#ffd700" stroke-width="2" opacity="0.7"/>
+    <circle cx="90" cy="30" r="4" fill="#ffd700" opacity="0.5"/>
+
+    <!-- Connection Lines -->
+    <line x1="38" y1="30" x2="52" y2="30" stroke="url(#flowGradient)" stroke-width="2" opacity="0.5"/>
+    <line x1="68" y1="30" x2="82" y2="30" stroke="url(#flowGradient)" stroke-width="2" opacity="0.5"/>
+  </g>
+</svg>

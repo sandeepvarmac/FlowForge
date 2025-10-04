@@ -112,7 +112,8 @@ export default function WorkflowsPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 border border-border rounded-md bg-background-secondary text-sm"
+            className="px-4 py-2 pr-10 border border-border rounded-md bg-background-secondary text-sm h-10 appearance-none bg-no-repeat bg-right"
+            style={{ backgroundImage: "url('data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27currentColor%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpolyline points=%276 9 12 15 18 9%27%3E%3C/polyline%3E%3C/svg%3E')", backgroundPosition: "right 0.5rem center", backgroundSize: "1.25rem" }}
           >
             <option value="all">All Status</option>
             <option value="manual">Manual</option>
@@ -120,7 +121,7 @@ export default function WorkflowsPage() {
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
           </select>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="h-10">
             <Filter className="w-4 h-4 mr-2" />
             Filters
           </Button>
