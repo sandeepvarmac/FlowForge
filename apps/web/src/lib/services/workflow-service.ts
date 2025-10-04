@@ -6,6 +6,39 @@ import { Workflow, WorkflowFormData, WorkflowStatus, Job } from '@/types/workflo
 export class WorkflowService {
   private static baseUrl = '/api'
 
+  /**
+   * Hydrate workflow data from API (convert date strings to Date objects)
+   */
+  private static hydrateWorkflow(raw: any): Workflow {
+    return {
+      ...raw,
+      createdAt: new Date(raw.createdAt),
+      updatedAt: new Date(raw.updatedAt),
+      lastRun: raw.lastRun ? new Date(raw.lastRun) : undefined,
+      nextRun: raw.nextRun ? new Date(raw.nextRun) : undefined,
+      jobs: Array.isArray(raw.jobs)
+        ? raw.jobs.map((job: any) => ({
+            ...job,
+            createdAt: new Date(job.createdAt),
+            updatedAt: new Date(job.updatedAt),
+            lastRun: job.lastRun ? new Date(job.lastRun) : undefined,
+          }))
+        : [],
+    }
+  }
+
+  /**
+   * Hydrate job data from API (convert date strings to Date objects)
+   */
+  private static hydrateJob(raw: any): Job {
+    return {
+      ...raw,
+      createdAt: new Date(raw.createdAt),
+      updatedAt: new Date(raw.updatedAt),
+      lastRun: raw.lastRun ? new Date(raw.lastRun) : undefined,
+    }
+  }
+
   // Create a new workflow
   static async createWorkflow(data: WorkflowFormData): Promise<Workflow> {
     const response = await fetch(`${this.baseUrl}/workflows`, {
@@ -19,7 +52,7 @@ export class WorkflowService {
     }
 
     const result = await response.json()
-    return result.workflow
+    return this.hydrateWorkflow(result.workflow)
   }
 
   // Get all workflows
@@ -33,7 +66,7 @@ export class WorkflowService {
     }
 
     const result = await response.json()
-    return result.workflows
+    return result.workflows.map(this.hydrateWorkflow)
   }
 
   // Update workflow status
@@ -100,7 +133,7 @@ export class WorkflowService {
     }
 
     const result = await response.json()
-    return result.workflow
+    return this.hydrateWorkflow(result.workflow)
   }
 
   // Get workflow execution history
@@ -131,7 +164,7 @@ export class WorkflowService {
 
     const result = await response.json()
     console.log(`Created new job: ${result.job.name} in workflow ${workflowId}`)
-    return result.job
+    return this.hydrateJob(result.job)
   }
 
   // Execute a job
@@ -184,7 +217,7 @@ export class WorkflowService {
 
     const result = await response.json()
     console.log(`Updated job ${jobId}`)
-    return result.job
+    return this.hydrateJob(result.job)
   }
 
   // Delete a job
