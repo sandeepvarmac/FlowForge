@@ -2,7 +2,9 @@ import Papa from 'papaparse'
 import { getDatabase } from '../db'
 import { saveParquetFile, readFile } from '../storage'
 import { writeParquet, readParquet, type ColumnSchema } from './parquet-writer'
+import { scanFilesWithPattern, scanSingleFile, type ScannedFile } from '../storage/file-scanner'
 import type { Job } from '@/types/workflow'
+import path from 'path'
 
 export interface ExecutionResult {
   success: boolean
@@ -52,9 +54,32 @@ export async function executeJob(
       startTime
     )
 
-    // Step 1: Bronze Layer - Read CSV and save as Parquet
-    addLog('📥 Step 1: Processing Bronze Layer (Raw Data)')
-    const bronzeResult = await processBronzeLayer(job, sourceFilePath, addLog)
+    // Determine source files (pattern matching or single file)
+    let sourceFiles: ScannedFile[] = []
+    const fileConfig = job.sourceConfig.fileConfig
+
+    if (fileConfig?.uploadMode === 'pattern' && fileConfig?.filePattern) {
+      // Pattern matching mode
+      const directory = path.dirname(sourceFilePath)
+      const pattern = fileConfig.filePattern
+      addLog(`📂 Scanning for files matching pattern: ${pattern}`)
+      sourceFiles = await scanFilesWithPattern(directory, pattern)
+      addLog(`✓ Found ${sourceFiles.length} files to process`)
+    } else {
+      // Single file mode
+      const scannedFile = scanSingleFile(sourceFilePath)
+      if (scannedFile) {
+        sourceFiles = [scannedFile]
+      }
+    }
+
+    if (sourceFiles.length === 0) {
+      throw new Error('No source files found to process')
+    }
+
+    // Step 1: Bronze Layer - Process all source files
+    addLog(`📥 Step 1: Processing Bronze Layer (${sourceFiles.length} file(s))`)
+    const bronzeResult = await processBronzeLayer(job, sourceFiles, addLog)
 
     // Step 2: Silver Layer - Apply transformations and validations
     addLog('🔄 Step 2: Processing Silver Layer (Cleaned Data)')
@@ -160,84 +185,100 @@ export async function executeJob(
 }
 
 /**
- * Bronze Layer: Read CSV and convert to Parquet (raw data with timestamp versioning)
+ * Bronze Layer: Read CSV files and convert to Parquet (raw data with timestamp versioning)
+ * Supports multiple files for pattern matching
  */
 async function processBronzeLayer(
   job: Job,
-  sourceFilePath: string,
+  sourceFiles: ScannedFile[],
   addLog: (message: string) => void
 ) {
-  addLog('  → Reading CSV file...')
-
-  const fileContent = readFile(sourceFilePath).toString('utf-8')
-
-  // Parse CSV
-  const parseResult = Papa.parse(fileContent, {
-    header: true,
-    skipEmptyLines: true,
-    dynamicTyping: false // Keep as strings for Bronze
-  })
-
-  let data = parseResult.data as any[]
-  const headers = parseResult.meta.fields || []
-
-  addLog(`  → Parsed ${data.length} rows, ${headers.length} columns`)
-
-  // Add audit columns if enabled (Bronze layer tracking)
   const bronzeConfig = job.destinationConfig.bronzeConfig
-  if (bronzeConfig?.auditColumns !== false) {
-    const timestamp = new Date().toISOString()
-    const sourceFileName = sourceFilePath.split(/[\\/]/).pop() || 'unknown'
+  const tableName = bronzeConfig?.tableName || 'bronze_data'
 
-    data = data.map((row, index) => ({
-      ...row,
-      _ingested_at: timestamp,
-      _source_file: sourceFileName,
-      _row_number: index + 1
-    }))
+  let allData: any[] = []
+  let schema: ColumnSchema[] = []
+  const versionedPaths: string[] = []
 
-    addLog(`  → Added audit columns: _ingested_at, _source_file, _row_number`)
+  // Process each file
+  for (let i = 0; i < sourceFiles.length; i++) {
+    const file = sourceFiles[i]
+    addLog(`  → Processing file ${i + 1}/${sourceFiles.length}: ${file.filename}`)
+
+    const fileContent = readFile(file.filepath).toString('utf-8')
+
+    // Parse CSV
+    const parseResult = Papa.parse(fileContent, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false // Keep as strings for Bronze
+    })
+
+    let fileData = parseResult.data as any[]
+    const headers = parseResult.meta.fields || []
+
+    addLog(`     → Parsed ${fileData.length} rows, ${headers.length} columns`)
+
+    // Add audit columns if enabled (Bronze layer tracking)
+    if (bronzeConfig?.auditColumns !== false) {
+      const timestamp = new Date().toISOString()
+
+      fileData = fileData.map((row, index) => ({
+        ...row,
+        _ingested_at: timestamp,
+        _source_file: file.filename,
+        _row_number: index + 1
+      }))
+    }
+
+    // Create schema from first file (all subsequent files should match)
+    if (i === 0) {
+      schema = [
+        ...headers.map(name => ({ name, type: 'string' as const })),
+        ...(bronzeConfig?.auditColumns !== false ? [
+          { name: '_ingested_at', type: 'string' as const },
+          { name: '_source_file', type: 'string' as const },
+          { name: '_row_number', type: 'integer' as const }
+        ] : [])
+      ]
+    }
+
+    // Write each file to separate Bronze Parquet (with timestamp in filename)
+    const outputPath = `data/bronze/${job.workflowId}/${job.id}/${tableName}.parquet`
+    writeParquet(fileData, schema, outputPath)
+
+    // Save with versioning strategy (includes filename in version)
+    const fs = require('fs')
+    const parquetBuffer = fs.readFileSync(outputPath)
+    const { saveParquetFile } = require('../storage')
+
+    // For pattern matching, include source filename in Bronze version
+    const cleanFileName = file.filename.replace(/\.[^/.]+$/, '').replace(/[^a-z0-9]/gi, '_')
+    const versionedPath = saveParquetFile(
+      'bronze',
+      job.workflowId,
+      job.id,
+      `${tableName}_${cleanFileName}`,
+      parquetBuffer,
+      { versioningStrategy: 'timestamp' }
+    )
+
+    // Remove temp file
+    fs.unlinkSync(outputPath)
+
+    versionedPaths.push(versionedPath)
+    allData = allData.concat(fileData)
+
+    addLog(`     ✓ Saved to Bronze: ${fileData.length} records`)
   }
 
-  // Create schema (all strings in Bronze + audit columns)
-  const schema: ColumnSchema[] = [
-    ...headers.map(name => ({ name, type: 'string' as const })),
-    ...(bronzeConfig?.auditColumns !== false ? [
-      { name: '_ingested_at', type: 'string' as const },
-      { name: '_source_file', type: 'string' as const },
-      { name: '_row_number', type: 'integer' as const }
-    ] : [])
-  ]
-
-  // Write to Parquet with timestamp versioning
-  const tableName = bronzeConfig?.tableName || 'bronze_data'
-  const outputPath = `data/bronze/${job.workflowId}/${job.id}/${tableName}.parquet`
-
-  writeParquet(data, schema, outputPath)
-
-  // Save with versioning strategy
-  const fs = require('fs')
-  const parquetBuffer = fs.readFileSync(outputPath)
-  const { saveParquetFile } = require('../storage')
-  const versionedPath = saveParquetFile(
-    'bronze',
-    job.workflowId,
-    job.id,
-    tableName,
-    parquetBuffer,
-    { versioningStrategy: 'timestamp' }
-  )
-
-  // Remove temp file
-  fs.unlinkSync(outputPath)
-
-  addLog(`  ✓ Bronze layer saved with versioning: ${data.length} records`)
+  addLog(`  ✓ Bronze layer complete: ${allData.length} total records from ${sourceFiles.length} file(s)`)
 
   return {
-    data,
+    data: allData, // Combined data for Silver layer
     schema,
-    recordCount: data.length,
-    filePath: versionedPath
+    recordCount: allData.length,
+    filePath: versionedPaths[0] // Return first file path for reference
   }
 }
 
