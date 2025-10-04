@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveUploadedFile, getFileHash, readFile } from '@/lib/storage'
 import { analyzeSchemaWithAI } from '@/lib/ai/openai-client'
+import { analyzePrimaryKeyCandidates } from '@/lib/ai/primary-key-detector'
 import { getDatabase } from '@/lib/db'
 import Papa from 'papaparse'
 
@@ -132,6 +133,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Analyze primary key candidates
+    console.log('🔍 Analyzing primary key candidates...')
+    const primaryKeyAnalysis = analyzePrimaryKeyCandidates(data, columns)
+
     return NextResponse.json({
       success: true,
       filepath,
@@ -139,7 +144,8 @@ export async function POST(request: NextRequest) {
       columnCount: columns.length,
       columns,
       preview: data,
-      aiAnalysis
+      aiAnalysis,
+      primaryKeyAnalysis
     })
 
   } catch (error) {
