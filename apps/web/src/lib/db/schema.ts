@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   workflow_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  type TEXT NOT NULL CHECK(type IN ('file-based', 'database', 'api')),
+  type TEXT NOT NULL CHECK(type IN ('file-based', 'database', 'api', 'gold-analytics', 'nosql')),
   order_index INTEGER NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('configured', 'ready', 'running', 'completed', 'failed', 'disabled')),
 
