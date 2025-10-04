@@ -1,176 +1,217 @@
 import { Workflow, WorkflowFormData, WorkflowStatus, Job } from '@/types/workflow'
 
-// Simulate API delays
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
+/**
+ * Real API-based Workflow Service
+ */
 export class WorkflowService {
+  private static baseUrl = '/api'
+
   // Create a new workflow
   static async createWorkflow(data: WorkflowFormData): Promise<Workflow> {
-    await delay(1500) // Simulate API call
-    
-    const workflow: Workflow = {
-      id: Date.now().toString(),
-      name: data.name,
-      description: data.description,
-      application: data.application,
-      owner: data.team,
-      status: data.workflowType === 'manual' ? 'manual' : 'scheduled',
-      type: data.workflowType,
-      jobs: [], // Initialize with empty jobs array
-      lastRun: undefined,
-      nextRun: data.workflowType === 'scheduled' ? new Date(Date.now() + 24 * 60 * 60 * 1000) : undefined,
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const response = await fetch(`${this.baseUrl}/workflows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to create workflow')
     }
-    
-    return workflow
+
+    const result = await response.json()
+    return result.workflow
+  }
+
+  // Get all workflows
+  static async getWorkflows(): Promise<Workflow[]> {
+    const response = await fetch(`${this.baseUrl}/workflows`, {
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch workflows')
+    }
+
+    const result = await response.json()
+    return result.workflows
   }
 
   // Update workflow status
   static async updateWorkflowStatus(workflowId: string, status: WorkflowStatus): Promise<void> {
-    await delay(800)
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to update workflow status')
+    }
+
     console.log(`Updated workflow ${workflowId} status to ${status}`)
   }
 
   // Run a manual workflow
   static async runWorkflow(workflowId: string): Promise<void> {
-    await delay(2000)
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/run`, {
+      method: 'POST'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to run workflow')
+    }
+
     console.log(`Started execution of workflow ${workflowId}`)
   }
 
   // Pause a scheduled workflow
   static async pauseWorkflow(workflowId: string): Promise<void> {
-    await delay(500)
-    console.log(`Paused workflow ${workflowId}`)
+    await this.updateWorkflowStatus(workflowId, 'paused')
   }
 
   // Resume a paused workflow
   static async resumeWorkflow(workflowId: string): Promise<void> {
-    await delay(500)
-    console.log(`Resumed workflow ${workflowId}`)
+    await this.updateWorkflowStatus(workflowId, 'scheduled')
   }
 
   // Delete a workflow
   static async deleteWorkflow(workflowId: string): Promise<void> {
-    await delay(1000)
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to delete workflow')
+    }
+
     console.log(`Deleted workflow ${workflowId}`)
   }
 
   // Update workflow details
   static async updateWorkflow(workflowId: string, updates: Partial<Workflow>): Promise<Workflow> {
-    await delay(1200)
-    
-    // Simulate returning updated workflow
-    const updatedWorkflow: Workflow = {
-      id: workflowId,
-      name: updates.name || 'Updated Workflow',
-      description: updates.description || 'Updated description',
-      application: updates.application || 'MDM',
-      owner: updates.owner || 'Team',
-      status: updates.status || 'manual',
-      type: updates.type || 'manual',
-      lastRun: updates.lastRun,
-      nextRun: updates.nextRun,
-      createdAt: updates.createdAt || new Date(),
-      updatedAt: new Date()
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to update workflow')
     }
-    
-    return updatedWorkflow
+
+    const result = await response.json()
+    return result.workflow
   }
 
   // Get workflow execution history
   static async getWorkflowExecutions(workflowId: string) {
-    await delay(800)
-    
-    // Mock execution data
-    return [
-      {
-        id: '1',
-        workflowId,
-        status: 'completed' as const,
-        startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        endTime: new Date(Date.now() - 2 * 60 * 60 * 1000 + 5 * 60 * 1000),
-        duration: 5 * 60 * 1000, // 5 minutes
-        logs: ['Started execution', 'Processing data', 'Completed successfully']
-      },
-      {
-        id: '2',
-        workflowId,
-        status: 'failed' as const,
-        startTime: new Date(Date.now() - 24 * 60 * 60 * 1000),
-        endTime: new Date(Date.now() - 24 * 60 * 60 * 1000 + 2 * 60 * 1000),
-        duration: 2 * 60 * 1000, // 2 minutes
-        logs: ['Started execution', 'Error: Connection timeout'],
-        error: 'Connection timeout to external API'
-      }
-    ]
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/executions`, {
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch executions')
+    }
+
+    const result = await response.json()
+    return result.executions
   }
 
   // Create a new job within a workflow
-  static async createJob(job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>): Promise<Job> {
-    await delay(1000)
-    
-    const newJob: Job = {
-      ...job,
-      id: `job-${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date()
+  static async createJob(workflowId: string, job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>): Promise<Job> {
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(job)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to create job')
     }
-    
-    console.log(`Created new job: ${newJob.name} in workflow ${newJob.workflowId}`)
-    return newJob
+
+    const result = await response.json()
+    console.log(`Created new job: ${result.job.name} in workflow ${workflowId}`)
+    return result.job
+  }
+
+  // Execute a job
+  static async executeJob(jobId: string, sourceFilePath: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/jobs/${jobId}/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceFilePath })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to execute job')
+    }
+
+    return await response.json()
+  }
+
+  // Upload file with AI analysis
+  static async uploadFile(workflowId: string, jobId: string, file: File): Promise<any> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('workflowId', workflowId)
+    formData.append('jobId', jobId)
+
+    const response = await fetch(`${this.baseUrl}/upload`, {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to upload file')
+    }
+
+    return await response.json()
   }
 
   // Update job configuration
   static async updateJob(jobId: string, updates: Partial<Job>): Promise<Job> {
-    await delay(800)
-    
-    const updatedJob: Job = {
-      id: jobId,
-      workflowId: updates.workflowId || '',
-      name: updates.name || 'Updated Job',
-      description: updates.description || 'Updated description',
-      type: updates.type || 'file-based',
-      order: updates.order || 1,
-      sourceConfig: updates.sourceConfig || {
-        id: '',
-        name: '',
-        type: 'csv',
-        connection: {}
-      },
-      destinationConfig: updates.destinationConfig || {
-        bronzeConfig: { enabled: true, tableName: '', storageFormat: 'parquet' }
-      },
-      transformationConfig: updates.transformationConfig,
-      validationConfig: updates.validationConfig,
-      status: updates.status || 'configured',
-      lastRun: updates.lastRun,
-      createdAt: updates.createdAt || new Date(),
-      updatedAt: new Date()
+    const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to update job')
     }
-    
+
+    const result = await response.json()
     console.log(`Updated job ${jobId}`)
-    return updatedJob
+    return result.job
   }
 
   // Delete a job
   static async deleteJob(jobId: string): Promise<void> {
-    await delay(600)
+    const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to delete job')
+    }
+
     console.log(`Deleted job ${jobId}`)
   }
 
   // Test data source connection
   static async testDataSourceConnection(sourceConfig: any): Promise<{ success: boolean; message: string }> {
-    await delay(2000)
-    
-    // Mock connection test
-    const success = Math.random() > 0.2 // 80% success rate
-    
-    return {
-      success,
-      message: success 
-        ? 'Connection successful' 
-        : 'Connection failed: Unable to reach host'
+    const response = await fetch(`${this.baseUrl}/test-connection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceConfig })
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to test connection')
     }
+
+    return await response.json()
   }
 }

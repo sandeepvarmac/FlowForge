@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react'
 import { DashboardMetrics } from '@/types'
 import { Workflow, Job } from '@/types/workflow'
-import { mockWorkflows } from '@/lib/mock-data'
+import { WorkflowService } from '@/lib/services/workflow-service'
 
 interface AppState {
   workflows: Workflow[]
@@ -101,8 +101,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
 
   useEffect(() => {
-    // Initialize with mock data
-    dispatch({ type: 'SET_WORKFLOWS', payload: mockWorkflows })
+    // Load workflows from API
+    const loadWorkflows = async () => {
+      try {
+        dispatch({ type: 'SET_LOADING', payload: true })
+        const workflows = await WorkflowService.getWorkflows()
+        dispatch({ type: 'SET_WORKFLOWS', payload: workflows })
+      } catch (error) {
+        console.error('Failed to load workflows:', error)
+        dispatch({ type: 'SET_ERROR', payload: 'Failed to load workflows' })
+      }
+    }
+
+    loadWorkflows()
   }, [])
 
   return (

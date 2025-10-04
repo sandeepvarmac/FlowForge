@@ -8,23 +8,57 @@ export function useJobActions() {
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const createJob = async (jobData: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const createJob = async (workflowId: string, jobData: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => {
     try {
-      setLoading(`create-${jobData.workflowId}`)
+      setLoading(`create-${workflowId}`)
       setError(null)
-      
-      const newJob = await WorkflowService.createJob(jobData)
-      
+
+      const newJob = await WorkflowService.createJob(workflowId, jobData)
+
       dispatch({
         type: 'ADD_JOB',
         payload: {
-          workflowId: jobData.workflowId,
+          workflowId,
           job: newJob
         }
       })
-      
+
+      return newJob
+
     } catch (err) {
       setError('Failed to create job')
+      throw err
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const executeJob = async (jobId: string, sourceFilePath: string) => {
+    try {
+      setLoading(`execute-${jobId}`)
+      setError(null)
+
+      const result = await WorkflowService.executeJob(jobId, sourceFilePath)
+      return result
+
+    } catch (err) {
+      setError('Failed to execute job')
+      throw err
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const uploadFile = async (workflowId: string, jobId: string, file: File) => {
+    try {
+      setLoading(`upload-${jobId}`)
+      setError(null)
+
+      const result = await WorkflowService.uploadFile(workflowId, jobId, file)
+      return result
+
+    } catch (err) {
+      setError('Failed to upload file')
       throw err
     } finally {
       setLoading(null)
@@ -103,6 +137,8 @@ export function useJobActions() {
     createJob,
     updateJob,
     deleteJob,
+    executeJob,
+    uploadFile,
     testConnection,
     isLoading,
     error,
