@@ -153,7 +153,7 @@ export function JobExecutionModal({ open, onOpenChange, jobName, executionId }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="6xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
+      <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-green-600" />

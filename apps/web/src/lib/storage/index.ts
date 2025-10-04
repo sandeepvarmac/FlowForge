@@ -2,13 +2,14 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), 'data', 'uploads')
-const BRONZE_DIR = process.env.BRONZE_DIR || path.join(process.cwd(), 'data', 'bronze')
-const SILVER_DIR = process.env.SILVER_DIR || path.join(process.cwd(), 'data', 'silver')
-const GOLD_DIR = process.env.GOLD_DIR || path.join(process.cwd(), 'data', 'gold')
+const UPLOAD_DIR: string = process.env.UPLOAD_DIR || path.join(process.cwd(), 'data', 'uploads')
+const BRONZE_DIR: string = process.env.BRONZE_DIR || path.join(process.cwd(), 'data', 'bronze')
+const SILVER_DIR: string = process.env.SILVER_DIR || path.join(process.cwd(), 'data', 'silver')
+const GOLD_DIR: string = process.env.GOLD_DIR || path.join(process.cwd(), 'data', 'gold')
 
 // Ensure all directories exist
-[UPLOAD_DIR, BRONZE_DIR, SILVER_DIR, GOLD_DIR].forEach(dir => {
+const dirs = [UPLOAD_DIR, BRONZE_DIR, SILVER_DIR, GOLD_DIR]
+dirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true })
   }

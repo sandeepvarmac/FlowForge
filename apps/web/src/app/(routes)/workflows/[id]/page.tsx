@@ -103,47 +103,44 @@ export default function WorkflowDetailPage() {
 
   const handleRunJob = async (jobId: string) => {
     if (runningJobs.has(jobId)) return
-    
-    // Add job to running state
+
     setRunningJobs(prev => new Set([...prev, jobId]))
-    
+
     try {
-      // Simulate job execution process
-      console.log(`Starting job execution: ${jobId}`)
-      
-      // Update job status to running
-      // This would typically call an API endpoint
-      console.log('Job processing through Bronze/Silver/Gold layers...')
-      
-      // Simulate processing time (3 seconds)
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      
-      // Job completed successfully
-      console.log(`Job ${jobId} completed successfully`)
-      
-      // Generate execution ID and show results
-      const executionId = `exec_${Date.now()}`
+      console.log(`Executing job: ${jobId}`)
+
+      // Call the backend API to execute the job
+      const response = await fetch(`/api/jobs/${jobId}/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Job execution failed')
+      }
+
+      const result = await response.json()
+      console.log('Job execution result:', result)
+
+      // Show execution results
       const job = workflow?.jobs.find(j => j.id === jobId)
-      
-      if (job) {
+      if (job && result.execution) {
         setSelectedExecution({
           jobId,
           jobName: job.name,
-          executionId
+          executionId: result.execution.id
         })
         setExecutionModalOpen(true)
       }
-      
-      // Here you would typically:
-      // 1. Update job status to 'completed' 
-      // 2. Update lastRun timestamp
-      // 3. Generate execution logs
-      // 4. Store execution results
-      
+
+      // Reload executions to show updated data
+      await loadExecutions()
+
     } catch (error) {
       console.error(`Job ${jobId} failed:`, error)
+      alert(error instanceof Error ? error.message : 'Job execution failed')
     } finally {
-      // Remove job from running state
       setRunningJobs(prev => {
         const newSet = new Set(prev)
         newSet.delete(jobId)
@@ -638,7 +635,7 @@ export default function WorkflowDetailPage() {
         open={createJobModalOpen}
         onOpenChange={setCreateJobModalOpen}
         workflowId={workflowId}
-        onJobCreate={createJob}
+        onJobCreate={(jobData) => createJob(workflowId, jobData)}
       />
 
       {/* Job Execution Results Modal */}

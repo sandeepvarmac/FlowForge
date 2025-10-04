@@ -142,12 +142,34 @@ export function useWorkflowActions() {
     }
   }
 
+  const createWorkflow = async (data: any) => {
+    try {
+      setLoading('create')
+      setError(null)
+
+      const newWorkflow = await WorkflowService.createWorkflow(data)
+
+      dispatch({
+        type: 'ADD_WORKFLOW',
+        payload: newWorkflow
+      })
+
+      return newWorkflow
+    } catch (err) {
+      setError('Failed to create workflow')
+      throw err
+    } finally {
+      setLoading(null)
+    }
+  }
+
   const isLoading = (workflowId: string, action?: string) => {
     if (!action) return loading?.includes(workflowId) || false
     return loading === `${action}-${workflowId}`
   }
 
   return {
+    createWorkflow,
     runWorkflow,
     pauseWorkflow,
     resumeWorkflow,

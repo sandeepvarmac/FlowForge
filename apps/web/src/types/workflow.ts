@@ -216,7 +216,7 @@ export interface ColumnMapping {
 }
 
 export interface ColumnTransformation {
-  type: 'uppercase' | 'lowercase' | 'trim' | 'replace' | 'substring' | 'format'
+  type: 'uppercase' | 'lowercase' | 'trim' | 'replace' | 'substring' | 'format' | 'email_normalize' | 'phone_format'
   parameters?: Record<string, any>
 }
 

@@ -1,186 +1,101 @@
 "use client"
 
 import * as React from "react"
+import { useRouter } from "next/navigation"
 import { Button, Input, Badge } from "@/components/ui"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { FormField, FormLabel, FormError, FormDescription, Select, Textarea } from "@/components/ui/form"
-import { X } from "lucide-react"
-import { WorkflowFormData, WorkflowType } from "@/types"
-import { useAppContext } from "@/lib/context/app-context"
+import { FormField, FormLabel, FormError, Textarea, Select } from "@/components/ui/form"
+import { WorkflowFormData } from "@/types"
+import { useWorkflowActions } from "@/hooks"
+import { Info, X } from "lucide-react"
 
 interface CreateWorkflowModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-const workflowTypes: { value: WorkflowType; label: string; description: string }[] = [
-  { value: 'manual', label: 'Manual', description: 'Triggered manually by users' },
-  { value: 'scheduled', label: 'Scheduled', description: 'Runs on a predefined schedule' },
-  { value: 'event-driven', label: 'Event-driven', description: 'Triggered by external events' }
-]
-
-const businessUnits = [
-  'Fund Accounting',
-  'Investment Management',
-  'Portfolio Analytics',
-  'Risk Management',
-  'Operations',
-  'Marketing',
-  'IT',
-  'Finance',
-  'Legal',
-  'Compliance'
-]
-
-const applications = [
-  'ILPA',
-  'Investran',
-  'Mailchimp',
-  'SharePoint',
-  'SQL Server',
-  'Oracle',
-  'Snowflake',
-  'Salesforce',
-  'Custom Application',
-  'CRM Analytics',
-  'Trade Processing'
-]
-
-const teams = [
-  'Data Engineering',
-  'Fund Accounting Team',
-  'Marketing Team',
-  'Operations Team',
-  'Investment Analytics',
-  'Risk Analytics',
-  'Portfolio Management',
-  'Data Science',
-  'IT Operations'
-]
-
-const tags = [
-  'daily',
-  'weekly',
-  'monthly',
-  'real-time',
-  'batch',
-  'csv',
-  'database',
-  'api',
-  'validation',
-  'reconciliation',
-  'reporting',
-  'analytics',
-  'etl',
-  'customers',
-  'trades',
-  'nav',
-  'performance'
-]
-
 export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalProps) {
-  const { dispatch } = useAppContext()
+  const router = useRouter()
+  const { createWorkflow } = useWorkflowActions()
   const [loading, setLoading] = React.useState(false)
-  const [step, setStep] = React.useState(1)
   const [errors, setErrors] = React.useState<Partial<WorkflowFormData>>({})
   const [tagInput, setTagInput] = React.useState('')
-  const [showTagSuggestions, setShowTagSuggestions] = React.useState(false)
-  
+
   const [formData, setFormData] = React.useState<WorkflowFormData>({
     name: '',
     description: '',
-    application: '',
-    businessUnit: '',
-    team: '',
+    application: 'Flat Files',
+    businessUnit: 'Data Engineering',
+    team: 'Data Engineering Team',
     workflowType: 'manual',
+    environment: 'dev',
+    dataClassification: 'internal',
+    priority: 'medium',
     notificationEmail: '',
-    tags: []
+    tags: ['csv'],
+    retentionDays: 90
   })
 
   const updateField = (field: keyof WorkflowFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }))
     }
   }
 
-  const validateStep = (stepNumber: number): boolean => {
+  const validate = (): boolean => {
     const newErrors: Partial<WorkflowFormData> = {}
 
-    if (stepNumber === 1) {
-      if (!formData.name.trim()) newErrors.name = 'Workflow name is required'
-      if (!formData.description.trim()) newErrors.description = 'Description is required'
-      if (!formData.application) newErrors.application = 'Application is required'
-    }
-
-    if (stepNumber === 2) {
-      if (!formData.businessUnit) newErrors.businessUnit = 'Business unit is required'
-      if (!formData.team.trim()) newErrors.team = 'Team is required'
-      if (!formData.workflowType) newErrors.workflowType = 'Workflow type is required'
-      if (formData.notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.notificationEmail)) {
-        newErrors.notificationEmail = 'Please enter a valid email address'
-      }
-    }
+    if (!formData.name.trim()) newErrors.name = 'Workflow name is required'
+    if (!formData.description.trim()) newErrors.description = 'Description is required'
+    if (!formData.application) newErrors.application = 'Source application is required'
+    if (!formData.team) newErrors.team = 'Team is required'
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  const handleNext = () => {
-    if (validateStep(step)) {
-      setStep(step + 1)
+  const addTag = () => {
+    if (tagInput.trim() && !formData.tags?.includes(tagInput.trim())) {
+      updateField('tags', [...(formData.tags || []), tagInput.trim()])
+      setTagInput('')
     }
   }
 
-  const handleBack = () => {
-    setStep(step - 1)
+  const removeTag = (tag: string) => {
+    updateField('tags', formData.tags?.filter(t => t !== tag) || [])
   }
 
   const handleSubmit = async () => {
-    if (!validateStep(2)) return
+    if (!validate()) return
 
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Create new workflow object
-      const newWorkflow = {
-        id: Date.now().toString(),
-        name: formData.name,
-        description: formData.description,
-        application: formData.application,
-        owner: formData.team,
-        status: 'manual' as const,
-        type: formData.workflowType,
-        jobs: [], // Initialize empty jobs array
-        lastRun: undefined,
-        nextRun: undefined,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        // Add missing EDP fields
-        businessUnit: formData.businessUnit,
-        notificationEmail: formData.notificationEmail,
-        tags: formData.tags
-      }
+      const newWorkflow = await createWorkflow(formData)
 
-      dispatch({ type: 'ADD_WORKFLOW', payload: newWorkflow })
-      
-      // Reset form and close modal
+      // Reset form and close
       setFormData({
         name: '',
         description: '',
-        application: '',
-        businessUnit: '',
-        team: '',
+        application: 'Flat Files',
+        businessUnit: 'Data Engineering',
+        team: 'Data Engineering Team',
         workflowType: 'manual',
+        environment: 'dev',
+        dataClassification: 'internal',
+        priority: 'medium',
         notificationEmail: '',
-        tags: []
+        tags: ['csv'],
+        retentionDays: 90
       })
-      setStep(1)
       setErrors({})
+      setTagInput('')
       onOpenChange(false)
+
+      // Auto-navigate to workflow detail page
+      if (newWorkflow?.id) {
+        router.push(`/workflows/${newWorkflow.id}`)
+      }
     } catch (error) {
       console.error('Failed to create workflow:', error)
     } finally {
@@ -189,268 +104,288 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
   }
 
   const handleClose = () => {
-    setStep(1)
     setErrors({})
-    setTagInput('')
-    setShowTagSuggestions(false)
     onOpenChange(false)
   }
 
-  const addTag = (tag: string) => {
-    if (tag && !formData.tags.includes(tag)) {
-      updateField('tags', [...formData.tags, tag])
-    }
-    setTagInput('')
-    setShowTagSuggestions(false)
-  }
-
-  const removeTag = (tagToRemove: string) => {
-    updateField('tags', formData.tags.filter(tag => tag !== tagToRemove))
-  }
-
-  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault()
-      addTag(tagInput.trim().toLowerCase())
-    }
-  }
-
-  const filteredTagSuggestions = tags.filter(tag => 
-    tag.toLowerCase().includes(tagInput.toLowerCase()) && 
-    !formData.tags.includes(tag)
-  )
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent size="xl" className="max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Create New Workflow</DialogTitle>
           <DialogDescription>
-            Set up a new workflow to automate your business processes
+            Configure a new data processing workflow for your enterprise data platform
           </DialogDescription>
-          
-          {/* Progress indicator */}
-          <div className="flex items-center space-x-2 mt-4">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-              step >= 1 ? 'bg-primary text-white' : 'bg-background-tertiary text-foreground-muted'
-            }`}>
-              1
-            </div>
-            <div className={`h-0.5 w-12 transition-colors ${
-              step >= 2 ? 'bg-primary' : 'bg-background-tertiary'
-            }`} />
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-              step >= 2 ? 'bg-primary text-white' : 'bg-background-tertiary text-foreground-muted'
-            }`}>
-              2
-            </div>
-          </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
-          {step === 1 && (
-            <div className="space-y-6">
-              <div className="text-sm font-medium text-foreground mb-4">
-                Workflow Information
-              </div>
-              
-              <FormField>
-                <FormLabel htmlFor="name" required>Workflow Name</FormLabel>
-                <Input
-                  id="name"
-                  placeholder="Enter workflow name"
-                  value={formData.name}
-                  onChange={(e) => updateField('name', e.target.value)}
-                />
-                <FormError>{errors.name}</FormError>
-              </FormField>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6">
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Basic Information</h3>
 
-              <FormField>
-                <FormLabel htmlFor="description" required>Description</FormLabel>
-                <Textarea
-                  id="description"
-                  placeholder="Enter workflow description"
-                  value={formData.description}
-                  onChange={(e) => updateField('description', e.target.value)}
-                  rows={3}
-                />
-                <FormError>{errors.description}</FormError>
-              </FormField>
+            <FormField>
+              <FormLabel htmlFor="name" required>Workflow Name</FormLabel>
+              <Input
+                id="name"
+                placeholder="e.g., Customer Data Pipeline"
+                value={formData.name}
+                onChange={(e) => updateField('name', e.target.value)}
+                autoFocus
+              />
+              <FormError>{errors.name}</FormError>
+            </FormField>
 
-              <FormField>
-                <FormLabel htmlFor="application" required>Application</FormLabel>
-                <Select
-                  id="application"
-                  value={formData.application}
-                  onChange={(e) => updateField('application', e.target.value)}
-                >
-                  <option value="">Select application</option>
-                  {applications.map((app) => (
-                    <option key={app} value={app}>{app}</option>
-                  ))}
-                </Select>
-                <FormError>{errors.application}</FormError>
-              </FormField>
-            </div>
-          )}
+            <FormField>
+              <FormLabel htmlFor="description" required>Description</FormLabel>
+              <Textarea
+                id="description"
+                placeholder="e.g., Daily import of customer data from CSV files for downstream analytics"
+                value={formData.description}
+                onChange={(e) => updateField('description', e.target.value)}
+                rows={3}
+              />
+              <FormError>{errors.description}</FormError>
+            </FormField>
+          </div>
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <div className="text-sm font-medium text-foreground mb-4">
-                Business Information
-              </div>
-              
+          {/* Source & Ownership */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Source & Ownership</h3>
+
+            <FormField>
+              <FormLabel htmlFor="application" required>Source Application</FormLabel>
+              <Select
+                id="application"
+                value={formData.application}
+                onChange={(e) => updateField('application', e.target.value)}
+              >
+                <option value="Flat Files">Flat Files (CSV, Excel, JSON)</option>
+                <option value="SAP">SAP ERP</option>
+                <option value="Salesforce">Salesforce CRM</option>
+                <option value="Oracle">Oracle Database</option>
+                <option value="SQL Server">Microsoft SQL Server</option>
+                <option value="PostgreSQL">PostgreSQL</option>
+                <option value="Snowflake">Snowflake Data Warehouse</option>
+                <option value="REST API">REST API Endpoint</option>
+                <option value="SFTP">SFTP Server</option>
+                <option value="AWS S3">AWS S3 Bucket</option>
+                <option value="Azure Blob">Azure Blob Storage</option>
+                <option value="Google Cloud">Google Cloud Storage</option>
+              </Select>
+              <FormError>{errors.application}</FormError>
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField>
-                <FormLabel htmlFor="businessUnit" required>Business Unit</FormLabel>
+                <FormLabel htmlFor="businessUnit">Business Unit</FormLabel>
                 <Select
                   id="businessUnit"
                   value={formData.businessUnit}
                   onChange={(e) => updateField('businessUnit', e.target.value)}
                 >
-                  <option value="">Select business unit</option>
-                  {businessUnits.map((unit) => (
-                    <option key={unit} value={unit}>{unit}</option>
-                  ))}
+                  <option value="Data Engineering">Data Engineering</option>
+                  <option value="Finance">Finance</option>
+                  <option value="Sales">Sales</option>
+                  <option value="Marketing">Marketing</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Supply Chain">Supply Chain</option>
+                  <option value="Human Resources">Human Resources</option>
+                  <option value="IT">Information Technology</option>
+                  <option value="Customer Service">Customer Service</option>
+                  <option value="Analytics">Analytics & Insights</option>
                 </Select>
-                <FormError>{errors.businessUnit}</FormError>
               </FormField>
 
               <FormField>
-                <FormLabel htmlFor="team" required>Team</FormLabel>
+                <FormLabel htmlFor="team" required>Owning Team</FormLabel>
                 <Select
                   id="team"
                   value={formData.team}
                   onChange={(e) => updateField('team', e.target.value)}
                 >
-                  <option value="">Select team</option>
-                  {teams.map((team) => (
-                    <option key={team} value={team}>{team}</option>
-                  ))}
+                  <option value="Data Engineering Team">Data Engineering Team</option>
+                  <option value="Analytics Team">Analytics Team</option>
+                  <option value="Finance Data Team">Finance Data Team</option>
+                  <option value="Sales Operations">Sales Operations</option>
+                  <option value="Marketing Analytics">Marketing Analytics</option>
+                  <option value="BI Team">Business Intelligence Team</option>
+                  <option value="Data Science">Data Science Team</option>
+                  <option value="ETL Team">ETL Development Team</option>
                 </Select>
                 <FormError>{errors.team}</FormError>
               </FormField>
+            </div>
+          </div>
 
-              <FormField>
-                <FormLabel htmlFor="workflowType" required>Workflow Type</FormLabel>
-                <Select
-                  id="workflowType"
-                  value={formData.workflowType}
-                  onChange={(e) => updateField('workflowType', e.target.value as WorkflowType)}
+          {/* Workflow Configuration */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Workflow Configuration</h3>
+
+            <FormField>
+              <FormLabel htmlFor="workflowType" required>Workflow Trigger</FormLabel>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => updateField('workflowType', 'manual')}
+                  className={`p-4 border rounded-lg text-left transition-all ${
+                    formData.workflowType === 'manual'
+                      ? 'border-primary bg-primary-50 shadow-sm'
+                      : 'border-border bg-background hover:border-primary-200'
+                  }`}
                 >
-                  {workflowTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
+                  <div className="font-medium text-sm">Manual</div>
+                  <div className="text-xs text-foreground-muted mt-1">Trigger on demand</div>
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50"
+                >
+                  <div className="font-medium text-sm">Scheduled</div>
+                  <div className="text-xs text-foreground-muted mt-1">Coming soon</div>
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50"
+                >
+                  <div className="font-medium text-sm">Event-driven</div>
+                  <div className="text-xs text-foreground-muted mt-1">Coming soon</div>
+                </button>
+              </div>
+            </FormField>
+
+            <div className="grid grid-cols-3 gap-4">
+              <FormField>
+                <FormLabel htmlFor="environment">Environment</FormLabel>
+                <Select
+                  id="environment"
+                  value={formData.environment || 'dev'}
+                  onChange={(e) => updateField('environment', e.target.value)}
+                >
+                  <option value="dev">Development</option>
+                  <option value="qa">QA/Testing</option>
+                  <option value="prod">Production</option>
                 </Select>
-                <FormDescription>
-                  {workflowTypes.find(t => t.value === formData.workflowType)?.description}
-                </FormDescription>
-                <FormError>{errors.workflowType}</FormError>
               </FormField>
 
               <FormField>
-                <FormLabel htmlFor="notificationEmail">Notification Email</FormLabel>
-                <Input
-                  id="notificationEmail"
-                  type="email"
-                  placeholder="Enter notification email (e.g., team@company.com)"
-                  value={formData.notificationEmail}
-                  onChange={(e) => updateField('notificationEmail', e.target.value)}
-                />
-                <FormDescription>
-                  Optional: Email address for workflow failure notifications
-                </FormDescription>
-                <FormError>{errors.notificationEmail}</FormError>
+                <FormLabel htmlFor="dataClassification">Data Classification</FormLabel>
+                <Select
+                  id="dataClassification"
+                  value={formData.dataClassification || 'internal'}
+                  onChange={(e) => updateField('dataClassification', e.target.value)}
+                >
+                  <option value="public">Public</option>
+                  <option value="internal">Internal</option>
+                  <option value="confidential">Confidential</option>
+                  <option value="pii">PII/Sensitive</option>
+                </Select>
               </FormField>
 
               <FormField>
-                <FormLabel htmlFor="tags">Tags</FormLabel>
-                <div className="space-y-2">
-                  {/* Tag display */}
-                  {formData.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center px-2 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded-md border border-primary-200"
-                        >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => removeTag(tag)}
-                            className="ml-1 text-primary-500 hover:text-primary-700 focus:outline-none"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {/* Tag input */}
-                  <div className="relative">
-                    <Input
-                      id="tags"
-                      placeholder="Type to add tags (e.g., daily, csv, customers)"
-                      value={tagInput}
-                      onChange={(e) => {
-                        setTagInput(e.target.value)
-                        setShowTagSuggestions(e.target.value.length > 0)
-                      }}
-                      onKeyDown={handleTagInputKeyDown}
-                      onFocus={() => setShowTagSuggestions(tagInput.length > 0)}
-                    />
-                    
-                    {/* Tag suggestions */}
-                    {showTagSuggestions && filteredTagSuggestions.length > 0 && (
-                      <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border border-border rounded-md shadow-lg max-h-32 overflow-y-auto">
-                        {filteredTagSuggestions.slice(0, 6).map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            className="block w-full px-3 py-2 text-left text-sm hover:bg-background-secondary focus:outline-none focus:bg-background-secondary"
-                            onClick={() => addTag(tag)}
-                          >
-                            {tag}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <FormDescription>
-                  Optional: Add tags to categorize and filter workflows
-                </FormDescription>
+                <FormLabel htmlFor="priority">Priority/SLA</FormLabel>
+                <Select
+                  id="priority"
+                  value={formData.priority || 'medium'}
+                  onChange={(e) => updateField('priority', e.target.value)}
+                >
+                  <option value="critical">Critical</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </Select>
               </FormField>
             </div>
-          )}
+          </div>
+
+          {/* Additional Settings */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Additional Settings</h3>
+
+            <FormField>
+              <FormLabel htmlFor="notificationEmail">
+                Notification Email(s)
+                <span className="text-xs text-foreground-muted ml-2">(Optional, comma-separated)</span>
+              </FormLabel>
+              <Input
+                id="notificationEmail"
+                type="email"
+                placeholder="e.g., data-team@company.com, alerts@company.com"
+                value={formData.notificationEmail || ''}
+                onChange={(e) => updateField('notificationEmail', e.target.value)}
+              />
+              <p className="text-xs text-foreground-muted mt-1">
+                <Info className="w-3 h-3 inline mr-1" />
+                Receive alerts for job failures and completion notifications
+              </p>
+            </FormField>
+
+            <FormField>
+              <FormLabel htmlFor="tags">
+                Tags
+                <span className="text-xs text-foreground-muted ml-2">(Optional, for categorization)</span>
+              </FormLabel>
+              <div className="flex gap-2">
+                <Input
+                  id="tags"
+                  placeholder="Add tag..."
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addTag()
+                    }
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={addTag}>
+                  Add
+                </Button>
+              </div>
+              {formData.tags && formData.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.tags.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                      {tag}
+                      <X
+                        className="w-3 h-3 cursor-pointer hover:text-destructive"
+                        onClick={() => removeTag(tag)}
+                      />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </FormField>
+
+            <FormField>
+              <FormLabel htmlFor="retentionDays">Data Retention (Days)</FormLabel>
+              <Select
+                id="retentionDays"
+                value={String(formData.retentionDays || 90)}
+                onChange={(e) => updateField('retentionDays', parseInt(e.target.value))}
+              >
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90">90 days (Default)</option>
+                <option value="180">180 days</option>
+                <option value="365">1 year</option>
+                <option value="730">2 years</option>
+              </Select>
+              <p className="text-xs text-foreground-muted mt-1">
+                How long to keep execution history and logs
+              </p>
+            </FormField>
+          </div>
         </div>
 
         <DialogFooter>
-          <div className="flex justify-between w-full">
-            <div>
-              {step > 1 && (
-                <Button variant="outline" onClick={handleBack} disabled={loading}>
-                  Back
-                </Button>
-              )}
-            </div>
-            <div className="flex space-x-2">
-              <Button variant="ghost" onClick={handleClose} disabled={loading}>
-                Cancel
-              </Button>
-              {step < 2 ? (
-                <Button onClick={handleNext}>
-                  Next
-                </Button>
-              ) : (
-                <Button onClick={handleSubmit} disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Workflow'}
-                </Button>
-              )}
-            </div>
-          </div>
+          <Button variant="ghost" onClick={handleClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading ? 'Creating...' : 'Create Workflow'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

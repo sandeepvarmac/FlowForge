@@ -202,7 +202,7 @@ export function MetadataCatalog({ open, onOpenChange, initialFilter }: MetadataC
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent size="6xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
+        <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Database className="w-5 h-5 text-primary" />
@@ -340,7 +340,7 @@ export function MetadataCatalog({ open, onOpenChange, initialFilter }: MetadataC
       {/* Metadata Details Modal */}
       {selectedEntry && (
         <Dialog open={showDetails} onOpenChange={setShowDetails}>
-          <DialogContent size="4xl" className="max-h-[90vh] overflow-y-auto">
+          <DialogContent size="2xl" className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {getEntityIcon(selectedEntry.entityType)}

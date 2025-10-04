@@ -62,9 +62,9 @@ export function DialogTrigger({ children, asChild }: { children: React.ReactNode
   if (!context) throw new Error('DialogTrigger must be used within Dialog')
 
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, {
+    return React.cloneElement(children as React.ReactElement<any>, {
       onClick: () => context.onOpenChange(true)
-    })
+    } as any)
   }
 
   return (

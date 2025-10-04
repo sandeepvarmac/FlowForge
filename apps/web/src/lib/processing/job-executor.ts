@@ -3,6 +3,13 @@ import { getDatabase } from '../db'
 import { saveParquetFile, readFile } from '../storage'
 import { writeParquet, readParquet, type ColumnSchema } from './parquet-writer'
 import { scanFilesWithPattern, scanSingleFile, type ScannedFile } from '../storage/file-scanner'
+import {
+  createSnowflakeSchema,
+  loadDimensionFromParquet,
+  loadFactFromParquet,
+  truncateAllTables,
+  exportTableToParquet
+} from '../duckdb'
 import type { Job } from '@/types/workflow'
 import path from 'path'
 
@@ -245,7 +252,7 @@ async function processBronzeLayer(
 
     // Write each file to separate Bronze Parquet (with timestamp in filename)
     const outputPath = `data/bronze/${job.workflowId}/${job.id}/${tableName}.parquet`
-    writeParquet(fileData, schema, outputPath)
+    await writeParquet(fileData, schema, outputPath)
 
     // Save with versioning strategy (includes filename in version)
     const fs = require('fs')
@@ -345,7 +352,7 @@ async function processSilverLayer(
 
   if (validationConfig?.dataQualityRules) {
     validRecords = data.filter(row => {
-      for (const rule of validationConfig.dataQualityRules) {
+      for (const rule of validationConfig.dataQualityRules!) {
         const value = row[rule.column]
 
         switch (rule.ruleType) {
@@ -406,7 +413,7 @@ async function processSilverLayer(
   // Perform upsert/merge
   let mergedData: any[]
 
-  if (existingData.length > 0 && silverConfig?.loadStrategy === 'merge') {
+  if (existingData.length > 0 && silverConfig?.mergeStrategy === 'merge') {
     // Create a map of existing records by primary key
     const existingMap = new Map(existingData.map(r => [r[primaryKeyCol], r]))
 
@@ -444,7 +451,7 @@ async function processSilverLayer(
 
   // Write to Parquet with 'current' versioning
   const outputPath = `data/silver/${job.workflowId}/${job.id}/${tableName}.parquet`
-  writeParquet(mergedData, schema, outputPath)
+  await writeParquet(mergedData, schema, outputPath)
 
   // Save with current + archive strategy
   const fs = require('fs')
@@ -473,7 +480,7 @@ async function processSilverLayer(
 }
 
 /**
- * Gold Layer: Business aggregations and derived metrics
+ * Gold Layer: DuckDB Snowflake Schema with Dimensions and Fact Tables
  */
 async function processGoldLayer(
   job: Job,
@@ -481,29 +488,171 @@ async function processGoldLayer(
   silverSchema: ColumnSchema[],
   addLog: (message: string) => void
 ) {
-  addLog('  → Creating business-ready dataset...')
+  const goldConfig = job.destinationConfig.goldConfig
+  const jobType = job.type
 
-  // For now, Gold = Silver (will add aggregations later)
-  // In production, this would include:
-  // - GROUP BY aggregations
-  // - Derived columns
-  // - Business rules
-  // - Denormalization
+  // Check if this is a Gold Analytics job (combines all dimensions into fact table)
+  if (jobType === 'gold-analytics') {
+    return await processGoldAnalytics(job, addLog)
+  }
 
-  let goldData = [...silverData]
+  // Otherwise, process as dimension/fact source job
+  addLog('  → Loading to Gold layer (DuckDB Snowflake Schema)...')
 
-  // Write to Parquet
-  const tableName = job.destinationConfig.goldConfig?.tableName || 'gold_data'
+  // Ensure Snowflake schema exists
+  await createSnowflakeSchema()
+
+  const tableName = goldConfig?.tableName || 'gold_data'
+  const silverTableName = job.destinationConfig.silverConfig?.tableName || 'silver_data'
+
+  // Determine Silver file path
+  const { getCurrentSilverFile } = require('../storage')
+  const silverFilePath = getCurrentSilverFile(job.workflowId, job.id, silverTableName)
+
+  if (!silverFilePath) {
+    throw new Error('Silver file not found for Gold layer processing')
+  }
+
+  let recordCount = 0
+
+  // Load dimension or fact based on job configuration
+  if (job.name.toLowerCase().includes('country') || tableName.includes('country')) {
+    // Load dim_country
+    addLog('  → Loading dim_country...')
+    recordCount = await loadDimensionFromParquet(
+      'dim_country',
+      silverFilePath,
+      {
+        country_code: 'country_code',
+        name: 'country_name',
+        region: 'region',
+        currency_code: 'currency_code',
+        phone_code: 'phone_code'
+      }
+    )
+    addLog(`  ✓ Loaded ${recordCount} records into dim_country`)
+
+  } else if (job.name.toLowerCase().includes('customer') || tableName.includes('customer')) {
+    // Load dim_customer
+    addLog('  → Loading dim_customer...')
+
+    // Need to join with dim_country for country_key
+    const sql = `
+      INSERT INTO dim_customer
+      SELECT
+        f._sk_id AS customer_key,
+        f.customer_id,
+        f.first_name,
+        f.last_name,
+        f.email,
+        f.phone,
+        c.country_key,
+        f.loyalty_tier,
+        CURRENT_TIMESTAMP AS valid_from,
+        TIMESTAMP '9999-12-31 23:59:59' AS valid_to,
+        TRUE AS is_current
+      FROM read_parquet('${silverFilePath}') f
+      LEFT JOIN dim_country c ON f.country = c.country_code AND c.is_current = TRUE
+    `
+
+    const { executeDuckDBQuery } = require('../duckdb')
+    await executeDuckDBQuery(sql)
+
+    const countResult = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_customer')
+    recordCount = countResult[0].count
+    addLog(`  ✓ Loaded ${recordCount} records into dim_customer`)
+
+  } else if (job.name.toLowerCase().includes('product') || tableName.includes('product')) {
+    // Load dim_product
+    addLog('  → Loading dim_product...')
+    recordCount = await loadDimensionFromParquet(
+      'dim_product',
+      silverFilePath,
+      {
+        product_id: 'product_id',
+        product_name: 'product_name',
+        category: 'category',
+        subcategory: 'subcategory',
+        unit_price: 'unit_price'
+      }
+    )
+    addLog(`  ✓ Loaded ${recordCount} records into dim_product`)
+
+  } else if (job.name.toLowerCase().includes('order') || tableName.includes('order')) {
+    // Load fact_orders
+    addLog('  → Loading fact_orders...')
+    recordCount = await loadFactFromParquet(
+      'fact_orders',
+      silverFilePath,
+      {
+        order_id: 'order_id',
+        order_date: 'order_date',
+        quantity: 'quantity',
+        unit_price: 'unit_price',
+        discount_percent: 'discount_percent',
+        total_amount: 'total_amount'
+      },
+      {
+        customer: { column: 'customer_id', lookupColumn: 'customer_id' },
+        product: { column: 'product_id', lookupColumn: 'product_id' }
+      }
+    )
+    addLog(`  ✓ Loaded ${recordCount} records into fact_orders`)
+  }
+
+  // Export DuckDB table to Parquet for storage
   const outputPath = `data/gold/${job.workflowId}/${job.id}/${tableName}.parquet`
+  await exportTableToParquet(tableName.startsWith('dim_') || tableName.startsWith('fact_') ? tableName : `gold_${tableName}`, outputPath)
 
-  writeParquet(goldData, silverSchema, outputPath)
-
-  addLog(`  ✓ Gold layer saved: ${goldData.length} records`)
+  addLog(`  ✓ Gold layer complete: ${recordCount} records`)
 
   return {
-    data: goldData,
+    data: [],
     schema: silverSchema,
-    recordCount: goldData.length,
+    recordCount,
     filePath: outputPath
+  }
+}
+
+/**
+ * Gold Analytics Job: Combines all dimensions and facts into final analytics layer
+ */
+async function processGoldAnalytics(
+  job: Job,
+  addLog: (message: string) => void
+) {
+  addLog('  → Running Gold Analytics (Snowflake Schema complete)...')
+
+  // Ensure schema exists
+  await createSnowflakeSchema()
+
+  const { executeDuckDBQuery } = require('../duckdb')
+
+  // Get counts from all tables
+  const countryCount = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_country')
+  const customerCount = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_customer')
+  const productCount = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_product')
+  const orderCount = await executeDuckDBQuery('SELECT COUNT(*) as count FROM fact_orders')
+
+  addLog(`  ✓ Snowflake Schema loaded:`)
+  addLog(`    - dim_country: ${countryCount[0].count} records`)
+  addLog(`    - dim_customer: ${customerCount[0].count} records`)
+  addLog(`    - dim_product: ${productCount[0].count} records`)
+  addLog(`    - fact_orders: ${orderCount[0].count} records`)
+
+  // Export all tables to Parquet
+  const workflowDir = `data/gold/${job.workflowId}/${job.id}`
+  await exportTableToParquet('dim_country', `${workflowDir}/dim_country.parquet`)
+  await exportTableToParquet('dim_customer', `${workflowDir}/dim_customer.parquet`)
+  await exportTableToParquet('dim_product', `${workflowDir}/dim_product.parquet`)
+  await exportTableToParquet('fact_orders', `${workflowDir}/fact_orders.parquet`)
+
+  addLog(`  ✓ All tables exported to Parquet`)
+
+  return {
+    data: [],
+    schema: [],
+    recordCount: orderCount[0].count,
+    filePath: `${workflowDir}/fact_orders.parquet`
   }
 }

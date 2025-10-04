@@ -54,11 +54,11 @@ function convertValue(value: any, type: string): any {
 /**
  * Write data to Parquet file
  */
-export function writeParquet(
+export async function writeParquet(
   data: any[],
   schema: ColumnSchema[],
   outputPath: string
-): void {
+): Promise<void> {
   try {
     // Build Arrow schema
     const fields = schema.map(col =>
@@ -102,16 +102,15 @@ export function writeParquet(
     // Finish building vectors
     const vectors = builders.map((builder, i) => builder.finish().toVector())
 
-    // Create record batch
-    const recordBatch = new arrow.RecordBatch(arrowSchema, data.length, vectors)
-
-    // Write to file using Parquet writer
-    const table = new arrow.Table(arrowSchema, [recordBatch])
+    // Create table directly from arrays
+    const table = arrow.tableFromArrays(
+      Object.fromEntries(schema.map((col, i) => [col.name, vectors[i].toArray()]))
+    )
 
     // For now, we'll write as Arrow IPC format (similar to Parquet)
     // Note: For production, you'd want to use a proper Parquet writer
     const writer = arrow.RecordBatchFileWriter.writeAll(table)
-    const buffer = writer.toUint8Array()
+    const buffer = await writer.toUint8Array()
 
     fs.writeFileSync(outputPath, buffer)
 
