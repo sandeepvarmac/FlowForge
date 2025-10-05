@@ -131,6 +131,9 @@ export async function executeJob(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     addLog(`❌ Job execution failed: ${errorMessage}`)
 
+    // Attach logs to error object so API route can persist them
+    (error as any).logs = logs
+
     // Re-throw the error so the run route can handle it
     throw error
   }
