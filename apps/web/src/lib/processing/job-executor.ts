@@ -231,8 +231,8 @@ async function processBronzeLayer(
 
       const table = tableFromArrays(columns) as any
 
-      // Write to Parquet using parquet-wasm (dynamic import to work around webpack ESM issues)
-      const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
+      // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
+      const { writeParquet: writeParquetWasm } = await import('parquet-wasm/node')
       const parquetBuffer = writeParquetWasm(table as any)
 
       // For pattern matching, include source filename in Bronze version
@@ -440,8 +440,8 @@ async function processSilverLayer(
 
     const table = tableFromArrays(columns) as any
 
-    // Write to Parquet using parquet-wasm (dynamic import to work around webpack ESM issues)
-    const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
+    // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
+    const { writeParquet: writeParquetWasm } = await import('parquet-wasm/node')
     const parquetBuffer = writeParquetWasm(table as any)
 
     versionedPath = saveParquetFile(
