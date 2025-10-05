@@ -88,12 +88,25 @@ Thumbs.db
 
 # Yarn Integrity file
 **/.yarn-integrity
+
+# Python virtual environments
 prefect-flows/venv/
+prefect-flows/.venv/
+**/__pycache__/
+**/*.pyc
+
+# Data directories (now using MinIO/S3)
+apps/web/data/bronze/
+apps/web/data/silver/
+apps/web/data/gold/
+apps/web/data/uploads/
+apps/web/data/duckdb/
 prefect-flows/data/
 
+# Docker volumes
+docker-compose.override.yml
 
-
-**/__pycache__/
-apps/web/data/duckdb/
-apps/web/public/wasm/
+# Prefect
+.prefect/
+prefect-flows/.prefectignore
 
