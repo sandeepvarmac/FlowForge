@@ -447,7 +447,13 @@ async function processSilverLayer(
     const table = tableFromArrays(columns) as any
 
     // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
-    const { writeParquet: writeParquetWasm } = await import('parquet-wasm/node')
+    let writeParquetWasm: (table: any) => Uint8Array
+    try {
+      writeParquetWasm = (await import('parquet-wasm/node')).writeParquet
+    } catch (error) {
+      const fallback = await import('parquet-wasm')
+      writeParquetWasm = fallback.writeParquet
+    }
     const parquetBuffer = writeParquetWasm(table as any)
 
     versionedPath = saveParquetFile(
