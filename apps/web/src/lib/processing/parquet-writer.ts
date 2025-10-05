@@ -77,8 +77,8 @@ export async function writeParquet(
     // Create Arrow table
     const table = tableFromArrays(columns) as any
 
-    // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
-    const { writeParquet: writeParquetWasm } = await import('parquet-wasm/node')
+    // Write to Parquet using parquet-wasm (ESM package, Next.js handles bundling)
+    const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
     const parquetBuffer = writeParquetWasm(table as any)
 
     // Write buffer to file

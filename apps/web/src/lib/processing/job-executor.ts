@@ -234,14 +234,8 @@ async function processBronzeLayer(
 
       const table = tableFromArrays(columns) as any
 
-      // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
-      let writeParquetWasm: (table: any) => Uint8Array
-      try {
-        writeParquetWasm = (await import('parquet-wasm/node')).writeParquet
-      } catch (error) {
-        const fallback = await import('parquet-wasm')
-        writeParquetWasm = fallback.writeParquet
-      }
+      // Write to Parquet using parquet-wasm (ESM package, Next.js handles bundling)
+      const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
       const parquetBuffer = writeParquetWasm(table as any)
 
       // For pattern matching, include source filename in Bronze version
@@ -449,14 +443,8 @@ async function processSilverLayer(
 
     const table = tableFromArrays(columns) as any
 
-    // Write to Parquet using parquet-wasm Node.js build (avoids WASM bundling issues)
-    let writeParquetWasm: (table: any) => Uint8Array
-    try {
-      writeParquetWasm = (await import('parquet-wasm/node')).writeParquet
-    } catch (error) {
-      const fallback = await import('parquet-wasm')
-      writeParquetWasm = fallback.writeParquet
-    }
+    // Write to Parquet using parquet-wasm (ESM package, Next.js handles bundling)
+    const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
     const parquetBuffer = writeParquetWasm(table as any)
 
     versionedPath = saveParquetFile(
