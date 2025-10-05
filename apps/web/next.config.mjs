@@ -17,13 +17,21 @@ const nextConfig = {
     // Handle WASM files for parquet-wasm
     config.experiments = {
       ...config.experiments,
-      asyncWebAssembly: true
+      asyncWebAssembly: true,
+      layers: true
     }
 
     config.module.rules.push({
       test: /\.wasm$/,
-      type: 'webassembly/async'
+      type: 'asset/resource'
     })
+
+    // Fallback for fs module (needed for WASM file loading)
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false
+    }
 
     return config
   }
