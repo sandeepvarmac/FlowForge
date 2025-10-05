@@ -2,8 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    typedRoutes: true,
-    serverComponentsExternalPackages: ['parquet-wasm']
+    typedRoutes: true
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
@@ -14,6 +13,18 @@ const nextConfig = {
         'duckdb-async': 'commonjs duckdb-async'
       })
     }
+
+    // Handle WASM files for parquet-wasm
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true
+    }
+
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'webassembly/async'
+    })
+
     return config
   }
 };
