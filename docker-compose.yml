@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  # MinIO - S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: flowforge-minio
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console UI
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - flowforge
+
+  # MinIO Client - Create buckets on startup
+  minio-client:
+    image: minio/mc:latest
+    container_name: flowforge-minio-client
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 minioadmin minioadmin123;
+      mc mb minio/flowforge-data --ignore-existing;
+      mc anonymous set download minio/flowforge-data;
+      mc admin user add minio prefect prefect123;
+      mc admin policy attach minio readwrite --user prefect;
+      echo 'MinIO buckets created successfully';
+      "
+    networks:
+      - flowforge
+
+  # PostgreSQL - For DuckDB metadata and Prefect state
+  postgres:
+    image: postgres:15-alpine
+    container_name: flowforge-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: flowforge
+      POSTGRES_PASSWORD: flowforge123
+      POSTGRES_DB: flowforge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowforge
+
+  # Prefect Server (Optional - use if not using Prefect Cloud)
+  # Uncomment if you want self-hosted Prefect
+  # prefect-server:
+  #   image: prefecthq/prefect:2-python3.11
+  #   container_name: flowforge-prefect-server
+  #   ports:
+  #     - "4200:4200"
+  #   environment:
+  #     PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://flowforge:flowforge123@postgres:5432/flowforge
+  #     PREFECT_API_URL: http://prefect-server:4200/api
+  #     PREFECT_SERVER_API_HOST: 0.0.0.0
+  #   command: prefect server start --host 0.0.0.0
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - flowforge
+
+volumes:
+  minio_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  flowforge:
+    driver: bridge
