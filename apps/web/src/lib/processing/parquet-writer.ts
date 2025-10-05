@@ -1,6 +1,5 @@
 import * as arrow from 'apache-arrow'
 import { tableFromArrays } from 'apache-arrow'
-import { writeParquet as writeParquetWasm } from 'parquet-wasm'
 import fs from 'fs'
 import path from 'path'
 
@@ -76,10 +75,11 @@ export async function writeParquet(
     })
 
     // Create Arrow table
-    const table = tableFromArrays(columns)
+    const table = tableFromArrays(columns) as any
 
-    // Write to Parquet using parquet-wasm
-    const parquetBuffer = writeParquetWasm(table)
+    // Write to Parquet using parquet-wasm (dynamic import to work around webpack ESM issues)
+    const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
+    const parquetBuffer = writeParquetWasm(table as any)
 
     // Write buffer to file
     fs.writeFileSync(outputPath, Buffer.from(parquetBuffer))

@@ -133,7 +133,7 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
                 </button>
               ) : (
                 <Link
-                  href={link.href}
+                  href={link.href as any}
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group',
                     active
@@ -166,7 +166,7 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
                     return (
                       <Link
                         key={subLink.href}
-                        href={subLink.href}
+                        href={subLink.href as any}
                         className={cn(
                           'block px-3 py-2 text-sm rounded-lg transition-colors',
                           subActive

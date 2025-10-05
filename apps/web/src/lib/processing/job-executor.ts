@@ -1,17 +1,20 @@
 import Papa from 'papaparse'
+import fs from 'fs'
+import path from 'path'
+import { tableFromArrays } from 'apache-arrow'
 import { getDatabase } from '../db'
-import { saveParquetFile, readFile } from '../storage'
-import { writeParquet, readParquet, type ColumnSchema } from './parquet-writer'
+import { saveParquetFile, readFile, fileExists, getCurrentSilverFile } from '../storage'
+import { writeParquet, readParquet as readParquetFile, type ColumnSchema } from './parquet-writer'
 import { scanFilesWithPattern, scanSingleFile, type ScannedFile } from '../storage/file-scanner'
 import {
   createSnowflakeSchema,
   loadDimensionFromParquet,
   loadFactFromParquet,
   truncateAllTables,
-  exportTableToParquet
+  exportTableToParquet,
+  executeDuckDBQuery
 } from '../duckdb'
 import type { Job } from '@/types/workflow'
-import path from 'path'
 
 export interface ExecutionResult {
   success: boolean
@@ -57,12 +60,23 @@ export async function executeJob(
     if (fileConfig?.uploadMode === 'pattern' && fileConfig?.filePattern) {
       // Pattern matching mode
       const directory = path.dirname(sourceFilePath)
+
+      // Check if directory exists
+      if (!fs.existsSync(directory)) {
+        throw new Error(`Source directory does not exist: ${directory}`)
+      }
+
       const pattern = fileConfig.filePattern
       addLog(`📂 Scanning for files matching pattern: ${pattern}`)
       sourceFiles = await scanFilesWithPattern(directory, pattern)
       addLog(`✓ Found ${sourceFiles.length} files to process`)
     } else {
       // Single file mode
+      // Check if source file exists
+      if (!fs.existsSync(sourceFilePath)) {
+        throw new Error(`Source file does not exist: ${sourceFilePath}`)
+      }
+
       const scannedFile = scanSingleFile(sourceFilePath)
       if (scannedFile) {
         sourceFiles = [scannedFile]
@@ -70,7 +84,7 @@ export async function executeJob(
     }
 
     if (sourceFiles.length === 0) {
-      throw new Error('No source files found to process')
+      throw new Error(`No source files found to process. Pattern: ${fileConfig?.filePattern || 'single file'}, Path: ${sourceFilePath}`)
     }
 
     // Step 1: Bronze Layer - Process all source files
@@ -143,7 +157,13 @@ async function processBronzeLayer(
     const file = sourceFiles[i]
     addLog(`  → Processing file ${i + 1}/${sourceFiles.length}: ${file.filename}`)
 
-    const fileContent = readFile(file.filepath).toString('utf-8')
+    // Read file content
+    let fileContent: string
+    try {
+      fileContent = readFile(file.filepath).toString('utf-8')
+    } catch (error) {
+      throw new Error(`Failed to read file ${file.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
 
     // Parse CSV
     const parseResult = Papa.parse(fileContent, {
@@ -152,8 +172,22 @@ async function processBronzeLayer(
       dynamicTyping: false // Keep as strings for Bronze
     })
 
+    // Check for parsing errors
+    if (parseResult.errors && parseResult.errors.length > 0) {
+      const errorMessages = parseResult.errors.slice(0, 3).map(e => e.message).join('; ')
+      addLog(`  ⚠ Warning: CSV parsing had ${parseResult.errors.length} error(s): ${errorMessages}`)
+    }
+
     let fileData = parseResult.data as any[]
     const headers = parseResult.meta.fields || []
+
+    if (fileData.length === 0) {
+      throw new Error(`File ${file.filename} contains no data rows`)
+    }
+
+    if (headers.length === 0) {
+      throw new Error(`File ${file.filename} has no headers`)
+    }
 
     addLog(`     → Parsed ${fileData.length} rows, ${headers.length} columns`)
 
@@ -181,33 +215,43 @@ async function processBronzeLayer(
       ]
     }
 
-    // Write each file to separate Bronze Parquet (with timestamp in filename)
-    const outputPath = `data/bronze/${job.workflowId}/${job.id}/${tableName}.parquet`
-    await writeParquet(fileData, schema, outputPath)
+    // Write directly to Bronze using storage module (with timestamp versioning)
+    try {
+      // Create Arrow table from data
+      const columns: Record<string, any[]> = {}
+      schema.forEach(col => {
+        columns[col.name] = fileData.map(row => {
+          const value = row[col.name]
+          if (col.type === 'integer') return value ? parseInt(value) : null
+          if (col.type === 'decimal') return value ? parseFloat(value) : null
+          if (col.type === 'boolean') return value === 'true' || value === true
+          return value
+        })
+      })
 
-    // Save with versioning strategy (includes filename in version)
-    const fs = require('fs')
-    const parquetBuffer = fs.readFileSync(outputPath)
-    const { saveParquetFile } = require('../storage')
+      const table = tableFromArrays(columns) as any
 
-    // For pattern matching, include source filename in Bronze version
-    const cleanFileName = file.filename.replace(/\.[^/.]+$/, '').replace(/[^a-z0-9]/gi, '_')
-    const versionedPath = saveParquetFile(
-      'bronze',
-      job.workflowId,
-      job.id,
-      `${tableName}_${cleanFileName}`,
-      parquetBuffer,
-      { versioningStrategy: 'timestamp' }
-    )
+      // Write to Parquet using parquet-wasm (dynamic import to work around webpack ESM issues)
+      const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
+      const parquetBuffer = writeParquetWasm(table as any)
 
-    // Remove temp file
-    fs.unlinkSync(outputPath)
+      // For pattern matching, include source filename in Bronze version
+      const cleanFileName = file.filename.replace(/\.[^/.]+$/, '').replace(/[^a-z0-9]/gi, '_')
+      const versionedPath = saveParquetFile(
+        'bronze',
+        job.workflowId,
+        job.id,
+        `${tableName}_${cleanFileName}`,
+        Buffer.from(parquetBuffer),
+        { versioningStrategy: 'timestamp' }
+      )
 
-    versionedPaths.push(versionedPath)
-    allData = allData.concat(fileData)
-
-    addLog(`     ✓ Saved to Bronze: ${fileData.length} records`)
+      addLog(`     ✓ Saved to Bronze: ${fileData.length} records → ${path.basename(versionedPath)}`)
+      versionedPaths.push(versionedPath)
+      allData = allData.concat(fileData)
+    } catch (error) {
+      throw new Error(`Failed to write Bronze Parquet for ${file.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   addLog(`  ✓ Bronze layer complete: ${allData.length} total records from ${sourceFiles.length} file(s)`)
@@ -313,7 +357,6 @@ async function processSilverLayer(
   }
 
   // Read existing Silver data for upsert/merge logic
-  const { getCurrentSilverFile, readParquet: readParquetFile } = require('../storage')
   const tableName = silverConfig?.tableName || 'silver_data'
   const existingSilverPath = getCurrentSilverFile(job.workflowId, job.id, tableName)
 
@@ -380,27 +423,40 @@ async function processSilverLayer(
       : bronzeSchema.filter(s => !s.name.startsWith('_'))) // Exclude Bronze audit columns
   ]
 
-  // Write to Parquet with 'current' versioning
-  const outputPath = `data/silver/${job.workflowId}/${job.id}/${tableName}.parquet`
-  await writeParquet(mergedData, schema, outputPath)
+  // Write directly to Silver using storage module (with current + archive strategy)
+  let versionedPath: string
+  try {
+    // Create Arrow table from data
+    const columns: Record<string, any[]> = {}
+    schema.forEach(col => {
+      columns[col.name] = mergedData.map(row => {
+        const value = row[col.name]
+        if (col.type === 'integer') return value ? parseInt(value) : null
+        if (col.type === 'decimal') return value ? parseFloat(value) : null
+        if (col.type === 'boolean') return value === 'true' || value === true
+        return value
+      })
+    })
 
-  // Save with current + archive strategy
-  const fs = require('fs')
-  const parquetBuffer = fs.readFileSync(outputPath)
-  const { saveParquetFile } = require('../storage')
-  const versionedPath = saveParquetFile(
-    'silver',
-    job.workflowId,
-    job.id,
-    tableName,
-    parquetBuffer,
-    { versioningStrategy: 'current' }
-  )
+    const table = tableFromArrays(columns) as any
 
-  // Remove temp file
-  fs.unlinkSync(outputPath)
+    // Write to Parquet using parquet-wasm (dynamic import to work around webpack ESM issues)
+    const { writeParquet: writeParquetWasm } = await import('parquet-wasm')
+    const parquetBuffer = writeParquetWasm(table as any)
 
-  addLog(`  ✓ Silver layer saved: ${mergedData.length} records`)
+    versionedPath = saveParquetFile(
+      'silver',
+      job.workflowId,
+      job.id,
+      tableName,
+      Buffer.from(parquetBuffer),
+      { versioningStrategy: 'current' }
+    )
+
+    addLog(`  ✓ Silver layer saved: ${mergedData.length} records → ${versionedPath}`)
+  } catch (error) {
+    throw new Error(`Failed to write Silver Parquet: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 
   return {
     data: mergedData,
@@ -437,12 +493,18 @@ async function processGoldLayer(
   const silverTableName = job.destinationConfig.silverConfig?.tableName || 'silver_data'
 
   // Determine Silver file path
-  const { getCurrentSilverFile } = require('../storage')
   const silverFilePath = getCurrentSilverFile(job.workflowId, job.id, silverTableName)
 
   if (!silverFilePath) {
-    throw new Error('Silver file not found for Gold layer processing')
+    throw new Error(`Silver file not found for Gold layer processing. Expected at: data/silver/${job.workflowId}/${job.id}/${silverTableName}/current.parquet`)
   }
+
+  // Verify file actually exists
+  if (!fs.existsSync(silverFilePath)) {
+    throw new Error(`Silver file path resolved but file does not exist: ${silverFilePath}`)
+  }
+
+  addLog(`  → Using Silver file: ${silverFilePath}`)
 
   let recordCount = 0
 
@@ -486,7 +548,6 @@ async function processGoldLayer(
       LEFT JOIN dim_country c ON f.country = c.country_code AND c.is_current = TRUE
     `
 
-    const { executeDuckDBQuery } = require('../duckdb')
     await executeDuckDBQuery(sql)
 
     const countResult = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_customer')
@@ -556,8 +617,6 @@ async function processGoldAnalytics(
 
   // Ensure schema exists
   await createSnowflakeSchema()
-
-  const { executeDuckDBQuery } = require('../duckdb')
 
   // Get counts from all tables
   const countryCount = await executeDuckDBQuery('SELECT COUNT(*) as count FROM dim_country')

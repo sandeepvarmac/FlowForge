@@ -56,7 +56,7 @@ const mockData = [
   { _sk_id: 5, customer_id: 'CUST-005', first_name: 'Charlie', last_name: 'Brown', email: 'charlie.b@example.com', phone: '+1-555-0105', country_id: 'CA', _source_file: 'customer_001.csv', _ingested_at: '2025-01-04 12:01:45' },
 ]
 
-const mockColumnStats = {
+const mockColumnStats: Record<string, { uniqueCount: number; nullCount: number; min?: number; max?: number; dataQuality: number }> = {
   _sk_id: { uniqueCount: 8891, nullCount: 0, min: 1, max: 8891, dataQuality: 100 },
   customer_id: { uniqueCount: 8891, nullCount: 0, dataQuality: 100 },
   first_name: { uniqueCount: 4521, nullCount: 12, dataQuality: 99.8 },

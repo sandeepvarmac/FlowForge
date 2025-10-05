@@ -13,7 +13,7 @@ export async function POST(
     // Get workflow with jobs
     const workflow = db.prepare(`
       SELECT * FROM workflows WHERE id = ?
-    `).get(workflowId)
+    `).get(workflowId) as any
 
     if (!workflow) {
       return NextResponse.json(
@@ -24,7 +24,7 @@ export async function POST(
 
     const jobs = db.prepare(`
       SELECT * FROM jobs WHERE workflow_id = ? ORDER BY order_index ASC
-    `).all(workflowId)
+    `).all(workflowId) as any[]
 
     if (!jobs || jobs.length === 0) {
       return NextResponse.json(
