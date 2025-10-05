@@ -7,24 +7,30 @@ import { Database } from 'duckdb-async'
 import path from 'path'
 import fs from 'fs'
 
-let db: Database | null = null
-
 /**
- * Get or create DuckDB instance
+ * Get or create DuckDB instance (creates a NEW connection each time)
  */
 export async function getDuckDB(): Promise<Database> {
-  if (!db) {
-    const dbPath = path.join(process.cwd(), 'data', 'duckdb', 'gold.duckdb')
-    const dbDir = path.dirname(dbPath)
+  const dbPath = path.join(process.cwd(), 'data', 'duckdb', 'gold.duckdb')
+  const dbDir = path.dirname(dbPath)
 
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true })
-    }
-
-    db = await Database.create(dbPath)
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true })
   }
 
-  return db
+  // Always create a new connection to avoid file locks
+  return await Database.create(dbPath)
+}
+
+/**
+ * Close DuckDB connection
+ */
+export async function closeDuckDB(database: Database): Promise<void> {
+  try {
+    await database.close()
+  } catch (error) {
+    console.error('Error closing DuckDB:', error)
+  }
 }
 
 /**
@@ -32,16 +38,18 @@ export async function getDuckDB(): Promise<Database> {
  */
 export async function executeDuckDBQuery(sql: string, params?: any[]): Promise<any[]> {
   const duckdb = await getDuckDB()
-  const result = await duckdb.all(sql, ...(params || []))
-  return result
+  try {
+    const result = await duckdb.all(sql, ...(params || []))
+    return result
+  } finally {
+    await closeDuckDB(duckdb)
+  }
 }
 
 /**
  * Create Snowflake Schema tables in DuckDB
  */
 export async function createSnowflakeSchema(): Promise<void> {
-  const duckdb = getDuckDB()
-
   // Create dimension: dim_country
   await executeDuckDBQuery(`
     CREATE TABLE IF NOT EXISTS dim_country (
@@ -107,7 +115,7 @@ export async function createSnowflakeSchema(): Promise<void> {
     )
   `)
 
-  console.log('✓ Snowflake schema created in DuckDB')
+  console.log('Snowflake schema created in DuckDB')
 }
 
 /**
@@ -183,7 +191,7 @@ export async function truncateAllTables(): Promise<void> {
   await executeDuckDBQuery('DELETE FROM dim_customer')
   await executeDuckDBQuery('DELETE FROM dim_product')
   await executeDuckDBQuery('DELETE FROM dim_country')
-  console.log('✓ All tables truncated')
+  console.log('All DuckDB tables truncated')
 }
 
 /**
@@ -204,15 +212,6 @@ export async function exportTableToParquet(
     (FORMAT PARQUET, COMPRESSION ZSTD)
   `)
 
-  console.log(`✓ Exported ${tableName} to ${outputPath}`)
+  console.log(`Exported ${tableName} to ${outputPath}`)
 }
 
-/**
- * Close DuckDB connection
- */
-export function closeDuckDB(): void {
-  if (db) {
-    db.close()
-    db = null
-  }
-}

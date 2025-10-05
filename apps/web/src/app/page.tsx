@@ -84,10 +84,10 @@ export default function HomePage() {
         {/* Background Pattern */}
         <div className="absolute inset-0 bg-grid-slate-200 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
 
-        <div className="max-w-7xl mx-auto px-6 py-24 sm:py-32">
+        <div className="max-w-7xl mx-auto px-6 pt-20 pb-16 sm:pt-24 sm:pb-20">
           <div className="text-center">
             {/* Large Logo */}
-            <div className="flex justify-center mb-8">
+            <div className="flex justify-center mb-6">
               <div className="relative w-48 h-48">
                 <Image
                   src="/logo-large.svg"
@@ -100,41 +100,32 @@ export default function HomePage() {
             </div>
 
             {/* Hero Text */}
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-6">
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-4 pb-3">
               FlowForge
             </h1>
 
-            <p className="text-xl sm:text-2xl text-slate-600 font-medium mb-4">
+            <p className="text-xl sm:text-2xl text-slate-600 font-medium mb-3">
               Enterprise Data Orchestration Platform
             </p>
 
-            <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-12">
+            <p className="text-lg text-slate-500 max-w-2xl mx-auto mb-8">
               Build robust data pipelines with Medallion Architecture. Transform raw data into business-ready insights with AI-powered automation.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            {/* CTA Button */}
+            <div className="flex justify-center">
               <Button
                 size="lg"
                 className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-6 text-lg"
                 onClick={() => setShowCreateModal(true)}
               >
-                Create Your First Workflow
+                Create a New Workflow
                 <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-2 border-slate-300 hover:border-blue-500 px-8 py-6 text-lg"
-                onClick={() => router.push('/workflows')}
-              >
-                View Demo Workflow
               </Button>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16 max-w-4xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 max-w-4xl mx-auto">
               {stats.map((stat, index) => (
                 <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
                   <div className="text-3xl font-bold text-blue-600 mb-1">{stat.value}</div>
@@ -148,8 +139,8 @@ export default function HomePage() {
       </div>
 
       {/* Features Section */}
-      <div className="max-w-7xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
+      <div className="max-w-7xl mx-auto px-6 pt-16 pb-12">
+        <div className="text-center mb-10">
           <h2 className="text-3xl font-bold text-slate-900 mb-3">
             Powerful Features
           </h2>
@@ -208,7 +199,7 @@ export default function HomePage() {
       </div>
 
       {/* Vision Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-16">
+      <div className="bg-gradient-to-r from-blue-600 to-purple-600 py-12">
         <div className="max-w-4xl mx-auto px-6 text-center text-white">
           <h2 className="text-3xl font-bold mb-4">
             Our Vision

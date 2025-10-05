@@ -47,19 +47,8 @@ export async function executeJob(
   try {
     addLog(`🚀 Starting job execution: ${job.name}`)
 
-    // Create execution record
-    db.prepare(`
-      INSERT INTO job_executions (
-        id, job_id, workflow_id, status, start_time, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      executionId,
-      job.id,
-      job.workflowId,
-      'running',
-      startTime,
-      startTime
-    )
+    // Note: Execution record is now created by the workflow run API
+    // This function focuses only on data processing
 
     // Determine source files (pattern matching or single file)
     let sourceFiles: ScannedFile[] = []
@@ -106,37 +95,9 @@ export async function executeJob(
       addLog
     )
 
-    // Update execution record
+    // Calculate duration
     const endTime = Date.now()
     const duration = endTime - startTime
-
-    db.prepare(`
-      UPDATE job_executions
-      SET status = ?, end_time = ?, duration = ?,
-          bronze_records = ?, silver_records = ?, gold_records = ?,
-          bronze_file_path = ?, silver_file_path = ?, gold_file_path = ?,
-          logs = ?
-      WHERE id = ?
-    `).run(
-      'completed',
-      endTime,
-      duration,
-      bronzeResult.recordCount,
-      silverResult.recordCount,
-      goldResult.recordCount,
-      bronzeResult.filePath,
-      silverResult.filePath,
-      goldResult.filePath,
-      JSON.stringify(logs),
-      executionId
-    )
-
-    // Update job status
-    db.prepare(`
-      UPDATE jobs
-      SET status = ?, last_run = ?, updated_at = ?
-      WHERE id = ?
-    `).run('completed', endTime, endTime, job.id)
 
     addLog(`✅ Job execution completed successfully in ${duration}ms`)
 
@@ -153,41 +114,11 @@ export async function executeJob(
     }
 
   } catch (error) {
-    const endTime = Date.now()
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-
     addLog(`❌ Job execution failed: ${errorMessage}`)
 
-    // Update execution record with error
-    db.prepare(`
-      UPDATE job_executions
-      SET status = ?, end_time = ?, duration = ?, error = ?, logs = ?
-      WHERE id = ?
-    `).run(
-      'failed',
-      endTime,
-      endTime - startTime,
-      errorMessage,
-      JSON.stringify(logs),
-      executionId
-    )
-
-    // Update job status
-    db.prepare(`
-      UPDATE jobs
-      SET status = ?, updated_at = ?
-      WHERE id = ?
-    `).run('failed', endTime, job.id)
-
-    return {
-      success: false,
-      executionId,
-      bronzeRecords: 0,
-      silverRecords: 0,
-      goldRecords: 0,
-      logs,
-      error: errorMessage
-    }
+    // Re-throw the error so the run route can handle it
+    throw error
   }
 }
 

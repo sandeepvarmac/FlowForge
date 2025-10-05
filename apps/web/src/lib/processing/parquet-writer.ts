@@ -1,5 +1,8 @@
 import * as arrow from 'apache-arrow'
+import { tableFromArrays } from 'apache-arrow'
+import { writeParquet as writeParquetWasm } from 'parquet-wasm'
 import fs from 'fs'
+import path from 'path'
 
 export interface ColumnSchema {
   name: string
@@ -60,59 +63,26 @@ export async function writeParquet(
   outputPath: string
 ): Promise<void> {
   try {
-    // Build Arrow schema
-    const fields = schema.map(col =>
-      new arrow.Field(col.name, getArrowType(col.type), true) // nullable
-    )
-    const arrowSchema = new arrow.Schema(fields)
-
-    // Convert data to columnar format
-    const columns = schema.map(col => {
-      const values = data.map(row => convertValue(row[col.name], col.type))
-      return values
-    })
-
-    // Build Arrow table
-    const builders = schema.map((col, i) => {
-      const ArrowType = getArrowType(col.type)
-
-      // Create appropriate builder
-      switch (col.type) {
-        case 'integer':
-          return arrow.makeBuilder({ type: new arrow.Int64(), nullValues: [null] })
-        case 'decimal':
-          return arrow.makeBuilder({ type: new arrow.Float64(), nullValues: [null] })
-        case 'date':
-          return arrow.makeBuilder({ type: new arrow.DateMillisecond(), nullValues: [null] })
-        case 'boolean':
-          return arrow.makeBuilder({ type: new arrow.Bool(), nullValues: [null] })
-        default:
-          return arrow.makeBuilder({ type: new arrow.Utf8(), nullValues: [null] })
-      }
-    })
-
-    // Populate builders
-    for (let rowIdx = 0; rowIdx < data.length; rowIdx++) {
-      schema.forEach((col, colIdx) => {
-        const value = convertValue(data[rowIdx][col.name], col.type)
-        builders[colIdx].append(value)
-      })
+    // Ensure directory exists
+    const dir = path.dirname(outputPath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
     }
 
-    // Finish building vectors
-    const vectors = builders.map((builder, i) => builder.finish().toVector())
+    // Convert data to columnar format for Arrow
+    const columns: Record<string, any[]> = {}
+    schema.forEach(col => {
+      columns[col.name] = data.map(row => convertValue(row[col.name], col.type))
+    })
 
-    // Create table directly from arrays
-    const table = arrow.tableFromArrays(
-      Object.fromEntries(schema.map((col, i) => [col.name, vectors[i].toArray()]))
-    )
+    // Create Arrow table
+    const table = tableFromArrays(columns)
 
-    // For now, we'll write as Arrow IPC format (similar to Parquet)
-    // Note: For production, you'd want to use a proper Parquet writer
-    const writer = arrow.RecordBatchFileWriter.writeAll(table)
-    const buffer = await writer.toUint8Array()
+    // Write to Parquet using parquet-wasm
+    const parquetBuffer = writeParquetWasm(table)
 
-    fs.writeFileSync(outputPath, buffer)
+    // Write buffer to file
+    fs.writeFileSync(outputPath, Buffer.from(parquetBuffer))
 
     console.log(`✅ Parquet file written: ${outputPath} (${data.length} rows)`)
   } catch (error) {

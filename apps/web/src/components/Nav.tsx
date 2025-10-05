@@ -93,7 +93,7 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
               <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 FlowForge
               </h1>
-              <p className="text-xs text-foreground-muted">Data Orchestration</p>
+              <p className="text-xs text-foreground-muted">Data Orchestration Platform</p>
             </div>
           )}
         </Link>

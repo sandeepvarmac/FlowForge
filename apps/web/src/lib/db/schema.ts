@@ -45,18 +45,33 @@ CREATE TABLE IF NOT EXISTS jobs (
   FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
 );
 
+-- Workflow Executions table
+CREATE TABLE IF NOT EXISTS executions (
+  id TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'cancelled')),
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+
+  FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+
 -- Job Executions table
 CREATE TABLE IF NOT EXISTS job_executions (
   id TEXT PRIMARY KEY,
+  execution_id TEXT NOT NULL,
   job_id TEXT NOT NULL,
-  workflow_id TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
 
-  start_time INTEGER NOT NULL,
-  end_time INTEGER,
-  duration INTEGER, -- milliseconds
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  duration_ms INTEGER,
 
   -- Record counts
+  records_processed INTEGER DEFAULT 0,
   bronze_records INTEGER DEFAULT 0,
   silver_records INTEGER DEFAULT 0,
   gold_records INTEGER DEFAULT 0,
@@ -70,12 +85,13 @@ CREATE TABLE IF NOT EXISTS job_executions (
   -- Results
   validation_results TEXT, -- JSON
   logs TEXT, -- JSON array
-  error TEXT,
+  error_message TEXT,
 
-  created_at INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
 
-  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
-  FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+  FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE,
+  FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
 
 -- Data Quality Rules table
@@ -146,10 +162,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
-CREATE INDEX IF NOT EXISTS idx_executions_job_id ON job_executions(job_id);
-CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON job_executions(workflow_id);
-CREATE INDEX IF NOT EXISTS idx_executions_status ON job_executions(status);
-CREATE INDEX IF NOT EXISTS idx_executions_start_time ON job_executions(start_time);
+CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
+CREATE INDEX IF NOT EXISTS idx_job_executions_execution_id ON job_executions(execution_id);
+CREATE INDEX IF NOT EXISTS idx_job_executions_job_id ON job_executions(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_executions_status ON job_executions(status);
 CREATE INDEX IF NOT EXISTS idx_metadata_layer ON metadata_catalog(layer);
 CREATE INDEX IF NOT EXISTS idx_metadata_job_id ON metadata_catalog(job_id);
 CREATE INDEX IF NOT EXISTS idx_dq_rules_job_id ON dq_rules(job_id);
