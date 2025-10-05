@@ -7,12 +7,11 @@ const nextConfig = {
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Externalize DuckDB and parquet-wasm native modules for server-side only
+      // Externalize DuckDB native modules for server-side only
       config.externals = config.externals || []
       config.externals.push({
         'duckdb': 'commonjs duckdb',
-        'duckdb-async': 'commonjs duckdb-async',
-        'parquet-wasm': 'commonjs parquet-wasm'
+        'duckdb-async': 'commonjs duckdb-async'
       })
     }
     return config
@@ -20,4 +19,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-

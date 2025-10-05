@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import path from 'path'
 import { executeJob } from '@/lib/processing/job-executor'
 import { getDatabase } from '@/lib/db'
 
@@ -92,8 +93,8 @@ export async function POST(
         // Get source file path from job configuration
         const fileName = sourceConfig.fileConfig?.filePath || sourceConfig.filePath || ''
 
-        // Resolve the full path - API runs from apps/web, so go up to project root
-        const sourceFilePath = `../../sample-data/${fileName}`
+        // Resolve absolute path to sample-data (stable regardless of deployment mode)
+        const sourceFilePath = path.join(process.cwd(), '..', '..', 'sample-data', fileName)
 
         console.log(`   Source file path: ${sourceFilePath}`)
 
@@ -109,7 +110,7 @@ export async function POST(
           SET status = ?, completed_at = ?, duration_ms = ?,
               records_processed = ?, bronze_records = ?, silver_records = ?, gold_records = ?,
               bronze_file_path = ?, silver_file_path = ?, gold_file_path = ?,
-              updated_at = ?
+              logs = ?, updated_at = ?
           WHERE id = ?
         `).run(
           'completed',
@@ -122,6 +123,7 @@ export async function POST(
           result.bronzeFilePath,
           result.silverFilePath,
           result.goldFilePath,
+          JSON.stringify(result.logs),
           jobEndTime,
           jobExecutionId
         )
@@ -152,12 +154,13 @@ export async function POST(
         overallStatus = 'failed'
 
         // Update job execution record with error
+        const errorLogs = error.logs || []
         db.prepare(`
           UPDATE job_executions
           SET status = ?, completed_at = ?, duration_ms = ?,
-              error_message = ?, updated_at = ?
+              error_message = ?, logs = ?, updated_at = ?
           WHERE id = ?
-        `).run('failed', jobEndTime, duration, error.message, jobEndTime, jobExecutionId)
+        `).run('failed', jobEndTime, duration, error.message, JSON.stringify(errorLogs), jobEndTime, jobExecutionId)
 
         console.error(`❌ Job failed: ${job.name}`)
         console.error(`   Error: ${error.message}`)
