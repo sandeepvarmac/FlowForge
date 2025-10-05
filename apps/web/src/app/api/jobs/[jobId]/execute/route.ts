@@ -1,14 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
-import { executeJob } from '@/lib/processing/job-executor'
-import type { Job } from '@/types/workflow'
+
+const PREFECT_API_URL = (process.env.PREFECT_API_URL || 'http://127.0.0.1:4200/api').replace(/\/$/, '')
+const PREFECT_FLOW_NAME = process.env.PREFECT_FLOW_NAME || 'flowforge-medallion'
+const PREFECT_DEPLOYMENT_NAME = process.env.PREFECT_DEPLOYMENT_NAME || 'customer-data'
+
+interface PrefectRunResponse {
+  id: string
+  name?: string
+}
+
+async function triggerPrefectRun(
+  flowName: string,
+  deploymentName: string,
+  parameters: Record<string, unknown>
+): Promise<PrefectRunResponse> {
+  const url = `${PREFECT_API_URL}/deployments/name/${encodeURIComponent(flowName)}/${encodeURIComponent(deploymentName)}/create_flow_run`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ parameters })
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`Prefect request failed (${response.status}): ${detail}`)
+  }
+
+  return response.json() as Promise<PrefectRunResponse>
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/jobs/[jobId]/execute
- * Execute a job (CSV → Bronze → Silver → Gold)
+ * Trigger a Prefect medallion run for a single job.
  */
 export async function POST(
   request: NextRequest,
@@ -16,19 +45,6 @@ export async function POST(
 ) {
   try {
     const { jobId } = params
-    const body = await request.json()
-    const { sourceFilePath } = body
-
-    if (!sourceFilePath) {
-      return NextResponse.json(
-        { error: 'sourceFilePath is required' },
-        { status: 400 }
-      )
-    }
-
-    console.log(`🚀 Executing job: ${jobId}`)
-
-    // Get job from database
     const db = getDatabase()
     const jobRow = db.prepare(`
       SELECT * FROM jobs WHERE id = ?
@@ -38,44 +54,31 @@ export async function POST(
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
-    // Reconstruct job object
-    const job: Job = {
-      id: jobRow.id,
-      workflowId: jobRow.workflow_id,
-      name: jobRow.name,
-      description: jobRow.description,
-      type: jobRow.type,
-      order: jobRow.order_index,
-      status: jobRow.status,
-      sourceConfig: JSON.parse(jobRow.source_config),
-      destinationConfig: JSON.parse(jobRow.destination_config),
-      transformationConfig: jobRow.transformation_config ? JSON.parse(jobRow.transformation_config) : undefined,
-      validationConfig: jobRow.validation_config ? JSON.parse(jobRow.validation_config) : undefined,
-      lastRun: jobRow.last_run ? new Date(jobRow.last_run) : undefined,
-      createdAt: new Date(jobRow.created_at),
-      updatedAt: new Date(jobRow.updated_at)
-    }
+    const sourceConfig = typeof jobRow.source_config === 'string' ? JSON.parse(jobRow.source_config) : jobRow.source_config
+    const landingKey = sourceConfig?.landingKey || `landing/${jobRow.workflow_id}/${jobRow.id}/${sourceConfig?.fileConfig?.filePath || ''}`
+    const prefectConfig = sourceConfig?.prefect ?? {}
+    const [flowName, deploymentName] = (prefectConfig.deploymentName || `${PREFECT_FLOW_NAME}/${PREFECT_DEPLOYMENT_NAME}`).split('/')
+    const primaryKeys = prefectConfig.parameters?.primary_keys || []
 
-    // Execute job
-    const result = await executeJob(job, sourceFilePath)
-
-    return NextResponse.json({
-      success: result.success,
-      executionId: result.executionId,
-      bronzeRecords: result.bronzeRecords,
-      silverRecords: result.silverRecords,
-      goldRecords: result.goldRecords,
-      bronzeFilePath: result.bronzeFilePath,
-      silverFilePath: result.silverFilePath,
-      goldFilePath: result.goldFilePath,
-      logs: result.logs,
-      error: result.error
+    const prefectRun = await triggerPrefectRun(flowName, deploymentName, {
+      workflow_id: jobRow.workflow_id,
+      job_id: jobId,
+      landing_key: landingKey,
+      primary_keys: primaryKeys
     })
 
-  } catch (error) {
+    return NextResponse.json({
+      success: true,
+      jobId,
+      flowRunId: prefectRun.id,
+      landingKey,
+      primaryKeys
+    })
+
+  } catch (error: any) {
     console.error('❌ Job execution error:', error)
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Execution failed' },
+      { error: error.message || 'Execution failed' },
       { status: 500 }
     )
   }
