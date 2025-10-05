@@ -88,3 +88,12 @@ Thumbs.db
 
 # Yarn Integrity file
 **/.yarn-integrity
+prefect-flows/venv/
+prefect-flows/data/
+
+
+
+**/__pycache__/
+apps/web/data/duckdb/
+apps/web/public/wasm/
+

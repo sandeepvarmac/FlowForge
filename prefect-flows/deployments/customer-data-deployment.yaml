@@ -1,0 +1,63 @@
+###
+### A complete description of a Prefect Deployment for flow 'flowforge-medallion'
+###
+name: customer-data
+description: "Execute the Bronze \u2192 Silver \u2192 Gold pipeline."
+version: 00b7d2353a96c4e1c4bb79aded415b59
+# The work queue that will handle this deployment's runs
+work_queue_name: flowforge-local
+work_pool_name: flowforge-local
+tags: []
+parameters: {}
+schedule: null
+is_schedule_active: null
+infra_overrides: {}
+infrastructure:
+  type: process
+  env: {}
+  labels: {}
+  name: null
+  command: null
+  stream_output: true
+  working_dir: null
+  block_type_slug: process
+  _block_type_slug: process
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: flowforge-medallion
+manifest_path: null
+storage: null
+path: C:\Dev\FlowForge\prefect-flows
+entrypoint: flows\medallion.py:medallion_pipeline
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties:
+    workflow_id:
+      title: workflow_id
+      position: 0
+      type: string
+    job_id:
+      title: job_id
+      position: 1
+      type: string
+    landing_key:
+      title: landing_key
+      position: 2
+      type: string
+    primary_keys:
+      title: primary_keys
+      position: 3
+      type: array
+      items:
+        type: string
+  required:
+  - workflow_id
+  - job_id
+  - landing_key
+  definitions: null
+timestamp: '2025-10-05T18:50:19.655945+00:00'
+triggers: []
+enforce_parameter_schema: null

@@ -5,6 +5,7 @@ prefect-aws==0.4.0  # S3 blocks for MinIO/AWS
 # Data processing
 polars==0.20.0      # Fast DataFrame library
 pyarrow==14.0.0     # Arrow/Parquet support
+numpy<2
 duckdb==0.9.0       # Analytics engine
 
 # Storage and utilities
@@ -19,3 +20,4 @@ sqlalchemy==2.0.23
 
 # Utilities
 python-dateutil==2.8.2
+pandas==2.1.4
