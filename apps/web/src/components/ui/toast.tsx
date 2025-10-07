@@ -33,7 +33,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
     setToasts((prev) => [...prev, newToast])
 
-    if (newToast.duration > 0) {
+    if ((newToast.duration ?? 0) > 0) {
       setTimeout(() => {
         dismiss(id)
       }, newToast.duration)

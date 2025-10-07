@@ -119,7 +119,7 @@ export async function PATCH(
     }
 
     if (key === 'lastRun' || key === 'nextRun') {
-      const timestamp = value ? new Date(value).getTime() : null
+      const timestamp = typeof value === 'string' || value instanceof Date ? new Date(value).getTime() : null
       setClauses.push(`${column} = ?`)
       values.push(timestamp)
       return
