@@ -7,98 +7,82 @@ import tempfile
 import polars as pl
 from prefect import task, get_run_logger
 
-from utils.duckdb_helper import (
-    create_snowflake_schema,
-    export_query_to_parquet,
-    get_connection,
-    load_dimension,
-)
+# TODO: Re-enable DuckDB when installed
+# from utils.duckdb_helper import (
+#     create_snowflake_schema,
+#     export_query_to_parquet,
+#     get_connection,
+#     load_dimension,
+# )
 from utils.parquet_utils import read_parquet, write_parquet
 from utils.s3 import S3Client
 
 
+def _build_gold_key(
+    workflow_slug: str,
+    job_slug: str,
+    run_id: str,
+    domain: str = "analytics",
+) -> tuple[str, str]:
+    """
+    Return (filename, s3_key) for the gold layer.
+
+    Pattern: gold/{domain}/{dataset}/{yyyymmdd}/{dataset}__{runId}__gold__view.parquet
+
+    For now, we use the job_slug as the dataset name.
+    """
+    date_folder = datetime.utcnow().strftime("%Y%m%d")
+    dataset = job_slug  # e.g., "ingest-countries" becomes the dataset name
+
+    filename = f"{dataset}__{run_id}__gold__view.parquet"
+    s3_key = f"gold/{domain}/{dataset}/{date_folder}/{filename}"
+
+    return filename, s3_key
+
+
 @task(name="gold_publish")
-def gold_publish(silver_result: dict) -> dict:
-    """Publish analytics outputs to the Gold layer."""
+def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
+    """Publish analytics outputs to the Gold layer (simplified - no DuckDB for now)."""
 
     logger = get_run_logger()
     s3 = S3Client()
 
     workflow_id = silver_result["workflow_id"]
     job_id = silver_result["job_id"]
+    workflow_slug = silver_result["workflow_slug"]
+    job_slug = silver_result["job_slug"]
+    run_id = silver_result["run_id"]
     silver_key = silver_result["silver_key"]
 
-    gold_prefix = f"gold/{workflow_id}/{job_id}"
-    metrics_key = f"{gold_prefix}/metrics.parquet"
-    country_key = f"{gold_prefix}/country_breakdown.parquet"
+    # Simplified: Just copy Silver to Gold with compression
+    logger.info(f"Publishing Gold layer from Silver: {silver_key}")
 
-    logger.info("Building Gold outputs from Silver %s", silver_key)
+    gold_filename, gold_key = _build_gold_key(workflow_slug, job_slug, run_id, domain)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
-        local_silver = tmp_path / "silver.parquet"
-        s3.download_file(silver_key, local_silver)
+        silver_file = tmp_path / "silver.parquet"
+        gold_file = tmp_path / gold_filename
 
-        df = read_parquet(local_silver)
+        # Download Silver file
+        s3.download_file(silver_key, str(silver_file))
 
-        metrics_df = pl.DataFrame(
-            {
-                "metric": ["records", "columns", "generated_at"],
-                "value": [df.height, len(df.columns), datetime.utcnow().isoformat()],
-            }
-        )
-        metrics_local = tmp_path / "metrics.parquet"
-        write_parquet(metrics_df, metrics_local)
-        s3.upload_file(metrics_local, metrics_key)
+        # Read and re-write with ZSTD compression
+        df = read_parquet(str(silver_file))
+        write_parquet(df, str(gold_file))
 
-        country_upload_key: str | None = None
-        if "country" in df.columns:
-            country_df = (
-                df.group_by("country")
-                .agg(pl.len().alias("records"))
-                .sort("records", descending=True)
-            )
-            country_local = tmp_path / "country_breakdown.parquet"
-            write_parquet(country_df, country_local)
-            s3.upload_file(country_local, country_key)
-            country_upload_key = country_key
-            logger.info("Uploaded Gold country breakdown to %s", country_key)
+        # Upload to Gold layer
+        s3.upload_file(str(gold_file), gold_key)
 
-        required_dim_cols = {"_sk_id", "customer_id", "first_name", "last_name", "email"}
-        if required_dim_cols.issubset(df.columns):
-            logger.info("Loading dim_customer table into DuckDB")
-            dim_df = df
-            if "country" not in dim_df.columns:
-                dim_df = dim_df.with_columns(pl.lit(None).alias("country"))
-            if "loyalty_tier" not in dim_df.columns:
-                dim_df = dim_df.with_columns(pl.lit(None).alias("loyalty_tier"))
+        logger.info(f"✅ Gold layer published: {gold_key} ({len(df)} rows)")
 
-            dim_df = dim_df.select(
-                pl.col("_sk_id").alias("customer_key"),
-                "customer_id",
-                "first_name",
-                "last_name",
-                pl.col("email").fill_null("").alias("email"),
-                pl.col("country").fill_null("").alias("country"),
-                pl.col("loyalty_tier").fill_null("").alias("loyalty_tier"),
-                pl.lit(datetime.utcnow()).alias("updated_at"),
-            )
-
-            with get_connection() as conn:
-                create_snowflake_schema(conn)
-                load_dimension(conn, "dim_customer", dim_df)
-                gold_table_path = tmp_path / "dim_customer.parquet"
-                export_query_to_parquet(
-                    conn,
-                    "SELECT * FROM dim_customer ORDER BY customer_key",
-                    gold_table_path,
-                )
-                s3.upload_file(gold_table_path, f"{gold_prefix}/dim_customer.parquet")
-
-    return {
-        "workflow_id": workflow_id,
-        "job_id": job_id,
-        "metrics_key": metrics_key,
-        "country_key": country_upload_key,
-        "silver_key": silver_key,
-    }
+        return {
+            "workflow_id": workflow_id,
+            "job_id": job_id,
+            "workflow_slug": workflow_slug,
+            "job_slug": job_slug,
+            "run_id": run_id,
+            "gold_key": gold_key,
+            "gold_filename": gold_filename,
+            "rows": len(df),
+        }

@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input, useToast, DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui'
 import { CreateWorkflowModal } from '@/components/workflows/create-workflow-modal'
+import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions } from '@/hooks'
-import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye } from 'lucide-react'
+import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import { useRouter } from 'next/navigation'
 
 const getStatusVariant = (status: string) => {
@@ -38,8 +40,12 @@ const formatDate = (date?: Date) => {
 export default function WorkflowsPage() {
   const router = useRouter()
   const { state } = useAppContext()
-  const { runWorkflow, pauseWorkflow, resumeWorkflow, isLoading, error } = useWorkflowActions()
+  const { runWorkflow, pauseWorkflow, resumeWorkflow, deleteWorkflow, isLoading, error } = useWorkflowActions()
+  const { toast } = useToast()
   const [createModalOpen, setCreateModalOpen] = React.useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = React.useState(false)
+  const [workflowToDelete, setWorkflowToDelete] = React.useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
 
@@ -51,7 +57,7 @@ export default function WorkflowsPage() {
     return matchesSearch && matchesStatus
   })
 
-  const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'edit' | 'view') => {
+  const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'edit' | 'view' | 'delete') => {
     switch (action) {
       case 'run':
         await runWorkflow(workflowId)
@@ -69,6 +75,37 @@ export default function WorkflowsPage() {
         console.log(`Edit workflow ${workflowId}`)
         // TODO: Implement edit workflow
         break
+      case 'delete':
+        const workflow = state.workflows.find(w => w.id === workflowId)
+        if (workflow) {
+          setWorkflowToDelete({ id: workflow.id, name: workflow.name })
+          setDeleteModalOpen(true)
+        }
+        break
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!workflowToDelete) return
+
+    setIsDeleting(true)
+    try {
+      await deleteWorkflow(workflowToDelete.id)
+      toast({
+        type: 'success',
+        title: 'Workflow Deleted',
+        description: `"${workflowToDelete.name}" has been permanently deleted along with all associated jobs and execution history.`
+      })
+      setDeleteModalOpen(false)
+      setWorkflowToDelete(null)
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Delete Failed',
+        description: error instanceof Error ? error.message : 'Failed to delete workflow'
+      })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -150,132 +187,218 @@ export default function WorkflowsPage() {
             </div>
           </Card>
         ) : (
-          filteredWorkflows.map((workflow) => (
-            <Card key={workflow.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <CardTitle className="text-lg text-foreground group-hover:text-primary-700 transition-colors">
-                      {workflow.name}
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={getStatusVariant(workflow.status)}>
-                        {workflow.status}
-                      </Badge>
-                      {workflow.status === 'running' && (
-                        <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                      )}
+          filteredWorkflows.map((workflow) => {
+            const completedJobs = workflow.jobs.filter(job => job.status === 'completed').length
+            const failedJobs = workflow.jobs.filter(job => job.status === 'failed').length
+            const runningJobs = workflow.jobs.filter(job => job.status === 'running').length
+            const totalJobs = workflow.jobs.length
+            const jobSummaryParts: string[] = []
+            if (completedJobs) {
+              jobSummaryParts.push(`${completedJobs} completed`)
+            }
+            if (runningJobs) {
+              jobSummaryParts.push(`${runningJobs} running`)
+            }
+            if (failedJobs) {
+              jobSummaryParts.push(`${failedJobs} failed`)
+            }
+            const jobSummary = totalJobs === 0
+              ? 'No jobs configured yet'
+              : jobSummaryParts.length > 0
+                ? jobSummaryParts.join(' | ')
+                : 'Jobs ready | awaiting next run'
+
+            const lastRunRelative = workflow.lastRun
+              ? formatDistanceToNow(workflow.lastRun, { addSuffix: true })
+              : null
+
+            const lastRunAbsolute = workflow.lastRun
+              ? new Intl.DateTimeFormat('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }).format(workflow.lastRun)
+              : null
+
+            return (
+              <Card key={workflow.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <CardTitle className="text-lg text-foreground group-hover:text-primary-700 transition-colors">
+                        {workflow.name}
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getStatusVariant(workflow.status)}>
+                          {workflow.status}
+                        </Badge>
+                        {workflow.status === 'running' && (
+                          <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {/* Quick Actions */}
+                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleWorkflowAction(workflow.id, 'run')}
+                            disabled={isLoading(workflow.id, 'run')}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isLoading(workflow.id, 'run') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
+                        {workflow.status === 'scheduled' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleWorkflowAction(workflow.id, 'pause')}
+                            disabled={isLoading(workflow.id, 'pause')}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isLoading(workflow.id, 'pause') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Pause className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
+                        {workflow.status === 'paused' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleWorkflowAction(workflow.id, 'resume')}
+                            disabled={isLoading(workflow.id, 'resume')}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isLoading(workflow.id, 'resume') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleWorkflowAction(workflow.id, 'delete')}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {/* More Actions Menu */}
+                      <DropdownMenu
+                        trigger={
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        }
+                      >
+                        <DropdownMenuItem onClick={() => handleWorkflowAction(workflow.id, 'view')}>
+                          <Eye className="w-4 h-4" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleWorkflowAction(workflow.id, 'edit')}>
+                          <Settings className="w-4 h-4" />
+                          Edit Workflow
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          destructive
+                          onClick={() => handleWorkflowAction(workflow.id, 'delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete Workflow
+                        </DropdownMenuItem>
+                      </DropdownMenu>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    {/* Quick Actions */}
-                    <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleWorkflowAction(workflow.id, 'run')}
-                          disabled={isLoading(workflow.id, 'run')}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isLoading(workflow.id, 'run') ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Play className="w-4 h-4" />
-                          )}
-                        </Button>
-                      )}
-                      {workflow.status === 'scheduled' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleWorkflowAction(workflow.id, 'pause')}
-                          disabled={isLoading(workflow.id, 'pause')}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isLoading(workflow.id, 'pause') ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Pause className="w-4 h-4" />
-                          )}
-                        </Button>
-                      )}
-                      {workflow.status === 'paused' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleWorkflowAction(workflow.id, 'resume')}
-                          disabled={isLoading(workflow.id, 'resume')}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isLoading(workflow.id, 'resume') ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Play className="w-4 h-4" />
-                          )}
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleWorkflowAction(workflow.id, 'view')}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleWorkflowAction(workflow.id, 'edit')}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 text-sm border-t border-border pt-4">
+                    <div>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
+                      <p className="font-semibold text-foreground mt-1">{workflow.application}</p>
                     </div>
-                    
-                    {/* More Actions Menu */}
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <MoreVertical className="w-4 h-4" />
-                    </Button>
+                    <div>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Owner</span>
+                      <p className="font-semibold text-foreground mt-1">{workflow.owner}</p>
+                    </div>
+                    <div>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Jobs</span>
+                      <p className="font-semibold text-foreground mt-1">{workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''}</p>
+                    </div>
+                    <div>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Created</span>
+                      <p className="font-semibold text-foreground mt-1">
+                        {new Intl.DateTimeFormat('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        }).format(workflow.createdAt)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 text-sm border-t border-border pt-4">
-                  <div>
-                    <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
-                    <p className="font-semibold text-foreground mt-1">{workflow.application}</p>
+
+                  <div className="mt-4 rounded-lg border border-border bg-background-secondary/60 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-medium uppercase text-foreground-muted">
+                          <Clock className="h-4 w-4 text-primary" />
+                          Last Execution
+                          <Badge variant={getStatusVariant(workflow.status)}>
+                            {workflow.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-foreground">
+                          {lastRunRelative ?? 'Awaiting first run'}
+                        </p>
+                        {lastRunAbsolute && (
+                          <p className="text-xs text-foreground-muted">
+                            {lastRunAbsolute}
+                          </p>
+                        )}
+                        <p className="mt-2 text-xs text-foreground-muted">
+                          {jobSummary}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Owner</span>
-                    <p className="font-semibold text-foreground mt-1">{workflow.owner}</p>
-                  </div>
-                  <div>
-                    <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Jobs</span>
-                    <p className="font-semibold text-foreground mt-1">{workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''}</p>
-                  </div>
-                  <div>
-                    <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Created</span>
-                    <p className="font-semibold text-foreground mt-1">
-                      {new Intl.DateTimeFormat('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      }).format(workflow.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+          })
         )}
       </div>
 
       {/* Create Workflow Modal */}
-      <CreateWorkflowModal 
-        open={createModalOpen} 
-        onOpenChange={setCreateModalOpen} 
+      <CreateWorkflowModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
       />
+
+      {/* Delete Confirmation Modal */}
+      {workflowToDelete && (
+        <DeleteConfirmationModal
+          open={deleteModalOpen}
+          onOpenChange={setDeleteModalOpen}
+          onConfirm={handleConfirmDelete}
+          title="Delete Workflow"
+          description="Are you sure you want to delete this workflow? This action cannot be undone and will permanently delete all associated jobs and execution history."
+          itemName={workflowToDelete.name}
+          itemType="workflow"
+          isDeleting={isDeleting}
+        />
+      )}
     </div>
   )
 }

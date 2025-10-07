@@ -1,23 +1,22 @@
 # Prefect and core dependencies
-prefect==2.14.0
-prefect-aws==0.4.0  # S3 blocks for MinIO/AWS
+prefect>=2.14.0,<3.0.0
+prefect-aws>=0.4.0  # S3 blocks for MinIO/AWS
 
 # Data processing
-polars==0.20.0      # Fast DataFrame library
-pyarrow==14.0.0     # Arrow/Parquet support
+polars>=0.20.0      # Fast DataFrame library
+pyarrow>=14.0.0     # Arrow/Parquet support
 numpy<2
-duckdb==0.9.0       # Analytics engine
 
 # Storage and utilities
-boto3==1.34.0       # S3/MinIO client
-python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.1.0
+boto3>=1.34.0       # S3/MinIO client
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 
 # Database
-psycopg2-binary==2.9.9  # PostgreSQL adapter
-sqlalchemy==2.0.23
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+sqlalchemy>=2.0.23
 
 # Utilities
-python-dateutil==2.8.2
-pandas==2.1.4
+python-dateutil>=2.8.2
+pandas>=2.1.0

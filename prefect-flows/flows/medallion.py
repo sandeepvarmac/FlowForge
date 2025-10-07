@@ -14,12 +14,15 @@ if str(PROJECT_ROOT) not in sys.path:
 from tasks.bronze import bronze_ingest  # noqa: E402
 from tasks.gold import gold_publish  # noqa: E402
 from tasks.silver import silver_transform  # noqa: E402
+from utils.slugify import slugify, generate_run_id  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the FlowForge medallion pipeline locally.")
     parser.add_argument("workflow_id", help="Workflow identifier (used for S3 paths)")
     parser.add_argument("job_id", help="Job identifier (used for S3 paths)")
+    parser.add_argument("workflow_name", help="Workflow name (for slug generation)")
+    parser.add_argument("job_name", help="Job name (for slug generation)")
     parser.add_argument("landing_key", help="S3 key under landing/ that points to the source CSV")
     parser.add_argument(
         "--primary-keys",
@@ -34,21 +37,36 @@ def _parse_args() -> argparse.Namespace:
 def medallion_pipeline(
     workflow_id: str,
     job_id: str,
+    workflow_name: str,
+    job_name: str,
     landing_key: str,
     primary_keys: Optional[List[str]] = None,
+    flow_run_id: Optional[str] = None,
 ) -> dict:
-    """Execute the Bronze → Silver → Gold pipeline."""
+    """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys."""
     logger = get_run_logger()
+
+    # Generate human-readable slugs
+    workflow_slug = slugify(workflow_name)
+    job_slug = slugify(job_name)
+    run_id = generate_run_id(flow_run_id)
+
     logger.info(
-        "Starting medallion pipeline for workflow=%s job=%s landing=%s",
+        "Starting medallion pipeline for workflow=%s job=%s landing=%s (slugs: %s/%s, run: %s)",
         workflow_id,
         job_id,
         landing_key,
+        workflow_slug,
+        job_slug,
+        run_id,
     )
 
     bronze_result = bronze_ingest(
         workflow_id=workflow_id,
         job_id=job_id,
+        workflow_slug=workflow_slug,
+        job_slug=job_slug,
+        run_id=run_id,
         landing_key=landing_key,
     )
 
@@ -67,6 +85,8 @@ if __name__ == "__main__":
     medallion_pipeline(
         workflow_id=args.workflow_id,
         job_id=args.job_id,
+        workflow_name=args.workflow_name,
+        job_name=args.job_name,
         landing_key=args.landing_key,
         primary_keys=args.primary_keys,
     )

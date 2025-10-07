@@ -14,7 +14,7 @@ interface CreateJobModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workflowId: string
-  onJobCreate: (job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>) => void
+  onJobCreate: (job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>, uploadedFile?: File) => void
 }
 
 interface JobFormData {
@@ -199,7 +199,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
       status: 'configured'
     }
 
-    onJobCreate(job)
+    onJobCreate(job, formData._uploadedFile)
     onOpenChange(false)
     resetForm()
   }

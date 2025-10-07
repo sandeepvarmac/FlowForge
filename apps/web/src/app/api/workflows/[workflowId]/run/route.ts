@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
 
 const PREFECT_API_URL = (process.env.PREFECT_API_URL || 'http://127.0.0.1:4200/api').replace(/\/$/, '')
-const PREFECT_FLOW_NAME = process.env.PREFECT_FLOW_NAME || 'flowforge-medallion'
-const PREFECT_DEPLOYMENT_NAME = process.env.PREFECT_DEPLOYMENT_NAME || 'customer-data'
+const PREFECT_DEPLOYMENT_ID = process.env.PREFECT_DEPLOYMENT_ID || '6418e5a3-9205-4fa6-a5fe-6e852c32281a'
 
 interface PrefectRunResponse {
   id: string
@@ -12,11 +11,10 @@ interface PrefectRunResponse {
 }
 
 async function triggerPrefectRun(
-  flowName: string,
-  deploymentName: string,
+  deploymentId: string,
   parameters: Record<string, unknown>
 ): Promise<PrefectRunResponse> {
-  const url = `${PREFECT_API_URL}/deployments/name/${encodeURIComponent(flowName)}/${encodeURIComponent(deploymentName)}/create_flow_run`
+  const url = `${PREFECT_API_URL}/deployments/${deploymentId}/create_flow_run`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -88,23 +86,26 @@ export async function POST(
       const sourceConfig = typeof job.source_config === 'string' ? JSON.parse(job.source_config) : job.source_config
       const landingKey = sourceConfig?.landingKey || `landing/${workflowId}/${job.id}/${sourceConfig?.fileConfig?.filePath || ''}`
       const prefectConfig = sourceConfig?.prefect ?? {}
-      const [flowName, deploymentName] = (prefectConfig.deploymentName || `${PREFECT_FLOW_NAME}/${PREFECT_DEPLOYMENT_NAME}`).split('/')
+      const deploymentId = prefectConfig.deploymentId || PREFECT_DEPLOYMENT_ID
       const primaryKeys = prefectConfig.parameters?.primary_keys || []
 
       try {
-        const prefectRun = await triggerPrefectRun(flowName, deploymentName, {
+        const prefectRun = await triggerPrefectRun(deploymentId, {
           workflow_id: workflowId,
           job_id: job.id,
+          workflow_name: workflow.name,
+          job_name: job.name,
           landing_key: landingKey,
-          primary_keys: primaryKeys
+          primary_keys: primaryKeys,
+          flow_run_id: null  // Will be set by Prefect
         })
 
         const logEntry = [`Prefect flow run created: ${prefectRun.id}`]
         db.prepare(`
           UPDATE job_executions
-          SET status = ?, logs = ?, updated_at = ?
+          SET status = ?, logs = ?, updated_at = ?, flow_run_id = ?
           WHERE id = ?
-        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), jobExecutionId)
+        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), prefectRun.id, jobExecutionId)
 
         jobResults.push({
           jobId: job.id,

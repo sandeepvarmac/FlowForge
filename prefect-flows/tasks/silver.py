@@ -16,6 +16,31 @@ from utils.parquet_utils import (
 from utils.s3 import S3Client
 
 
+def _build_silver_keys(
+    workflow_slug: str,
+    job_slug: str,
+    run_id: str,
+) -> tuple[str, str, str]:
+    """
+    Return (current_filename, current_key, archive_key) for the silver layer.
+
+    Pattern:
+      - Current: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}__{jobSlug}__{runId}__silver__current.parquet
+      - Archive: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/archive/{timestamp}__v{sequence}.parquet
+    """
+    date_folder = datetime.utcnow().strftime("%Y%m%d")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
+    current_filename = f"{workflow_slug}__{job_slug}__{run_id}__silver__current.parquet"
+    current_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/{current_filename}"
+
+    # Archive: we'll determine version dynamically, for now use v001
+    archive_filename = f"{timestamp}__v001.parquet"
+    archive_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/archive/{archive_filename}"
+
+    return current_filename, current_key, archive_key
+
+
 @task(name="silver_transform")
 def silver_transform(
     bronze_result: dict,
@@ -28,10 +53,12 @@ def silver_transform(
 
     workflow_id = bronze_result["workflow_id"]
     job_id = bronze_result["job_id"]
+    workflow_slug = bronze_result["workflow_slug"]
+    job_slug = bronze_result["job_slug"]
+    run_id = bronze_result["run_id"]
     bronze_key = bronze_result["bronze_key"]
 
-    current_key = f"silver/{workflow_id}/{job_id}/current.parquet"
-    archive_key = f"silver/{workflow_id}/{job_id}/archive/current_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.parquet"
+    current_filename, current_key, archive_key = _build_silver_keys(workflow_slug, job_slug, run_id)
 
     logger.info("Transforming Bronze dataset %s to Silver", bronze_key)
 
@@ -66,7 +93,11 @@ def silver_transform(
     return {
         "workflow_id": workflow_id,
         "job_id": job_id,
+        "workflow_slug": workflow_slug,
+        "job_slug": job_slug,
+        "run_id": run_id,
         "silver_key": current_key,
+        "silver_filename": current_filename,
         "records": df.height,
         "columns": df.columns,
         "bronze_key": bronze_key,

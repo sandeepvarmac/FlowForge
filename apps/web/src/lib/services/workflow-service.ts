@@ -147,7 +147,26 @@ export class WorkflowService {
     }
 
     const result = await response.json()
-    return result.executions
+    return (result.executions || []).map((execution: any) => ({
+      ...execution,
+      startTime: execution.startTime ? new Date(execution.startTime) : undefined,
+      endTime: execution.endTime ? new Date(execution.endTime) : undefined,
+      createdAt: execution.createdAt ? new Date(execution.createdAt) : undefined,
+      updatedAt: execution.updatedAt ? new Date(execution.updatedAt) : undefined,
+      duration: typeof execution.duration === 'number' ? execution.duration : execution.duration ? Number(execution.duration) : undefined,
+      logs: Array.isArray(execution.logs) ? execution.logs : [],
+      jobExecutions: Array.isArray(execution.jobExecutions)
+        ? execution.jobExecutions.map((job: any) => ({
+            ...job,
+            startedAt: job.startedAt ? new Date(job.startedAt) : undefined,
+            completedAt: job.completedAt ? new Date(job.completedAt) : undefined,
+            createdAt: job.createdAt ? new Date(job.createdAt) : undefined,
+            updatedAt: job.updatedAt ? new Date(job.updatedAt) : undefined,
+            durationMs: typeof job.durationMs === 'number' ? job.durationMs : job.durationMs ? Number(job.durationMs) : undefined,
+            logs: Array.isArray(job.logs) ? job.logs : []
+          }))
+        : []
+    }))
   }
 
   // Create a new job within a workflow
