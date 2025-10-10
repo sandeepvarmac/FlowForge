@@ -20,6 +20,17 @@ export interface Workflow {
   notificationEmail?: string
   tags?: string[]
   retentionDays?: number
+  // Execution summary
+  lastExecution?: {
+    id: string
+    status: ExecutionStatus
+    startTime?: Date
+    endTime?: Date
+    duration?: number
+    completedJobs: number
+    failedJobs: number
+    totalJobs: number
+  } | null
 }
 
 export type WorkflowStatus = 

@@ -69,6 +69,32 @@ export class WorkflowService {
     return result.workflows.map(this.hydrateWorkflow)
   }
 
+  // Get all workflows with their latest execution summary
+  static async getWorkflowsWithLastExecution(): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/workflows?includeLastExecution=true`, {
+      cache: 'no-store'
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch workflows')
+    }
+
+    const result = await response.json()
+    return result.workflows.map((workflow: any) => ({
+      ...this.hydrateWorkflow(workflow),
+      lastExecution: workflow.lastExecution ? {
+        id: workflow.lastExecution.id,
+        status: workflow.lastExecution.status,
+        startTime: workflow.lastExecution.startTime ? new Date(workflow.lastExecution.startTime) : undefined,
+        endTime: workflow.lastExecution.endTime ? new Date(workflow.lastExecution.endTime) : undefined,
+        duration: workflow.lastExecution.duration,
+        completedJobs: workflow.lastExecution.completedJobs || 0,
+        failedJobs: workflow.lastExecution.failedJobs || 0,
+        totalJobs: workflow.lastExecution.totalJobs || 0,
+      } : null
+    }))
+  }
+
   // Update workflow status
   static async updateWorkflowStatus(workflowId: string, status: WorkflowStatus): Promise<void> {
     const response = await fetch(`${this.baseUrl}/workflows/${workflowId}`, {

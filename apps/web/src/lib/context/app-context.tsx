@@ -101,11 +101,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
 
   useEffect(() => {
-    // Load workflows from API
+    // Load workflows from API with last execution summary
     const loadWorkflows = async () => {
       try {
         dispatch({ type: 'SET_LOADING', payload: true })
-        const workflows = await WorkflowService.getWorkflows()
+        const workflows = await WorkflowService.getWorkflowsWithLastExecution()
         dispatch({ type: 'SET_WORKFLOWS', payload: workflows })
       } catch (error) {
         console.error('Failed to load workflows:', error)

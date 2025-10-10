@@ -9,9 +9,11 @@ export const dynamic = 'force-dynamic'
  * GET /api/workflows
  * Get all workflows
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const db = getDatabase()
+    const { searchParams } = new URL(request.url)
+    const includeLastExecution = searchParams.get('includeLastExecution') === 'true'
 
     const workflows = db.prepare(`
       SELECT w.*,
@@ -37,23 +39,57 @@ export async function GET() {
       ORDER BY w.created_at DESC
     `).all() as any[]
 
-    const result = workflows.map(row => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      application: row.application,
-      owner: row.owner,
-      status: row.status,
-      type: row.type,
-      businessUnit: row.business_unit,
-      notificationEmail: row.notification_email,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-      jobs: row.jobs ? JSON.parse(row.jobs) : [],
-      lastRun: row.last_run ? new Date(row.last_run) : undefined,
-      nextRun: row.next_run ? new Date(row.next_run) : undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at)
-    }))
+    const result = workflows.map(row => {
+      const workflow: any = {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        application: row.application,
+        owner: row.owner,
+        status: row.status,
+        type: row.type,
+        businessUnit: row.business_unit,
+        notificationEmail: row.notification_email,
+        tags: row.tags ? JSON.parse(row.tags) : [],
+        jobs: row.jobs ? JSON.parse(row.jobs) : [],
+        lastRun: row.last_run ? new Date(row.last_run) : undefined,
+        nextRun: row.next_run ? new Date(row.next_run) : undefined,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at)
+      }
+
+      // Include last execution if requested
+      if (includeLastExecution) {
+        const lastExecution = db.prepare(`
+          SELECT
+            e.*,
+            (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'completed') as completed_jobs,
+            (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'failed') as failed_jobs,
+            (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id) as total_jobs
+          FROM executions e
+          WHERE e.workflow_id = ?
+          ORDER BY e.created_at DESC
+          LIMIT 1
+        `).get(row.id) as any
+
+        if (lastExecution) {
+          workflow.lastExecution = {
+            id: lastExecution.id,
+            status: lastExecution.status,
+            startTime: lastExecution.started_at,
+            endTime: lastExecution.completed_at,
+            duration: lastExecution.duration_ms,
+            completedJobs: lastExecution.completed_jobs,
+            failedJobs: lastExecution.failed_jobs,
+            totalJobs: lastExecution.total_jobs,
+          }
+        } else {
+          workflow.lastExecution = null
+        }
+      }
+
+      return workflow
+    })
 
     return NextResponse.json({ workflows: result })
 

@@ -6,6 +6,7 @@ import { CreateWorkflowModal } from '@/components/workflows/create-workflow-moda
 import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions } from '@/hooks'
+import { WorkflowService } from '@/lib/services/workflow-service'
 import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter } from 'next/navigation'
@@ -35,6 +36,35 @@ const formatDate = (date?: Date) => {
     Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
     'day'
   )
+}
+
+const formatDuration = (durationMs?: number) => {
+  if (!durationMs || durationMs <= 0) {
+    return '—'
+  }
+
+  const totalSeconds = Math.floor(durationMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  const parts: string[] = []
+  if (hours) parts.push(`${hours}h`)
+  if (minutes) parts.push(`${minutes}m`)
+  if (seconds || parts.length === 0) parts.push(`${seconds}s`)
+
+  return parts.join(' ')
+}
+
+const formatRows = (value?: number) => {
+  if (typeof value !== 'number' || value < 0) {
+    return '—'
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(value)
 }
 
 export default function WorkflowsPage() {
@@ -208,19 +238,6 @@ export default function WorkflowsPage() {
                 ? jobSummaryParts.join(' | ')
                 : 'Jobs ready | awaiting next run'
 
-            const lastRunRelative = workflow.lastRun
-              ? formatDistanceToNow(workflow.lastRun, { addSuffix: true })
-              : null
-
-            const lastRunAbsolute = workflow.lastRun
-              ? new Intl.DateTimeFormat('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }).format(workflow.lastRun)
-              : null
-
             return (
               <Card key={workflow.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
                 <CardHeader className="pb-3">
@@ -239,64 +256,7 @@ export default function WorkflowsPage() {
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      {/* Quick Actions */}
-                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleWorkflowAction(workflow.id, 'run')}
-                            disabled={isLoading(workflow.id, 'run')}
-                            className="h-8 w-8 p-0"
-                          >
-                            {isLoading(workflow.id, 'run') ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
-                          </Button>
-                        )}
-                        {workflow.status === 'scheduled' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleWorkflowAction(workflow.id, 'pause')}
-                            disabled={isLoading(workflow.id, 'pause')}
-                            className="h-8 w-8 p-0"
-                          >
-                            {isLoading(workflow.id, 'pause') ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Pause className="w-4 h-4" />
-                            )}
-                          </Button>
-                        )}
-                        {workflow.status === 'paused' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleWorkflowAction(workflow.id, 'resume')}
-                            disabled={isLoading(workflow.id, 'resume')}
-                            className="h-8 w-8 p-0"
-                          >
-                            {isLoading(workflow.id, 'resume') ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleWorkflowAction(workflow.id, 'delete')}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-
-                      {/* More Actions Menu */}
+                      {/* Actions Menu */}
                       <DropdownMenu
                         trigger={
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
@@ -312,6 +272,46 @@ export default function WorkflowsPage() {
                           <Settings className="w-4 h-4" />
                           Edit Workflow
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
+                          <DropdownMenuItem
+                            onClick={() => handleWorkflowAction(workflow.id, 'run')}
+                            disabled={isLoading(workflow.id, 'run')}
+                          >
+                            {isLoading(workflow.id, 'run') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                            Run Now
+                          </DropdownMenuItem>
+                        )}
+                        {workflow.status === 'scheduled' && (
+                          <DropdownMenuItem
+                            onClick={() => handleWorkflowAction(workflow.id, 'pause')}
+                            disabled={isLoading(workflow.id, 'pause')}
+                          >
+                            {isLoading(workflow.id, 'pause') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Pause className="w-4 h-4" />
+                            )}
+                            Pause Schedule
+                          </DropdownMenuItem>
+                        )}
+                        {workflow.status === 'paused' && (
+                          <DropdownMenuItem
+                            onClick={() => handleWorkflowAction(workflow.id, 'resume')}
+                            disabled={isLoading(workflow.id, 'resume')}
+                          >
+                            {isLoading(workflow.id, 'resume') ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Play className="w-4 h-4" />
+                            )}
+                            Resume Schedule
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           destructive
@@ -350,32 +350,79 @@ export default function WorkflowsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-lg border border-border bg-background-secondary/60 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2 text-xs font-medium uppercase text-foreground-muted">
-                          <Clock className="h-4 w-4 text-primary" />
-                          Last Execution
-                          <Badge variant={getStatusVariant(workflow.status)}>
-                            {workflow.status}
-                          </Badge>
+                  {/* Last Execution Summary */}
+                  {workflow.lastExecution && (
+                    <details className="mt-4 rounded-lg border border-border bg-background-secondary/60 overflow-hidden">
+                      <summary className="p-4 cursor-pointer list-none hover:bg-background-secondary transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-primary" />
+                            <span className="text-xs font-medium uppercase text-foreground-muted">
+                              Last Execution
+                            </span>
+                            <Badge variant={getStatusVariant(workflow.lastExecution.status)}>
+                              {workflow.lastExecution.status}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-foreground-muted">
+                            {workflow.lastExecution.endTime
+                              ? formatDistanceToNow(workflow.lastExecution.endTime, { addSuffix: true })
+                              : workflow.lastExecution.startTime
+                              ? `Started ${formatDistanceToNow(workflow.lastExecution.startTime, { addSuffix: true })}`
+                              : 'In progress'}
+                          </div>
                         </div>
-                        <p className="mt-2 text-sm font-semibold text-foreground">
-                          {lastRunRelative ?? 'Awaiting first run'}
-                        </p>
-                        {lastRunAbsolute && (
-                          <p className="text-xs text-foreground-muted">
-                            {lastRunAbsolute}
-                          </p>
+                      </summary>
+                      <div className="px-4 pb-4 pt-2 border-t border-border space-y-2">
+                        <div className="grid grid-cols-3 gap-4 text-xs">
+                          <div>
+                            <span className="text-foreground-muted">Status</span>
+                            <p className="font-semibold text-foreground mt-1">{workflow.lastExecution.status}</p>
+                          </div>
+                          <div>
+                            <span className="text-foreground-muted">Duration</span>
+                            <p className="font-semibold text-foreground mt-1">
+                              {formatDuration(workflow.lastExecution.duration)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-foreground-muted">Jobs</span>
+                            <p className="font-semibold text-foreground mt-1">
+                              {workflow.lastExecution.completedJobs}/{workflow.lastExecution.totalJobs} completed
+                              {workflow.lastExecution.failedJobs > 0 && ` • ${workflow.lastExecution.failedJobs} failed`}
+                            </p>
+                          </div>
+                        </div>
+                        {workflow.lastExecution.endTime && (
+                          <div className="text-xs text-foreground-muted pt-2">
+                            Finished: {new Intl.DateTimeFormat('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            }).format(workflow.lastExecution.endTime)}
+                          </div>
                         )}
-                        <p className="mt-2 text-xs text-foreground-muted">
-                          {jobSummary}
-                        </p>
                       </div>
+                    </details>
+                  )}
+
+                  {/* No execution history */}
+                  {!workflow.lastExecution && (
+                    <div className="mt-4 rounded-lg border border-border bg-background-secondary/60 p-4">
+                      <div className="flex items-center gap-2 text-xs font-medium text-foreground-muted">
+                        <Clock className="h-4 w-4 text-primary" />
+                        <span className="uppercase">Last Execution</span>
+                      </div>
+                      <p className="mt-2 text-sm text-foreground-muted">
+                        Awaiting first run • {workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''} configured
+                      </p>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  )}
+              </CardContent>
+            </Card>
+            )
           })
         )}
       </div>
