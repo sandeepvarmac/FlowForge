@@ -58,14 +58,22 @@ const initialFormData: JobFormData = {
       tableName: '',
       storageFormat: 'parquet',
       loadStrategy: 'append',
-      auditColumns: true
+      auditColumns: true,
+      auditColumnsBatchId: false,
+      auditColumnsSourceSystem: false,
+      auditColumnsFileModified: false,
+      compression: 'snappy',
+      schemaEvolution: 'strict'
     },
     silverConfig: {
       enabled: true,
       tableName: '',
       storageFormat: 'parquet',
       mergeStrategy: 'merge',
+      updateStrategy: 'update_all',
+      conflictResolution: 'source_wins',
       surrogateKeyStrategy: 'auto_increment',
+      surrogateKeyColumn: '_surrogate_key',
       primaryKey: ''
     },
     goldConfig: {
@@ -79,9 +87,11 @@ const initialFormData: JobFormData = {
 }
 
 const steps = [
-  { id: 1, title: 'Job Type & Configuration', description: 'Select job type and upload data', icon: Upload },
-  { id: 2, title: 'Medallion Architecture', description: 'Configure Bronze, Silver, Gold layers', icon: Settings },
-  { id: 3, title: 'Review & Create', description: 'Review configuration and create job', icon: CheckCircle }
+  { id: 1, title: 'Job Basics & Source', description: 'Select job type and upload data', icon: Upload },
+  { id: 2, title: 'Bronze Layer', description: 'Configure raw data ingestion', icon: Database },
+  { id: 3, title: 'Silver Layer', description: 'Configure cleaned & validated data', icon: Shield },
+  { id: 4, title: 'Gold Layer', description: 'Configure analytics-ready data', icon: Sparkles },
+  { id: 5, title: 'Review & Create', description: 'Review configuration and create job', icon: CheckCircle }
 ]
 
 const jobTypes = [
@@ -160,11 +170,19 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) {
           newErrors.bronzeTable = 'Bronze table name is required'
         }
-        if (!formData.destinationConfig.silverConfig?.tableName?.trim()) {
-          newErrors.silverTable = 'Silver table name is required'
+        break
+      case 3:
+        if (formData.destinationConfig.silverConfig?.enabled !== false) {
+          if (!formData.destinationConfig.silverConfig?.tableName?.trim()) {
+            newErrors.silverTable = 'Silver table name is required'
+          }
         }
-        if (!formData.destinationConfig.goldConfig?.tableName?.trim()) {
-          newErrors.goldTable = 'Gold table name is required'
+        break
+      case 4:
+        if (formData.destinationConfig.goldConfig?.enabled !== false) {
+          if (!formData.destinationConfig.goldConfig?.tableName?.trim()) {
+            newErrors.goldTable = 'Gold table name is required'
+          }
         }
         break
     }
@@ -175,7 +193,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 3))
+      setCurrentStep(prev => Math.min(prev + 1, 5))
     }
   }
 
@@ -449,14 +467,13 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
       case 2:
         return (
           <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
                 <div>
-                  <h4 className="text-sm font-semibold text-blue-900 mb-1">Medallion Architecture Configuration</h4>
-                  <p className="text-sm text-blue-800">
-                    Configure how your data flows through Bronze (raw) → Silver (cleaned) → Gold (business-ready) layers.
-                    AI-suggested table names are pre-populated and can be customized.
+                  <h4 className="text-sm font-semibold text-amber-900 mb-1">Bronze Layer Configuration</h4>
+                  <p className="text-sm text-amber-800">
+                    Configure raw data ingestion with minimal transformation. This layer stores data exactly as received from the source.
                   </p>
                 </div>
               </div>
@@ -488,6 +505,41 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   />
                   {errors.bronzeTable && <FormError>{errors.bronzeTable}</FormError>}
                 </FormField>
+
+                {/* Load Strategy - NEW */}
+                <FormField>
+                  <FormLabel>Load Strategy</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.bronzeConfig?.loadStrategy || 'append'}
+                    onChange={(e) => updateDestinationConfig({
+                      bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadStrategy: e.target.value as any }
+                    })}
+                  >
+                    <option value="append">Append (Add all rows - Recommended)</option>
+                    <option value="full_refresh">Full Refresh (Truncate and reload)</option>
+                    <option value="incremental" disabled>Incremental (Coming Soon)</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'append' && 'New data is added to existing records without removing old data'}
+                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'full_refresh' && 'All existing data is deleted before loading new data'}
+                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'incremental' && 'Only new/changed records are loaded based on watermark column'}
+                  </p>
+                </FormField>
+
+                {/* Incremental Load Configuration - Coming Soon */}
+                {formData.destinationConfig.bronzeConfig?.loadStrategy === 'incremental' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                      <span className="text-sm font-medium text-blue-900">Incremental Load Configuration</span>
+                    </div>
+                    <div className="space-y-2 text-xs text-blue-700">
+                      <div>• Watermark column selection (timestamp/date/integer)</div>
+                      <div>• Lookback window configuration</div>
+                      <div>• Change data capture (CDC) support</div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField>
@@ -522,8 +574,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   </FormField>
                 </div>
 
+                {/* Enhanced Audit Columns */}
                 <FormField>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <FormLabel>Audit Columns</FormLabel>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -537,12 +590,139 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                       <span className="text-sm text-foreground">Enable</span>
                     </label>
                   </div>
-                  <p className="text-xs text-foreground-muted mt-1">
-                    Auto-add: _ingested_at, _source_file, _row_number for tracking
+                  <p className="text-xs text-foreground-muted mb-3">
+                    Automatically add tracking columns to your data
                   </p>
+
+                  {formData.destinationConfig.bronzeConfig?.auditColumns && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                      <div className="text-xs font-medium text-foreground mb-2">Standard Columns (Always Added):</div>
+                      <div className="space-y-1 text-xs text-foreground-muted ml-2">
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_ingested_at</code> - Timestamp when row was ingested</div>
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_source_file</code> - Original source file name</div>
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_row_number</code> - Row position in source file</div>
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-2 mt-3">
+                        <div className="text-xs font-medium text-foreground mb-2">Additional Columns:</div>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsBatchId || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsBatchId: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_batch_id</code> - Unique batch identifier (UUID)
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsSourceSystem || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsSourceSystem: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_source_system</code> - Source system name
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsFileModified || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsFileModified: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_file_modified_at</code> - File last modified timestamp
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </FormField>
+
+                {/* Partitioning - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Partitioning</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Improve query performance by partitioning data based on columns
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Partition by date columns (YYYY/MM/DD)</div>
+                    <div>• Partition by categorical columns</div>
+                    <div>• Hive / Delta / Iceberg partitioning strategies</div>
+                    <div>• Automatic partition pruning optimization</div>
+                  </div>
+                </div>
+
+                {/* Schema Evolution - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Schema Evolution</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Handle schema changes automatically when source data structure changes
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• <strong>Strict Mode:</strong> Fail on schema mismatch (recommended for production)</div>
+                    <div>• <strong>Add New Columns:</strong> Automatically add new columns from source</div>
+                    <div>• <strong>Ignore Extra:</strong> Ignore columns not in target schema</div>
+                    <div>• Column type change detection and warnings</div>
+                  </div>
+                </div>
+
+                {/* Data Quality Checks - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Data Quality Checks</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Validate data quality at ingestion time
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Reject duplicate rows (based on all columns)</div>
+                    <div>• Reject rows with all nulls</div>
+                    <div>• Maximum null percentage threshold</div>
+                    <div>• Minimum row count validation</div>
+                    <div>• File size validation and warnings</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
+          </div>
+        )
+
+      case 3:
+        return (
+          <div className="space-y-6">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-gray-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-1">Silver Layer Configuration</h4>
+                  <p className="text-sm text-gray-800">
+                    Configure data quality rules, deduplication, and transformations. This layer provides cleaned and validated data.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Silver Layer - Enhanced */}
             <Card className="border-gray-300 bg-gray-50/30">
@@ -585,46 +765,54 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   {errors.silverTable && <FormError>{errors.silverTable}</FormError>}
                 </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField>
-                    <FormLabel>Storage Format</FormLabel>
-                    <Select
-                      value={formData.destinationConfig.silverConfig?.storageFormat || 'parquet'}
-                      onChange={(e) => updateDestinationConfig({
-                        silverConfig: { ...formData.destinationConfig.silverConfig!, storageFormat: e.target.value as any }
-                      })}
-                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
-                    >
-                      <option value="parquet">Parquet (Active)</option>
-                      <option value="delta" disabled>Delta Lake (Coming Soon)</option>
-                    </Select>
-                  </FormField>
+                <FormField>
+                  <FormLabel>Storage Format</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.silverConfig?.storageFormat || 'parquet'}
+                    onChange={(e) => updateDestinationConfig({
+                      silverConfig: { ...formData.destinationConfig.silverConfig!, storageFormat: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                  >
+                    <option value="parquet">Parquet (Active)</option>
+                    <option value="delta" disabled>Delta Lake (Coming Soon)</option>
+                    <option value="iceberg" disabled>Apache Iceberg (Coming Soon)</option>
+                  </Select>
+                </FormField>
 
-                  <FormField>
-                    <FormLabel>Merge Strategy</FormLabel>
-                    <Select
-                      value={formData.destinationConfig.silverConfig?.mergeStrategy || 'merge'}
-                      onChange={(e) => updateDestinationConfig({
-                        silverConfig: { ...formData.destinationConfig.silverConfig!, mergeStrategy: e.target.value as any }
-                      })}
-                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
-                    >
-                      <option value="merge">Merge/Upsert (Recommended)</option>
-                      <option value="full_refresh">Full Refresh</option>
-                      <option value="append">Append Only</option>
-                    </Select>
-                  </FormField>
-                </div>
+                {/* Deduplication Strategy - Enhanced */}
+                <FormField>
+                  <FormLabel>Deduplication Strategy</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.silverConfig?.mergeStrategy || 'merge'}
+                    onChange={(e) => updateDestinationConfig({
+                      silverConfig: { ...formData.destinationConfig.silverConfig!, mergeStrategy: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                  >
+                    <option value="merge">Merge/Upsert (Recommended)</option>
+                    <option value="full_refresh">Full Refresh (Truncate & Reload)</option>
+                    <option value="append">Append Only (No Deduplication)</option>
+                    <option value="scd_type_2" disabled>SCD Type 2 (Coming Soon)</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    {formData.destinationConfig.silverConfig?.mergeStrategy === 'merge' && 'Updates existing records and inserts new ones based on primary key'}
+                    {formData.destinationConfig.silverConfig?.mergeStrategy === 'full_refresh' && 'Deletes all existing data and reloads from Bronze'}
+                    {formData.destinationConfig.silverConfig?.mergeStrategy === 'append' && 'Adds all records without checking for duplicates'}
+                    {formData.destinationConfig.silverConfig?.mergeStrategy === 'scd_type_2' && 'Tracks historical changes with effective dates'}
+                  </p>
+                </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Primary Key Configuration - Enhanced for Composite Keys */}
+                {formData.destinationConfig.silverConfig?.mergeStrategy === 'merge' && (
                   <FormField>
-                    <FormLabel>Primary Key (for Merge)</FormLabel>
+                    <FormLabel>Primary Key (for Deduplication)</FormLabel>
                     <Select
                       value={formData.destinationConfig.silverConfig?.primaryKey || ''}
                       onChange={(e) => updateDestinationConfig({
                         silverConfig: { ...formData.destinationConfig.silverConfig!, primaryKey: e.target.value }
                       })}
-                      disabled={formData.destinationConfig.silverConfig?.enabled === false || formData.destinationConfig.silverConfig?.mergeStrategy !== 'merge'}
+                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
                     >
                       <option value="">Select primary key...</option>
                       {formData._detectedSchema?.map(col => (
@@ -633,23 +821,82 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                         </option>
                       ))}
                     </Select>
-                  </FormField>
+                    <p className="text-xs text-foreground-muted mt-1">
+                      Used to identify unique records for merge operations
+                    </p>
 
-                  <FormField>
-                    <FormLabel>Surrogate Key Strategy</FormLabel>
-                    <Select
-                      value={formData.destinationConfig.silverConfig?.surrogateKeyStrategy || 'auto_increment'}
-                      onChange={(e) => updateDestinationConfig({
-                        silverConfig: { ...formData.destinationConfig.silverConfig!, surrogateKeyStrategy: e.target.value as any }
-                      })}
-                      disabled={formData.destinationConfig.silverConfig?.enabled === false}
-                    >
-                      <option value="auto_increment">Auto Increment (Recommended)</option>
-                      <option value="uuid">UUID</option>
-                      <option value="use_existing">Use Existing Column</option>
-                    </Select>
+                    {/* Composite Key Notice - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                        <span className="text-xs text-blue-800">Composite Keys (Multiple Columns)</span>
+                      </div>
+                      <p className="text-[11px] text-blue-700 mt-1">
+                        Select multiple columns as a composite primary key (e.g., customer_id + order_date)
+                      </p>
+                    </div>
                   </FormField>
-                </div>
+                )}
+
+                {/* Merge Configuration - Only for Merge Strategy */}
+                {formData.destinationConfig.silverConfig?.mergeStrategy === 'merge' && formData.destinationConfig.silverConfig?.primaryKey && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+                    <div className="text-xs font-medium text-foreground">Merge Behavior</div>
+
+                    <FormField>
+                      <FormLabel className="text-xs">Update Strategy</FormLabel>
+                      <Select
+                        value={formData.destinationConfig.silverConfig?.updateStrategy || 'update_all'}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, updateStrategy: e.target.value as any }
+                        })}
+                        className="text-xs h-8"
+                      >
+                        <option value="update_all">Update All Columns</option>
+                        <option value="update_changed" disabled>Update Only Changed (Coming Soon)</option>
+                        <option value="custom" disabled>Custom Columns (Coming Soon)</option>
+                      </Select>
+                    </FormField>
+
+                    <FormField>
+                      <FormLabel className="text-xs">Conflict Resolution</FormLabel>
+                      <Select
+                        value={formData.destinationConfig.silverConfig?.conflictResolution || 'source_wins'}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, conflictResolution: e.target.value as any }
+                        })}
+                        className="text-xs h-8"
+                      >
+                        <option value="source_wins">Source Wins (Overwrite)</option>
+                        <option value="target_wins" disabled>Target Wins (Coming Soon)</option>
+                        <option value="most_recent" disabled>Most Recent Timestamp (Coming Soon)</option>
+                      </Select>
+                      <p className="text-[11px] text-foreground-muted mt-1">
+                        How to resolve conflicts when the same record exists in both source and target
+                      </p>
+                    </FormField>
+                  </div>
+                )}
+
+                {/* Surrogate Key Configuration */}
+                <FormField>
+                  <FormLabel>Surrogate Key Strategy</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.silverConfig?.surrogateKeyStrategy || 'auto_increment'}
+                    onChange={(e) => updateDestinationConfig({
+                      silverConfig: { ...formData.destinationConfig.silverConfig!, surrogateKeyStrategy: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                  >
+                    <option value="auto_increment">Auto Increment (Recommended)</option>
+                    <option value="uuid">UUID (Globally Unique)</option>
+                    <option value="hash" disabled>Hash (Coming Soon)</option>
+                    <option value="use_existing">Use Existing Column</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    Generates a unique identifier ({formData.destinationConfig.silverConfig?.surrogateKeyColumn || '_surrogate_key'}) for each record
+                  </p>
+                </FormField>
 
                 {/* AI Transformations Preview */}
                 {formData._detectedSchema && formData._detectedSchema.length > 0 && (
@@ -681,8 +928,120 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                     </div>
                   </div>
                 )}
+
+                {/* SCD Type 2 Configuration - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Slowly Changing Dimension (SCD) Type 2</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Track historical changes to records with effective dates
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Natural key selection (business key)</div>
+                    <div>• Effective date column (_valid_from)</div>
+                    <div>• End date column (_valid_to)</div>
+                    <div>• Current flag column (_is_current)</div>
+                    <div>• Track deleted records with soft deletes</div>
+                    <div>• Automatic versioning and history management</div>
+                  </div>
+                </div>
+
+                {/* Data Quality Rules - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Data Quality Rules</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Validate data quality at the Silver layer
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• <strong>Column-level rules:</strong> Not null, unique, regex patterns, min/max values</div>
+                    <div>• <strong>Row-level rules:</strong> Cross-column validation (e.g., start_date &lt; end_date)</div>
+                    <div>• <strong>SQL expressions:</strong> Custom validation logic</div>
+                    <div>• <strong>Quality thresholds:</strong> Fail job, quarantine bad rows, or log warnings</div>
+                    <div>• <strong>Quarantine table:</strong> Isolate invalid records for review</div>
+                  </div>
+                </div>
+
+                {/* Column Transformations - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Column Transformations</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Apply transformations to clean and standardize data
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Trim whitespace, uppercase/lowercase</div>
+                    <div>• Date parsing with auto-format detection</div>
+                    <div>• Email validation and normalization</div>
+                    <div>• Phone number formatting (international support)</div>
+                    <div>• Remove special characters</div>
+                    <div>• Type casting with error handling</div>
+                    <div>• Derived columns with SQL expressions</div>
+                    <div>• Column renaming and reordering</div>
+                  </div>
+                </div>
+
+                {/* PII Masking - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">PII Masking & Data Privacy</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Protect sensitive data with masking strategies
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• <strong>Hash:</strong> One-way hashing (irreversible)</div>
+                    <div>• <strong>Tokenize:</strong> Reversible with encryption key</div>
+                    <div>• <strong>Partial mask:</strong> Show last 4 digits (e.g., ****1234)</div>
+                    <div>• <strong>Full mask:</strong> Replace with XXXXX</div>
+                    <div>• <strong>Null out:</strong> Remove sensitive data entirely</div>
+                    <div>• Tag columns as: PII, PHI, Confidential</div>
+                    <div>• Compliance presets: GDPR, HIPAA, CCPA</div>
+                  </div>
+                </div>
+
+                {/* Performance Optimization - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Performance Optimization</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Optimize query performance for large datasets
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Partitioning by date or categorical columns</div>
+                    <div>• Clustering (Delta/Iceberg)</div>
+                    <div>• Z-ordering (Delta Lake)</div>
+                    <div>• Automatic statistics collection</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
+          </div>
+        )
+
+      case 4:
+        return (
+          <div className="space-y-6">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-yellow-900 mb-1">Gold Layer Configuration</h4>
+                  <p className="text-sm text-yellow-800">
+                    Configure analytics-optimized data for reporting and business intelligence. This layer provides business-ready datasets.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Gold Layer - Enhanced */}
             <Card className="border-yellow-400 bg-yellow-50/30">
@@ -786,7 +1145,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
           </div>
         )
 
-      case 3:
+      case 5:
         return (
           <div className="space-y-6">
             <div className="text-sm font-medium text-foreground mb-2">
@@ -938,7 +1297,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              {currentStep < 3 ? (
+              {currentStep < 5 ? (
                 <Button onClick={nextStep}>
                   Next
                   <ArrowRight className="w-4 h-4 ml-2" />

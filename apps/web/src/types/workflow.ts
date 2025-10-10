@@ -198,12 +198,29 @@ export interface LayerConfig {
   storageFormat: 'parquet' | 'iceberg' | 'delta'
   retentionDays?: number
   // Bronze-specific
-  loadStrategy?: 'append' | 'overwrite' // Bronze: timestamp-based append or overwrite
+  loadStrategy?: 'append' | 'full_refresh' | 'incremental' // Bronze: append, truncate+reload, or incremental
   auditColumns?: boolean // Add _ingested_at, _source_file, _row_number
+  auditColumnsBatchId?: boolean // Add _batch_id (UUID)
+  auditColumnsSourceSystem?: boolean // Add _source_system
+  auditColumnsFileModified?: boolean // Add _file_modified_at
+  watermarkColumn?: string // For incremental loads
+  watermarkType?: 'timestamp' | 'integer' | 'date' // Type of watermark
+  lookbackWindowHours?: number // For incremental: how far back to look
+  partitionStrategy?: 'hive' | 'delta' | 'iceberg' // Partitioning strategy
+  schemaEvolution?: 'strict' | 'add_new_columns' | 'ignore_extra' // Schema change handling
   // Silver-specific
-  primaryKey?: string // Column to use for deduplication/merge
-  mergeStrategy?: 'merge' | 'full_refresh' | 'append' // Silver: upsert, truncate, or append
-  surrogateKeyStrategy?: 'auto_increment' | 'uuid' | 'use_existing' // How to generate _sk_id
+  primaryKey?: string | string[] // Column(s) to use for deduplication/merge (supports composite keys)
+  mergeStrategy?: 'merge' | 'full_refresh' | 'append' | 'scd_type_2' // Silver: upsert, truncate, append, or SCD Type 2
+  updateStrategy?: 'update_all' | 'update_changed' | 'custom' // Which columns to update on merge
+  conflictResolution?: 'source_wins' | 'target_wins' | 'most_recent' // How to resolve conflicts
+  surrogateKeyStrategy?: 'auto_increment' | 'uuid' | 'hash' | 'use_existing' // How to generate _sk_id
+  surrogateKeyColumn?: string // Name of surrogate key column (default: _surrogate_key)
+  // SCD Type 2 specific
+  scdNaturalKey?: string[] // Natural key for SCD Type 2
+  scdEffectiveDateColumn?: string // Effective date column name
+  scdEndDateColumn?: string // End date column name
+  scdCurrentFlagColumn?: string // Current flag column name
+  scdTrackDeletes?: boolean // Track deleted records
   // Gold-specific
   refreshStrategy?: 'incremental' | 'full_rebuild' // Gold: incremental or full
   compression?: 'snappy' | 'gzip' | 'zstd' | 'none'
