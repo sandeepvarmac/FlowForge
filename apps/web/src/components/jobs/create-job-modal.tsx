@@ -1410,30 +1410,33 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
         {/* Step Progress */}
         <div className="mb-6 px-6">
           <div className="flex items-center justify-center space-x-2 mb-4">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center">
-                <div className={cn(
-                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-colors',
-                  currentStep === step.id
-                    ? 'bg-primary text-white'
-                    : currentStep > step.id
-                    ? 'bg-success text-white'
-                    : 'bg-background-tertiary text-foreground-muted'
-                )}>
-                  {currentStep > step.id ? (
-                    <CheckCircle className="w-3 h-3" />
-                  ) : (
-                    step.id
+            {steps.map((step, index) => {
+              const StepIcon = step.icon
+              return (
+                <div key={step.id} className="flex items-center">
+                  <div className={cn(
+                    'w-9 h-9 rounded-full flex items-center justify-center transition-colors',
+                    currentStep === step.id
+                      ? 'bg-primary text-white'
+                      : currentStep > step.id
+                      ? 'bg-success text-white'
+                      : 'bg-background-tertiary text-foreground-muted'
+                  )}>
+                    {currentStep > step.id ? (
+                      <CheckCircle className="w-4 h-4" />
+                    ) : (
+                      <StepIcon className="w-4 h-4" />
+                    )}
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div className={cn(
+                      'w-12 h-0.5 mx-1',
+                      currentStep > step.id ? 'bg-success' : 'bg-background-tertiary'
+                    )} />
                   )}
                 </div>
-                {index < steps.length - 1 && (
-                  <div className={cn(
-                    'w-8 h-0.5 mx-1',
-                    currentStep > step.id ? 'bg-success' : 'bg-background-tertiary'
-                  )} />
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="text-center">
