@@ -17,12 +17,15 @@ import {
   Calendar,
   Users,
   FileText,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react'
 import { OrchestrationService } from '@/lib/services/orchestration-service'
 import { formatDistanceToNow } from 'date-fns'
+import { useRouter } from 'next/navigation'
 
 export default function OverviewPage() {
+  const router = useRouter()
   const [metrics, setMetrics] = React.useState<any>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -81,16 +84,25 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header with CTA */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Orchestration Overview</h1>
           <p className="text-foreground-muted mt-1">
             Real-time monitoring and analytics for your data pipelines
           </p>
         </div>
-        <div className="text-xs text-foreground-muted">
-          Last updated: {formatDistanceToNow(new Date(metrics.timestamp), { addSuffix: true })}
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-foreground-muted">
+            Last updated: {formatDistanceToNow(new Date(metrics.timestamp), { addSuffix: true })}
+          </div>
+          <button
+            onClick={() => router.push('/workflows')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Create Workflow
+          </button>
         </div>
       </div>
 
@@ -273,6 +285,8 @@ function KPICard({ title, value, change, changePercent, icon: Icon, color, inver
 
 // Recent Activity Stream Component
 function RecentActivityStream({ activities }: { activities: any[] }) {
+  const router = useRouter()
+
   return (
     <Card className="h-[500px] flex flex-col">
       <CardHeader className="pb-3">
@@ -286,9 +300,16 @@ function RecentActivityStream({ activities }: { activities: any[] }) {
         <div className="space-y-2">
           {activities.length === 0 ? (
             <div className="text-center py-12 text-foreground-muted">
-              <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No executions yet</p>
-              <p className="text-xs mt-1">Run a workflow to see activity here</p>
+              <Activity className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No Executions Yet</h3>
+              <p className="text-sm mb-6">Create your first workflow to start orchestrating data pipelines</p>
+              <button
+                onClick={() => router.push('/workflows')}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                Create Your First Workflow
+              </button>
             </div>
           ) : (
             activities.map((activity) => (
