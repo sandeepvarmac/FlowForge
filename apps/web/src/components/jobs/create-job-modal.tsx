@@ -80,8 +80,12 @@ const initialFormData: JobFormData = {
       enabled: true,
       tableName: '',
       storageFormat: 'parquet',
-      refreshStrategy: 'full_rebuild',
-      compression: 'zstd'
+      buildStrategy: 'full_rebuild',
+      materializationType: 'table',
+      compression: 'zstd',
+      aggregationEnabled: false,
+      denormalizationEnabled: false,
+      exportEnabled: false
     }
   }
 }
@@ -1084,11 +1088,32 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   {errors.goldTable && <FormError>{errors.goldTable}</FormError>}
                 </FormField>
 
+                {/* Build Strategy - Enhanced */}
+                <FormField>
+                  <FormLabel>Build Strategy</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.goldConfig?.buildStrategy || 'full_rebuild'}
+                    onChange={(e) => updateDestinationConfig({
+                      goldConfig: { ...formData.destinationConfig.goldConfig!, buildStrategy: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                  >
+                    <option value="full_rebuild">Full Rebuild (Recommended)</option>
+                    <option value="incremental" disabled>Incremental (Coming Soon)</option>
+                    <option value="snapshot" disabled>Snapshot (Coming Soon)</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    {formData.destinationConfig.goldConfig?.buildStrategy === 'full_rebuild' && 'Rebuild entire table from Silver layer on each run'}
+                    {formData.destinationConfig.goldConfig?.buildStrategy === 'incremental' && 'Only process new/changed records from Silver layer'}
+                    {formData.destinationConfig.goldConfig?.buildStrategy === 'snapshot' && 'Create point-in-time snapshot of Silver data'}
+                  </p>
+                </FormField>
+
                 <div className="grid grid-cols-2 gap-4">
                   <FormField>
                     <FormLabel>Storage Format</FormLabel>
                     <Select
-                      value={formData.destinationConfig.goldConfig?.storageFormat || 'iceberg'}
+                      value={formData.destinationConfig.goldConfig?.storageFormat || 'parquet'}
                       onChange={(e) => updateDestinationConfig({
                         goldConfig: { ...formData.destinationConfig.goldConfig!, storageFormat: e.target.value as any }
                       })}
@@ -1101,14 +1126,43 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   </FormField>
 
                   <FormField>
-                    <FormLabel>Optimization</FormLabel>
-                    <Select disabled>
-                      <option value="none">None (Coming Soon)</option>
-                      <option value="z-order" disabled>Z-Order (Coming Soon)</option>
-                      <option value="cluster" disabled>Clustering (Coming Soon)</option>
+                    <FormLabel>Compression</FormLabel>
+                    <Select
+                      value={formData.destinationConfig.goldConfig?.compression || 'zstd'}
+                      onChange={(e) => updateDestinationConfig({
+                        goldConfig: { ...formData.destinationConfig.goldConfig!, compression: e.target.value as any }
+                      })}
+                      disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                    >
+                      <option value="snappy">Snappy (Balanced)</option>
+                      <option value="gzip">GZIP (High Compression)</option>
+                      <option value="zstd">Zstandard (Best - Recommended)</option>
+                      <option value="none">None</option>
                     </Select>
+                    <p className="text-xs text-foreground-muted mt-1">Balance between storage size and query speed</p>
                   </FormField>
                 </div>
+
+                {/* Materialization Type */}
+                <FormField>
+                  <FormLabel>Materialization Type</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.goldConfig?.materializationType || 'table'}
+                    onChange={(e) => updateDestinationConfig({
+                      goldConfig: { ...formData.destinationConfig.goldConfig!, materializationType: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                  >
+                    <option value="table">Table (Physical Storage - Recommended)</option>
+                    <option value="view" disabled>View (Coming Soon)</option>
+                    <option value="materialized_view" disabled>Materialized View (Coming Soon)</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    {formData.destinationConfig.goldConfig?.materializationType === 'table' && 'Physical table with stored data for fast queries'}
+                    {formData.destinationConfig.goldConfig?.materializationType === 'view' && 'Virtual view that queries Silver on demand'}
+                    {formData.destinationConfig.goldConfig?.materializationType === 'materialized_view' && 'Pre-computed view with auto-refresh'}
+                  </p>
+                </FormField>
 
                 {/* AI Aggregations Preview */}
                 {formData._detectedSchema && formData._detectedSchema.length > 0 && (
@@ -1140,6 +1194,115 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                     </div>
                   </div>
                 )}
+
+                {/* Aggregation Configuration - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Aggregation Configuration</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Create pre-aggregated analytics tables for faster reporting
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Group by columns (dimensions)</div>
+                    <div>• Aggregation functions: SUM, AVG, MIN, MAX, COUNT, COUNT_DISTINCT</div>
+                    <div>• Time grain selection: Daily, Weekly, Monthly, Yearly</div>
+                    <div>• Multiple aggregation rules per table</div>
+                    <div>• Window functions for advanced analytics</div>
+                  </div>
+                </div>
+
+                {/* Denormalization - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Denormalization (Joins)</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Join with other Silver tables to create wide, analytics-friendly tables
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Join with other Silver tables</div>
+                    <div>• Join types: INNER, LEFT, RIGHT, FULL OUTER</div>
+                    <div>• Multi-table joins (star schema support)</div>
+                    <div>• Column selection from joined tables</div>
+                    <div>• Automatic dimension flattening</div>
+                  </div>
+                </div>
+
+                {/* Business Logic - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Business Logic</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Apply business rules and calculated fields
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Calculated columns with SQL expressions</div>
+                    <div>• Filter conditions (WHERE clause)</div>
+                    <div>• Custom SQL (advanced users)</div>
+                    <div>• Business KPIs and metrics</div>
+                  </div>
+                </div>
+
+                {/* Performance & Optimization - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Performance & Optimization</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Optimize for query performance at scale
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Partitioning by date or business dimensions</div>
+                    <div>• Indexing (Iceberg/Delta only)</div>
+                    <div>• Z-ordering for Delta Lake</div>
+                    <div>• Clustering for Snowflake/BigQuery</div>
+                    <div>• Statistics collection for query optimization</div>
+                  </div>
+                </div>
+
+                {/* Export Configuration - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Export to External Systems</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Automatically export Gold data to downstream systems
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• <strong>S3/Parquet:</strong> Export to S3 in Parquet format</div>
+                    <div>• <strong>Snowflake:</strong> Create external table or COPY INTO</div>
+                    <div>• <strong>Google BigQuery:</strong> Export to BigQuery table</div>
+                    <div>• <strong>Azure Synapse:</strong> Export to Synapse Analytics</div>
+                    <div>• <strong>PostgreSQL/MySQL:</strong> Export to relational databases</div>
+                    <div>• <strong>Excel/CSV:</strong> Download for business users</div>
+                    <div>• Schedule: On job completion, Daily, Weekly</div>
+                  </div>
+                </div>
+
+                {/* Analytics Metadata - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Analytics Metadata</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Add business context and enable data catalog integration
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Business-friendly name and description</div>
+                    <div>• Data owner and steward assignment</div>
+                    <div>• Tags: finance, marketing, operations, kpi</div>
+                    <div>• Data lineage tracking</div>
+                    <div>• Sync to data catalog (Alation, Collibra, DataHub)</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

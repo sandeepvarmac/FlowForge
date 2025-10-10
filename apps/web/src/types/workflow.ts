@@ -222,8 +222,16 @@ export interface LayerConfig {
   scdCurrentFlagColumn?: string // Current flag column name
   scdTrackDeletes?: boolean // Track deleted records
   // Gold-specific
-  refreshStrategy?: 'incremental' | 'full_rebuild' // Gold: incremental or full
+  refreshStrategy?: 'full_rebuild' | 'incremental' | 'snapshot' // Gold: full rebuild, incremental, or snapshot
+  buildStrategy?: 'full_rebuild' | 'incremental' // Alias for refreshStrategy (used in UI)
+  aggregationEnabled?: boolean // Enable aggregation features
+  aggregationGroupBy?: string[] // Columns to group by
+  aggregationTimeGrain?: 'daily' | 'weekly' | 'monthly' | 'yearly' // Time-based aggregation
+  denormalizationEnabled?: boolean // Enable joins with other tables
+  materializationType?: 'table' | 'view' | 'materialized_view' // How to materialize Gold layer
   compression?: 'snappy' | 'gzip' | 'zstd' | 'none'
+  exportEnabled?: boolean // Enable export to external systems
+  exportTargets?: string[] // Export destinations (S3, Snowflake, BigQuery, etc.)
 }
 
 // Transformation Configuration
