@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS metadata_catalog (
   layer TEXT NOT NULL CHECK(layer IN ('bronze', 'silver', 'gold')),
   table_name TEXT NOT NULL,
   job_id TEXT,
+  environment TEXT DEFAULT 'prod' CHECK(environment IN ('dev', 'qa', 'uat', 'prod')),
 
   -- Schema information
   schema TEXT NOT NULL, -- JSON
@@ -134,7 +135,7 @@ CREATE TABLE IF NOT EXISTS metadata_catalog (
   updated_at INTEGER NOT NULL,
 
   FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
-  UNIQUE(layer, table_name)
+  UNIQUE(layer, table_name, environment)
 );
 
 -- AI Schema Analysis Cache table
@@ -169,6 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_job_executions_job_id ON job_executions(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_executions_status ON job_executions(status);
 CREATE INDEX IF NOT EXISTS idx_metadata_layer ON metadata_catalog(layer);
 CREATE INDEX IF NOT EXISTS idx_metadata_job_id ON metadata_catalog(job_id);
+CREATE INDEX IF NOT EXISTS idx_metadata_environment ON metadata_catalog(environment);
 CREATE INDEX IF NOT EXISTS idx_dq_rules_job_id ON dq_rules(job_id);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 `;
