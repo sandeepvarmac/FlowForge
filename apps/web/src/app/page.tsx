@@ -100,7 +100,7 @@ export default function HomePage() {
             </div>
 
             {/* Hero Text */}
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent mb-4 pb-3">
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight bg-brand-gradient bg-clip-text text-transparent mb-4 pb-3">
               FlowForge
             </h1>
 
@@ -116,7 +116,7 @@ export default function HomePage() {
             <div className="flex justify-center">
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-6 text-lg"
+                className="bg-brand-gradient hover:shadow-brand-lg text-white px-8 py-6 text-lg transition-all"
                 onClick={() => setShowCreateModal(true)}
               >
                 Create a New Workflow
@@ -128,7 +128,7 @@ export default function HomePage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 max-w-4xl mx-auto">
               {stats.map((stat, index) => (
                 <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-                  <div className="text-3xl font-bold text-blue-600 mb-1">{stat.value}</div>
+                  <div className="text-3xl font-bold text-primary mb-1">{stat.value}</div>
                   <div className="text-sm font-semibold text-slate-700">{stat.label}</div>
                   <div className="text-xs text-slate-500 mt-1">{stat.description}</div>
                 </div>
@@ -157,14 +157,14 @@ export default function HomePage() {
                 key={index}
                 className={`relative overflow-hidden border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${
                   feature.status === 'available'
-                    ? 'border-blue-200 hover:border-blue-400'
+                    ? 'border-primary-200 hover:border-primary-400 hover:shadow-brand'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between mb-3">
                     <div className={`p-3 rounded-lg bg-gradient-to-br ${feature.gradient}`} style={{ opacity: 0.1 }}>
-                      <Icon className="w-6 h-6 text-blue-600" />
+                      <Icon className="w-6 h-6 text-primary" />
                     </div>
                     <Badge
                       variant={feature.status === 'available' ? 'success' : 'secondary'}

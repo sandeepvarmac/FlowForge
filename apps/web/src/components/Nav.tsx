@@ -90,7 +90,7 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
           />
           {!isCollapsed && (
             <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <h1 className="text-lg font-bold bg-brand-gradient bg-clip-text text-transparent">
                 FlowForge
               </h1>
               <p className="text-xs text-foreground-muted">Data Orchestration Platform</p>
@@ -146,7 +146,7 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
                     <span className="flex items-center justify-between w-full">
                       <span>{link.label}</span>
                       {link.badge && (
-                        <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium">
+                        <span className="text-xs px-2 py-0.5 bg-accent-yellow/10 text-accent-yellow border border-accent-yellow/30 rounded-full font-medium">
                           {link.badge}
                         </span>
                       )}
