@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Button, Badge } from "@/components/ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui"
-import { Upload, FileText, AlertCircle, CheckCircle2, Eye, X } from "lucide-react"
+import { Upload, FileText, AlertCircle, CheckCircle2, Eye, X, Sparkles, Clock } from "lucide-react"
 
 interface CSVFileUploadProps {
   onFileUpload: (file: File, schema: Array<{ name: string; type: string; sample?: string }>, preview: any[]) => void
@@ -20,9 +20,9 @@ interface UploadState {
   isProcessing: boolean
   file: File | null
   error: string | null
-  schema: Array<{ 
-    name: string; 
-    type: string; 
+  schema: Array<{
+    name: string;
+    type: string;
     sample?: string;
     nonEmptyCount?: number;
     nullPercentage?: number;
@@ -30,12 +30,21 @@ interface UploadState {
   }> | null
   preview: any[] | null
   showPreview: boolean
+  aiValidation: {
+    fileSizeWarning?: string
+    headerDetection?: {
+      hasHeader: boolean
+      confidence: number
+      reasoning: string
+      needsUserInput: boolean
+    }
+  } | null
 }
 
-export function CSVFileUpload({ 
-  onFileUpload, 
-  expectedColumns = [], 
-  maxSizeInMB = 10,
+export function CSVFileUpload({
+  onFileUpload,
+  expectedColumns = [],
+  maxSizeInMB = 100,
   initialFile,
   initialSchema,
   initialPreview
@@ -47,36 +56,37 @@ export function CSVFileUpload({
     error: null,
     schema: initialSchema || null,
     preview: initialPreview || null,
-    showPreview: !!(initialFile && initialSchema && initialPreview)
+    showPreview: !!(initialFile && initialSchema && initialPreview),
+    aiValidation: null
   })
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const detectDataType = (value: string): string => {
     if (!value || value.trim() === '') return 'string'
-    
+
     const trimmed = value.trim()
-    
+
     // Check if it's a number (but exclude phone numbers that look like numbers)
     if (!isNaN(Number(trimmed)) && !(/^[\+\-\(\)\s\d]+$/.test(trimmed) && trimmed.length > 7)) {
       return trimmed.includes('.') ? 'decimal' : 'integer'
     }
-    
+
     // Check if it's a date (YYYY-MM-DD format)
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !isNaN(Date.parse(trimmed))) {
       return 'date'
     }
-    
+
     // Check if it's an email
     if (/@/.test(trimmed) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
       return 'email'
     }
-    
+
     // Check if it's a phone number (contains digits and phone-like characters)
     if (/[\+\d\s\-\(\)\.]+/.test(trimmed) && /\d/.test(trimmed) && trimmed.replace(/[\+\d\s\-\(\)\.]/g, '').length <= 2) {
       return 'phone'
     }
-    
+
     return 'string'
   }
 
@@ -85,13 +95,13 @@ export function CSVFileUpload({
     const lines = text.split(/\r?\n/).filter(line => line.trim())
     console.log('Total lines found:', lines.length)
     console.log('First few lines:', lines.slice(0, 3))
-    
+
     if (lines.length === 0) throw new Error('Empty CSV file')
-    
+
     const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
     console.log('Parsed headers:', headers)
     console.log('Header count:', headers.length)
-    
+
     const rows = lines.slice(1).map(line => {
       const cells = line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
       // Ensure each row has the same number of columns as headers
@@ -100,67 +110,79 @@ export function CSVFileUpload({
       }
       return cells.slice(0, headers.length) // Trim any extra columns
     }).filter(row => row.some(cell => cell.trim())) // Remove completely empty rows
-    
+
     console.log('Parsed rows count:', rows.length)
     console.log('First row sample:', rows[0])
-    
+
     return { headers, rows }
   }
 
   const processFile = async (file: File) => {
-    setState(prev => ({ ...prev, isProcessing: true, error: null }))
-    
+    setState(prev => ({ ...prev, isProcessing: true, error: null, aiValidation: null }))
+
     try {
-      // Validate file type
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        throw new Error('Please upload a CSV file')
+      console.log('🤖 Starting AI-powered CSV validation...')
+
+      // Step 1: Call AI validation endpoint
+      const validationFormData = new FormData()
+      validationFormData.append('file', file)
+
+      const validationResponse = await fetch('/api/validate-csv', {
+        method: 'POST',
+        body: validationFormData
+      })
+
+      const validationResult = await validationResponse.json()
+
+      if (!validationResult.success) {
+        throw new Error(validationResult.error || 'File validation failed')
       }
-      
-      // Validate file size
-      if (file.size > maxSizeInMB * 1024 * 1024) {
-        throw new Error(`File size must be less than ${maxSizeInMB}MB`)
+
+      console.log('✅ AI validation complete:', validationResult.validation)
+
+      // Check individual validations
+      if (!validationResult.validation.fileFormat.valid) {
+        throw new Error(validationResult.validation.fileFormat.message)
       }
-      
-      // Read and parse CSV
+
+      if (!validationResult.validation.isEmpty.valid) {
+        throw new Error(validationResult.validation.isEmpty.message || 'File is empty')
+      }
+
+      // Store AI validation results
+      const aiValidation: UploadState['aiValidation'] = {
+        fileSizeWarning: validationResult.validation.fileSize.warning,
+        headerDetection: validationResult.validation.headerDetection
+      }
+
+      // Step 2: Parse CSV
       const text = await file.text()
-      console.log('CSV Text Preview:', text.substring(0, 200) + '...')
-      
       const { headers, rows } = parseCSV(text)
-      console.log('Parsed Headers:', headers)
-      console.log('Parsed Rows Count:', rows.length)
-      console.log('First Row Sample:', rows[0])
-      
+
       if (headers.length === 0) {
         throw new Error('No headers found in CSV file')
       }
-      
-      // Generate schema by analyzing all rows for accurate type detection
+
+      // Step 3: Generate schema by analyzing all rows
       const schema = headers.map((header, columnIndex) => {
         // Get all values for this column
         const allValues = rows.map(row => row[columnIndex] || '').filter(cell => cell && cell.trim())
         const samples = allValues.slice(0, 10) // Use first 10 for type detection
         const types = samples.map(detectDataType)
-        
-        console.log(`Column "${header}":`, {
-          totalValues: rows.length,
-          nonEmptyValues: allValues.length,
-          samples: samples.slice(0, 3),
-          detectedTypes: types.slice(0, 3)
-        })
-        
+
         // Default to 'string' if no samples or types found
         let mostCommonType = 'string'
         if (types.length > 0) {
-          mostCommonType = types.reduce((a, b, i, arr) => 
+          mostCommonType = types.reduce((a, b, i, arr) =>
             arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b
           )
         }
-        
+
         // Calculate accurate statistics
         const nonEmptyCount = allValues.length
         const totalRows = rows.length
         const nullPercentage = totalRows > 0 ? Math.round(((totalRows - nonEmptyCount) / totalRows) * 100) : 0
-        
+
         return {
           name: header,
           type: mostCommonType,
@@ -170,9 +192,9 @@ export function CSVFileUpload({
           uniqueValues: new Set(allValues.slice(0, 10)).size
         }
       })
-      
+
       console.log('Generated schema:', schema)
-      
+
       // Create preview data (first 20 rows)
       const preview = rows.slice(0, 20).map(row => {
         const obj: any = {}
@@ -181,24 +203,26 @@ export function CSVFileUpload({
         })
         return obj
       })
-      
+
       setState(prev => ({
         ...prev,
         isProcessing: false,
         file,
         schema,
         preview,
-        showPreview: true
+        showPreview: true,
+        aiValidation
       }))
-      
+
       // Notify parent component
       onFileUpload(file, schema, preview)
-      
+
     } catch (error) {
       setState(prev => ({
         ...prev,
         isProcessing: false,
-        error: error instanceof Error ? error.message : 'Failed to process file'
+        error: error instanceof Error ? error.message : 'Failed to process file',
+        aiValidation: null
       }))
     }
   }
@@ -206,7 +230,7 @@ export function CSVFileUpload({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setState(prev => ({ ...prev, isDragging: false }))
-    
+
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
       processFile(files[0])
@@ -228,7 +252,8 @@ export function CSVFileUpload({
       error: null,
       schema: null,
       preview: null,
-      showPreview: false
+      showPreview: false,
+      aiValidation: null
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -237,12 +262,12 @@ export function CSVFileUpload({
 
   const validateColumns = () => {
     if (!state.schema || expectedColumns.length === 0) return { valid: true, missing: [] }
-    
+
     const presentColumns = state.schema.map(col => col.name.toLowerCase())
-    const missing = expectedColumns.filter(expected => 
+    const missing = expectedColumns.filter(expected =>
       !presentColumns.includes(expected.toLowerCase())
     )
-    
+
     return { valid: missing.length === 0, missing }
   }
 
@@ -250,12 +275,22 @@ export function CSVFileUpload({
 
   return (
     <div className="space-y-4">
+      {/* AI-Powered Badge */}
+      {state.file && state.aiValidation && (
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="secondary" className="bg-purple-50 text-purple-700 border-purple-200">
+            <Sparkles className="w-3 h-3 mr-1" />
+            AI-Powered Validation
+          </Badge>
+        </div>
+      )}
+
       {/* Upload Area */}
       <div
         className={`border-2 border-dashed rounded-lg transition-all ${
-          state.isDragging 
-            ? 'border-primary bg-primary-50' 
-            : state.file 
+          state.isDragging
+            ? 'border-primary bg-primary-50'
+            : state.file
             ? 'border-success bg-success-50'
             : 'border-border hover:border-primary-200 hover:bg-background-secondary'
         }`}
@@ -268,7 +303,7 @@ export function CSVFileUpload({
           {state.isProcessing ? (
             <div className="space-y-3">
               <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
-              <p className="text-sm text-foreground-muted">Processing CSV file...</p>
+              <p className="text-sm text-foreground-muted">Running AI-powered validation...</p>
             </div>
           ) : state.file ? (
             <div className="space-y-3">
@@ -276,7 +311,16 @@ export function CSVFileUpload({
               <div>
                 <p className="font-medium text-foreground">{state.file.name}</p>
                 <p className="text-sm text-foreground-muted">
-                  {(state.file.size / 1024).toFixed(1)} KB • {state.schema?.length || 0} columns • {state.preview?.length || 0} rows loaded
+                  {(state.file.size / 1024 / 1024).toFixed(2)} MB • {state.schema?.length || 0} columns • {state.preview?.length || 0} rows loaded
+                </p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-3">
+                <div className="flex items-center justify-center gap-2 text-green-700 text-sm font-medium">
+                  <Clock className="w-4 h-4" />
+                  <span>File Staged for Upload</span>
+                </div>
+                <p className="text-xs text-green-600 mt-1">
+                  This file will be uploaded when you create the job
                 </p>
               </div>
               <Button variant="outline" size="sm" onClick={clearFile}>
@@ -313,6 +357,39 @@ export function CSVFileUpload({
         className="hidden"
       />
 
+      {/* AI File Size Warning */}
+      {state.aiValidation?.fileSizeWarning && (
+        <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="text-sm">{state.aiValidation.fileSizeWarning}</span>
+        </div>
+      )}
+
+      {/* AI Header Detection Info */}
+      {state.aiValidation?.headerDetection && (
+        <div className={`p-3 rounded-lg border ${
+          state.aiValidation.headerDetection.confidence >= 80
+            ? 'bg-green-50 border-green-200'
+            : 'bg-yellow-50 border-yellow-200'
+        }`}>
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles className={`w-4 h-4 ${
+              state.aiValidation.headerDetection.confidence >= 80 ? 'text-green-600' : 'text-yellow-600'
+            }`} />
+            <span className={`text-sm font-medium ${
+              state.aiValidation.headerDetection.confidence >= 80 ? 'text-green-700' : 'text-yellow-700'
+            }`}>
+              AI Header Detection: {state.aiValidation.headerDetection.confidence}% confidence
+            </span>
+          </div>
+          <p className={`text-xs ${
+            state.aiValidation.headerDetection.confidence >= 80 ? 'text-green-600' : 'text-yellow-600'
+          }`}>
+            {state.aiValidation.headerDetection.reasoning}
+          </p>
+        </div>
+      )}
+
       {/* Error message */}
       {state.error && (
         <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
@@ -324,8 +401,8 @@ export function CSVFileUpload({
       {/* Column validation */}
       {state.schema && expectedColumns.length > 0 && (
         <div className={`p-3 rounded-lg border ${
-          columnValidation.valid 
-            ? 'bg-green-50 border-green-200' 
+          columnValidation.valid
+            ? 'bg-green-50 border-green-200'
             : 'bg-yellow-50 border-yellow-200'
         }`}>
           <div className="flex items-center gap-2">
@@ -380,8 +457,8 @@ export function CSVFileUpload({
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
                 <span>Column Schema Analysis</span>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => setState(prev => ({ ...prev, showPreview: !prev.showPreview }))}
                 >
@@ -412,7 +489,7 @@ export function CSVFileUpload({
                             <div className="font-medium text-foreground font-mono">{col.name}</div>
                           </td>
                           <td className="p-3">
-                            <Badge 
+                            <Badge
                               variant={col.type === 'string' ? 'secondary' : 'default'}
                               className={`${
                                 col.type === 'integer' ? 'bg-blue-100 text-blue-800' :
@@ -439,8 +516,8 @@ export function CSVFileUpload({
                               {typedCol.nullPercentage > 0 && (
                                 <div className="flex items-center gap-2">
                                   <span className={`${
-                                    typedCol.nullPercentage > 20 ? 'text-red-600' : 
-                                    typedCol.nullPercentage > 10 ? 'text-amber-600' : 
+                                    typedCol.nullPercentage > 20 ? 'text-red-600' :
+                                    typedCol.nullPercentage > 10 ? 'text-amber-600' :
                                     'text-gray-600'
                                   }`}>
                                     {typedCol.nullPercentage > 20 ? '⚠' : '○'} {typedCol.nullPercentage}% null
@@ -487,8 +564,8 @@ export function CSVFileUpload({
                         <th key={index} className="text-left p-3 font-semibold text-foreground-muted min-w-32 border-r border-border last:border-r-0">
                           <div className="flex flex-col gap-1">
                             <span className="font-mono text-xs">{col.name}</span>
-                            <Badge 
-                              variant="outline" 
+                            <Badge
+                              variant="outline"
                               className={`text-xs w-fit ${
                                 col.type === 'integer' ? 'border-blue-300 text-blue-700' :
                                 col.type === 'decimal' ? 'border-green-300 text-green-700' :
@@ -517,7 +594,7 @@ export function CSVFileUpload({
                           return (
                             <td key={colIndex} className="p-3 border-r border-border last:border-r-0">
                               <div className={`font-mono text-xs truncate max-w-40 ${
-                                isEmpty ? 'text-gray-400 italic' : 
+                                isEmpty ? 'text-gray-400 italic' :
                                 col.type === 'email' && !/@/.test(value) ? 'text-red-600 bg-red-50 px-1 rounded' :
                                 col.type === 'integer' && isNaN(Number(value)) ? 'text-red-600 bg-red-50 px-1 rounded' :
                                 'text-foreground'
@@ -533,7 +610,7 @@ export function CSVFileUpload({
                 </table>
               </div>
             </div>
-            
+
             {/* Data Quality Summary */}
             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
               <h4 className="font-semibold text-sm mb-3 text-foreground">Quick Data Quality Summary</h4>
