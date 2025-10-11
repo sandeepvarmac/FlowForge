@@ -275,8 +275,7 @@ export default function WorkflowsPage() {
                         <DropdownMenuSeparator />
                         {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
                           <DropdownMenuItem
-                            onClick={() => handleWorkflowAction(workflow.id, 'run')}
-                            disabled={isLoading(workflow.id, 'run')}
+                            onClick={() => !isLoading(workflow.id, 'run') && handleWorkflowAction(workflow.id, 'run')}
                           >
                             {isLoading(workflow.id, 'run') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -288,8 +287,7 @@ export default function WorkflowsPage() {
                         )}
                         {workflow.status === 'scheduled' && (
                           <DropdownMenuItem
-                            onClick={() => handleWorkflowAction(workflow.id, 'pause')}
-                            disabled={isLoading(workflow.id, 'pause')}
+                            onClick={() => !isLoading(workflow.id, 'pause') && handleWorkflowAction(workflow.id, 'pause')}
                           >
                             {isLoading(workflow.id, 'pause') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -301,8 +299,7 @@ export default function WorkflowsPage() {
                         )}
                         {workflow.status === 'paused' && (
                           <DropdownMenuItem
-                            onClick={() => handleWorkflowAction(workflow.id, 'resume')}
-                            disabled={isLoading(workflow.id, 'resume')}
+                            onClick={() => !isLoading(workflow.id, 'resume') && handleWorkflowAction(workflow.id, 'resume')}
                           >
                             {isLoading(workflow.id, 'resume') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />

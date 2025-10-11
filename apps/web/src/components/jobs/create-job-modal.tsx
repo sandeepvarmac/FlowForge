@@ -137,6 +137,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
   const [currentStep, setCurrentStep] = React.useState(1)
   const [formData, setFormData] = React.useState<JobFormData>(initialFormData)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
   const resetForm = () => {
     setFormData(initialFormData)
@@ -198,11 +199,19 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
   const nextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => Math.min(prev + 1, 5))
+      // Scroll to top of modal content
+      setTimeout(() => {
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 0)
     }
   }
 
   const prevStep = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1))
+    // Scroll to top of modal content
+    setTimeout(() => {
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 0)
   }
 
   const handleSubmit = () => {
@@ -1105,7 +1114,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   <p className="text-xs text-foreground-muted mt-1">
                     {formData.destinationConfig.goldConfig?.buildStrategy === 'full_rebuild' && 'Rebuild entire table from Silver layer on each run'}
                     {formData.destinationConfig.goldConfig?.buildStrategy === 'incremental' && 'Only process new/changed records from Silver layer'}
-                    {formData.destinationConfig.goldConfig?.buildStrategy === 'snapshot' && 'Create point-in-time snapshot of Silver data'}
                   </p>
                 </FormField>
 
@@ -1445,7 +1453,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 pb-6">
           {renderStepContent()}
         </div>
 

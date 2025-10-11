@@ -9,6 +9,7 @@ import { WorkflowService } from '@/lib/services/workflow-service'
 import { CreateJobModal, JobExecutionModal } from '@/components/jobs'
 import { MetadataCatalog } from '@/components/metadata'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 
 const getStatusVariant = (status: string) => {
   switch (status) {
@@ -86,7 +87,7 @@ export default function WorkflowDetailPage() {
   const router = useRouter()
   const { state } = useAppContext()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, isLoading } = useWorkflowActions()
-  const { createJob } = useJobActions()
+  const { createJob, uploadFile } = useJobActions()
   const [executions, setExecutions] = React.useState<WorkflowExecution[]>([])
   const [loadingExecutions, setLoadingExecutions] = React.useState(false)
   const [createJobModalOpen, setCreateJobModalOpen] = React.useState(false)
@@ -972,7 +973,12 @@ export default function WorkflowDetailPage() {
         open={createJobModalOpen}
         onOpenChange={setCreateJobModalOpen}
         workflowId={workflowId}
-        onJobCreate={(jobData) => createJob(workflowId, jobData)}
+        onJobCreate={async (jobData, file) => {
+          const newJob = await createJob(workflowId, jobData)
+          if (file && newJob?.id) {
+            await uploadFile(workflowId, newJob.id, file)
+          }
+        }}
       />
 
       {/* Job Execution Results Modal */}

@@ -18,17 +18,79 @@ import {
   Users,
   FileText,
   Loader2,
-  Plus
+  Plus,
+  type LucideIcon
 } from 'lucide-react'
 import { OrchestrationService } from '@/lib/services/orchestration-service'
 import { formatDistanceToNow } from 'date-fns'
-import { useRouter } from 'next/navigation'
+import { CreateWorkflowModal } from '@/components/workflows'
+
+// Type definitions
+type SystemStatus = 'operational' | 'degraded' | 'outage'
+type ServiceStatus = 'running' | 'available' | 'connected' | 'active' | 'unavailable' | 'error'
+type ActivityStatus = 'completed' | 'failed' | 'running' | 'pending'
+type KPIColor = 'blue' | 'green' | 'red' | 'purple'
+
+interface ServiceHealth {
+  status: ServiceStatus
+  responseTime: number
+}
+
+interface SystemHealth {
+  overall: SystemStatus
+  services: {
+    prefect: ServiceHealth
+    minio: ServiceHealth
+    database: ServiceHealth
+    queue: ServiceHealth
+  }
+}
+
+interface KPIValue {
+  value: number
+  change: number
+  changePercent: number
+}
+
+interface KPIs {
+  activeWorkflows: KPIValue
+  successfulRuns: KPIValue
+  failedRuns: KPIValue
+  dataProcessed: KPIValue & { valueFormatted: string }
+}
+
+interface Activity {
+  id: string
+  workflowName: string
+  status: ActivityStatus
+  startedAt: string
+  duration?: number
+  completedJobs: number
+  totalJobs: number
+}
+
+interface SuccessRateTrend {
+  date: string
+  total: number
+  successful: number
+  failed: number
+  running: number
+  successRate: number
+}
+
+interface OverviewMetrics {
+  timestamp: string
+  systemHealth: SystemHealth
+  kpis: KPIs
+  recentActivity: Activity[]
+  successRateTrends: SuccessRateTrend[]
+}
 
 export default function OverviewPage() {
-  const router = useRouter()
-  const [metrics, setMetrics] = React.useState<any>(null)
+  const [metrics, setMetrics] = React.useState<OverviewMetrics | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [showCreateModal, setShowCreateModal] = React.useState(false)
 
   const loadMetrics = React.useCallback(async () => {
     try {
@@ -82,6 +144,10 @@ export default function OverviewPage() {
     )
   }
 
+  if (!metrics) {
+    return null
+  }
+
   return (
     <div className="space-y-6 p-6">
       {/* Header with CTA */}
@@ -97,7 +163,7 @@ export default function OverviewPage() {
             Last updated: {formatDistanceToNow(new Date(metrics.timestamp), { addSuffix: true })}
           </div>
           <button
-            onClick={() => router.push('/workflows')}
+            onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
           >
             <Plus className="w-4 h-4" />
@@ -149,7 +215,7 @@ export default function OverviewPage() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity Stream */}
-        <RecentActivityStream activities={metrics.recentActivity} />
+        <RecentActivityStream activities={metrics.recentActivity} onCreateClick={() => setShowCreateModal(true)} />
 
         {/* Success Rate Trends */}
         <SuccessRateTrends trends={metrics.successRateTrends} />
@@ -157,19 +223,25 @@ export default function OverviewPage() {
 
       {/* Coming Soon - Phase 2 & 3 Features */}
       <ComingSoonFeatures />
+
+      {/* Create Workflow Modal */}
+      <CreateWorkflowModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+      />
     </div>
   )
 }
 
 // System Health Status Component
-function SystemHealthStatus({ health }: { health: any }) {
-  const statusColors = {
+function SystemHealthStatus({ health }: { health: SystemHealth }) {
+  const statusColors: Record<SystemStatus, string> = {
     operational: 'bg-green-500',
     degraded: 'bg-yellow-500',
     outage: 'bg-red-500'
   }
 
-  const statusText = {
+  const statusText: Record<SystemStatus, string> = {
     operational: 'All Systems Operational',
     degraded: 'Some Systems Degraded',
     outage: 'System Outage'
@@ -220,7 +292,14 @@ function SystemHealthStatus({ health }: { health: any }) {
   )
 }
 
-function ServiceStatus({ name, status, responseTime, icon: Icon }: any) {
+interface ServiceStatusProps {
+  name: string
+  status: ServiceStatus
+  responseTime: number
+  icon: LucideIcon
+}
+
+function ServiceStatus({ name, status, responseTime, icon: Icon }: ServiceStatusProps) {
   const isHealthy = status === 'running' || status === 'available' || status === 'connected' || status === 'active'
   const statusColor = isHealthy ? 'text-green-600' : 'text-red-600'
   const bgColor = isHealthy ? 'bg-green-50' : 'bg-red-50'
@@ -242,11 +321,21 @@ function ServiceStatus({ name, status, responseTime, icon: Icon }: any) {
 }
 
 // KPI Card Component
-function KPICard({ title, value, change, changePercent, icon: Icon, color, invertTrend = false }: any) {
+interface KPICardProps {
+  title: string
+  value: number | string
+  change: number
+  changePercent: number
+  icon: LucideIcon
+  color: KPIColor
+  invertTrend?: boolean
+}
+
+function KPICard({ title, value, change, changePercent, icon: Icon, color, invertTrend = false }: KPICardProps) {
   const isPositive = invertTrend ? change < 0 : change > 0
   const isNegative = invertTrend ? change > 0 : change < 0
 
-  const colorClasses = {
+  const colorClasses: Record<KPIColor, string> = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
     red: 'bg-red-50 text-red-600',
@@ -284,9 +373,12 @@ function KPICard({ title, value, change, changePercent, icon: Icon, color, inver
 }
 
 // Recent Activity Stream Component
-function RecentActivityStream({ activities }: { activities: any[] }) {
-  const router = useRouter()
+interface RecentActivityStreamProps {
+  activities: Activity[]
+  onCreateClick: () => void
+}
 
+function RecentActivityStream({ activities, onCreateClick }: RecentActivityStreamProps) {
   return (
     <Card className="h-[500px] flex flex-col">
       <CardHeader className="pb-3">
@@ -304,7 +396,7 @@ function RecentActivityStream({ activities }: { activities: any[] }) {
               <h3 className="text-lg font-semibold text-foreground mb-2">No Executions Yet</h3>
               <p className="text-sm mb-6">Create your first workflow to start orchestrating data pipelines</p>
               <button
-                onClick={() => router.push('/workflows')}
+                onClick={onCreateClick}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
               >
                 <Plus className="w-5 h-5" />
@@ -322,15 +414,19 @@ function RecentActivityStream({ activities }: { activities: any[] }) {
   )
 }
 
-function ActivityItem({ activity }: { activity: any }) {
-  const statusConfig = {
+interface ActivityItemProps {
+  activity: Activity
+}
+
+function ActivityItem({ activity }: ActivityItemProps) {
+  const statusConfig: Record<ActivityStatus, { icon: LucideIcon; color: string; bg: string }> = {
     completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
     failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
     running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50' },
     pending: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-50' }
   }
 
-  const config = statusConfig[activity.status as keyof typeof statusConfig] || statusConfig.pending
+  const config = statusConfig[activity.status]
   const StatusIcon = config.icon
 
   return (
@@ -362,7 +458,11 @@ function ActivityItem({ activity }: { activity: any }) {
 }
 
 // Success Rate Trends Component
-function SuccessRateTrends({ trends }: { trends: any[] }) {
+interface SuccessRateTrendsProps {
+  trends: SuccessRateTrend[]
+}
+
+function SuccessRateTrends({ trends }: SuccessRateTrendsProps) {
   const maxValue = Math.max(...trends.map(t => t.total), 1)
   const avgSuccessRate = trends.reduce((sum, t) => sum + t.successRate, 0) / trends.length
 

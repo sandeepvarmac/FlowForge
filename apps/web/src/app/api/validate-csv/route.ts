@@ -4,6 +4,16 @@ import { openai } from '@/lib/ai/openai-client'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+interface ColumnSuggestion {
+  position: number
+  originalName?: string
+  suggestedName: string
+  reasoning: string
+  dataType: string
+  sampleValues: string[]
+  confidence: number
+}
+
 interface CSVValidationResult {
   success: boolean
   validation: {
@@ -26,6 +36,8 @@ interface CSVValidationResult {
       suggestedHeaders?: string[]
       reasoning: string
       needsUserInput: boolean
+      aiSuggestedColumns?: ColumnSuggestion[]
+      headerQuality?: 'excellent' | 'good' | 'poor'
     }
   }
   error?: string
@@ -184,13 +196,89 @@ Return ONLY valid JSON in this exact format:
         result.validation.headerDetection.suggestedHeaders = headers
         console.log('✅ Headers detected:', headers.slice(0, 5).join(', '), '...')
       } else if (!headerAnalysis.hasHeader && headerAnalysis.confidence >= 80) {
-        // No headers detected - suggest auto-generated column names
-        const firstRowColumns = firstThreeRows[0].split(',').length
-        result.validation.headerDetection.suggestedHeaders = Array.from(
-          { length: firstRowColumns },
-          (_, i) => `Column_${i + 1}`
-        )
-        console.log('⚠️ No headers detected. Suggesting auto-generated names:', result.validation.headerDetection.suggestedHeaders.slice(0, 5).join(', '), '...')
+        // No headers detected - use AI to suggest intelligent column names
+        console.log('🤖 No headers detected. Asking AI for intelligent column names...')
+
+        try {
+          const columnNamingCompletion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `You are an expert data analyst. Analyze CSV data (without headers) and suggest meaningful column names.
+
+For each column, provide:
+1. A descriptive, snake_case column name
+2. Brief reasoning (why this name fits the data)
+3. Data type (string, integer, decimal, email, phone, date, boolean, etc.)
+4. Confidence score (0-100)
+
+Guidelines:
+- Use snake_case (e.g., customer_id, email_address, registration_date)
+- Be specific, not generic (not "data" or "value", but "order_total" or "customer_age")
+- Consider relationships (if col 1 is customer_id, col 2 might be customer_name)
+- For IDs, use entity_id format (customer_id, order_id, product_id)
+- For amounts, include currency or unit if obvious (price_usd, weight_kg)
+- For dates/times, be specific (created_at, registration_date, last_login)
+
+Return ONLY valid JSON in this exact format:
+{
+  "columns": [
+    {
+      "position": 1,
+      "suggestedName": "customer_id",
+      "reasoning": "Sequential unique integers starting from 1",
+      "dataType": "integer",
+      "confidence": 90
+    }
+  ]
+}`
+              },
+              {
+                role: 'user',
+                content: `Analyze this CSV data and suggest column names:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}\n\nSuggest intelligent column names for each column.`
+              }
+            ],
+            temperature: 0.3,
+            response_format: { type: 'json_object' }
+          })
+
+          const columnNamingResponse = columnNamingCompletion.choices[0].message.content
+          if (columnNamingResponse) {
+            const columnNaming = JSON.parse(columnNamingResponse)
+            console.log('🤖 AI Column Naming Suggestions:', columnNaming)
+
+            // Parse first 5 rows to get sample values for each column
+            const first5Rows = lines.slice(0, 5).map(line =>
+              line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
+            )
+
+            result.validation.headerDetection.aiSuggestedColumns = columnNaming.columns.map((col: any) => {
+              const sampleValues = first5Rows.map(row => row[col.position - 1] || '').slice(0, 3)
+              return {
+                position: col.position,
+                suggestedName: col.suggestedName,
+                reasoning: col.reasoning,
+                dataType: col.dataType,
+                sampleValues,
+                confidence: col.confidence
+              }
+            })
+
+            result.validation.headerDetection.suggestedHeaders = columnNaming.columns.map((col: any) => col.suggestedName)
+            result.validation.headerDetection.needsUserInput = true // Always ask user to review AI suggestions
+            console.log('✅ AI suggested column names:', result.validation.headerDetection.suggestedHeaders.slice(0, 5).join(', '), '...')
+          }
+        } catch (columnNamingError) {
+          console.error('❌ AI column naming failed:', columnNamingError)
+          // Fallback to auto-generated names
+          const firstRowColumns = firstThreeRows[0].split(',').length
+          result.validation.headerDetection.suggestedHeaders = Array.from(
+            { length: firstRowColumns },
+            (_, i) => `Column_${i + 1}`
+          )
+          console.log('⚠️ Falling back to auto-generated names:', result.validation.headerDetection.suggestedHeaders.slice(0, 5).join(', '), '...')
+        }
       }
 
     } catch (aiError) {

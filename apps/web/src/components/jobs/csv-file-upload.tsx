@@ -4,6 +4,7 @@ import * as React from "react"
 import { Button, Badge } from "@/components/ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui"
 import { Upload, FileText, AlertCircle, CheckCircle2, Eye, X, Sparkles, Clock } from "lucide-react"
+import { ColumnNameEditorModal, type ColumnSuggestion } from "./column-name-editor-modal"
 
 interface CSVFileUploadProps {
   onFileUpload: (file: File, schema: Array<{ name: string; type: string; sample?: string }>, preview: any[]) => void
@@ -37,8 +38,15 @@ interface UploadState {
       confidence: number
       reasoning: string
       needsUserInput: boolean
+      aiSuggestedColumns?: ColumnSuggestion[]
     }
   } | null
+  showColumnNamingModal: boolean
+  pendingFileData?: {
+    file: File
+    rawText: string
+    rows: string[][]
+  }
 }
 
 export function CSVFileUpload({
@@ -57,7 +65,9 @@ export function CSVFileUpload({
     schema: initialSchema || null,
     preview: initialPreview || null,
     showPreview: !!(initialFile && initialSchema && initialPreview),
-    aiValidation: null
+    aiValidation: null,
+    showColumnNamingModal: false,
+    pendingFileData: undefined
   })
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -90,7 +100,7 @@ export function CSVFileUpload({
     return 'string'
   }
 
-  const parseCSV = (text: string): { headers: string[]; rows: string[][] } => {
+  const parseCSV = (text: string, customHeaders?: string[]): { headers: string[]; rows: string[][] } => {
     // Split on actual newlines, not escaped ones
     const lines = text.split(/\r?\n/).filter(line => line.trim())
     console.log('Total lines found:', lines.length)
@@ -98,11 +108,14 @@ export function CSVFileUpload({
 
     if (lines.length === 0) throw new Error('Empty CSV file')
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
+    // Use custom headers if provided, otherwise parse from first row
+    const headers = customHeaders || lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
     console.log('Parsed headers:', headers)
     console.log('Header count:', headers.length)
 
-    const rows = lines.slice(1).map(line => {
+    // If custom headers provided, don't skip first row (it's data)
+    const dataStartIndex = customHeaders ? 0 : 1
+    const rows = lines.slice(dataStartIndex).map(line => {
       const cells = line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
       // Ensure each row has the same number of columns as headers
       while (cells.length < headers.length) {

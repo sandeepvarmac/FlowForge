@@ -110,7 +110,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent size="2xl" className="max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Create New Workflow</DialogTitle>
           <DialogDescription>
