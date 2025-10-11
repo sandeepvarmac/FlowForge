@@ -13,7 +13,6 @@ export async function GET(request: NextRequest) {
 
     const service = new DataAssetsService();
     const lineage = service.getLineageGraph(assetId);
-    service.close();
 
     return NextResponse.json({ lineage });
   } catch (error: any) {

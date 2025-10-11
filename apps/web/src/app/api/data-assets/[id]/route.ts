@@ -17,7 +17,6 @@ export async function GET(
     const asset = service.getAssetById(id);
 
     if (!asset) {
-      service.close();
       return NextResponse.json(
         { error: 'Asset not found' },
         { status: 404 }
@@ -32,8 +31,6 @@ export async function GET(
 
     // Get lineage
     const lineage = service.getLineageGraph(id);
-
-    service.close();
 
     return NextResponse.json({
       asset,
@@ -63,7 +60,6 @@ export async function PATCH(
     // Validate asset exists
     const asset = service.getAssetById(id);
     if (!asset) {
-      service.close();
       return NextResponse.json(
         { error: 'Asset not found' },
         { status: 404 }
@@ -80,8 +76,6 @@ export async function PATCH(
 
     // Get updated asset
     const updatedAsset = service.getAssetById(id);
-
-    service.close();
 
     return NextResponse.json({ asset: updatedAsset });
   } catch (error: any) {

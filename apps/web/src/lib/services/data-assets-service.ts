@@ -4,7 +4,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { DB_PATH } from '@/lib/db';
+import { getDatabase } from '@/lib/db';
 
 export interface DataAsset {
   id: string;
@@ -93,8 +93,8 @@ export interface LineageGraph {
 export class DataAssetsService {
   private db: Database.Database;
 
-  constructor(dbPath: string = DB_PATH) {
-    this.db = new Database(dbPath);
+  constructor() {
+    this.db = getDatabase();
   }
 
   /**
@@ -588,7 +588,5 @@ export class DataAssetsService {
       .filter(asset => asset.parent_tables && asset.parent_tables.includes(tableName));
   }
 
-  close() {
-    this.db.close();
-  }
+  // Note: Database is shared, no need to close
 }

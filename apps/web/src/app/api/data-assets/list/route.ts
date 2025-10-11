@@ -41,8 +41,6 @@ export async function GET(request: NextRequest) {
     // Get stats for current environment
     const stats = service.getAssetStats(environments[0] || 'prod');
 
-    service.close();
-
     return NextResponse.json({
       assets: result.assets,
       workflows,
