@@ -19,9 +19,13 @@ import {
   UserCog,
   HelpCircle,
   GitBranch,
-  Repeat,
-  Send,
-  Bell
+  Shield,
+  Plug,
+  Eye,
+  Bell,
+  AlertTriangle,
+  BarChart3,
+  Search
 } from 'lucide-react'
 
 interface NavLink {
@@ -29,34 +33,43 @@ interface NavLink {
   label: string
   icon: any
   badge?: string
-  subLinks?: { href: string; label: string }[]
+  subLinks?: { href: string; label: string; icon?: any }[]
 }
 
 const links: NavLink[] = [
   { href: '/', label: 'Home', icon: Home },
   {
-    href: '/orchestration',
-    label: 'Orchestration',
+    href: '/pipelines',
+    label: 'Pipelines',
     icon: Workflow,
     subLinks: [
-      { href: '/orchestration/overview', label: 'Overview' },
-      { href: '/workflows', label: 'Workflows' },
-      { href: '/orchestration/monitor', label: 'Monitor' },
+      { href: '/pipelines/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/workflows', label: 'Workflows', icon: GitBranch },
+      { href: '/pipelines/executions', label: 'Executions', icon: Activity },
     ]
   },
   {
-    href: '/catalog',
-    label: 'Data Catalog',
+    href: '/data-assets',
+    label: 'Data Assets',
     icon: Database,
     subLinks: [
-      { href: '/catalog/explorer', label: 'Explorer' },
-      { href: '/catalog/lineage', label: 'Lineage' },
+      { href: '/data-assets/explorer', label: 'Explorer', icon: Search },
+      { href: '/data-assets/lineage', label: 'Lineage', icon: GitBranch },
     ]
   },
-  { href: '/reconciliation', label: 'Reconciliation', icon: Repeat, badge: 'Soon' },
-  { href: '/downstream', label: 'Downstream Feeds', icon: Send, badge: 'Soon' },
-  { href: '/alerts', label: 'Alerts', icon: Bell, badge: 'Soon' },
-  { href: '/admin', label: 'Admin', icon: Settings },
+  { href: '/quality', label: 'Quality', icon: Shield, badge: 'Soon' },
+  { href: '/integrations', label: 'Integrations', icon: Plug, badge: 'Soon' },
+  {
+    href: '/observability',
+    label: 'Observability',
+    icon: Eye,
+    subLinks: [
+      { href: '/observability/alerts', label: 'Alerts', icon: Bell },
+      { href: '/observability/incidents', label: 'Incidents', icon: AlertTriangle },
+      { href: '/observability/metrics', label: 'Metrics', icon: BarChart3 },
+    ]
+  },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 interface NavProps {
@@ -68,9 +81,10 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
   const pathname = usePathname()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-    '/orchestration': true,
-    '/catalog': false
-  })
+  '/pipelines': true,
+  '/data-assets': false,
+  '/observability': false
+})
 
   const toggleMenu = (href: string) => {
     setExpandedMenus(prev => ({ ...prev, [href]: !prev[href] }))
@@ -159,27 +173,29 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
               )}
 
               {/* Sub-menu */}
-              {hasSubLinks && isExpanded && !isCollapsed && (
-                <div className="ml-8 mt-1 space-y-1">
-                  {link.subLinks?.map((subLink) => {
-                    const subActive = pathname === subLink.href
-                    return (
-                      <Link
-                        key={subLink.href}
-                        href={subLink.href as any}
-                        className={cn(
-                          'block px-3 py-2 text-sm rounded-lg transition-colors',
-                          subActive
-                            ? 'bg-primary-100 text-primary-700 font-medium'
-                            : 'text-foreground-muted hover:bg-background-tertiary hover:text-foreground'
-                        )}
-                      >
-                        {subLink.label}
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
+{hasSubLinks && isExpanded && !isCollapsed && (
+  <div className="ml-8 mt-1 space-y-1">
+    {link.subLinks?.map((subLink) => {
+      const subActive = pathname === subLink.href
+      const SubIcon = subLink.icon
+      return (
+        <Link
+          key={subLink.href}
+          href={subLink.href as any}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors',
+            subActive
+              ? 'bg-primary-100 text-primary-700 font-medium'
+              : 'text-foreground-muted hover:bg-background-tertiary hover:text-foreground'
+          )}
+        >
+          {SubIcon && <SubIcon className="w-4 h-4 flex-shrink-0" />}
+          {subLink.label}
+        </Link>
+      )
+    })}
+  </div>
+)}
             </div>
           )
         })}
