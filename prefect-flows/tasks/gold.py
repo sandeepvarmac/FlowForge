@@ -28,14 +28,17 @@ def _build_gold_key(
     """
     Return (filename, s3_key) for the gold layer.
 
-    Pattern: gold/{domain}/{dataset}/{yyyymmdd}/{dataset}__{runId}__gold__view.parquet
+    Pattern: gold/{domain}/{dataset}/{yyyymmdd}/{dataset}_{runId}.parquet
 
-    For now, we use the job_slug as the dataset name.
+    Human-friendly naming:
+    - Single underscores instead of double
+    - No redundant "__gold" or "__view" suffix (gold layer implies analytics-ready view)
+    - Dataset name from job_slug provides business context
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
-    dataset = job_slug  # e.g., "ingest-countries" becomes the dataset name
+    dataset = job_slug  # e.g., "ingest-customers" becomes the dataset name
 
-    filename = f"{dataset}__{run_id}__gold__view.parquet"
+    filename = f"{dataset}_{run_id}.parquet"
     s3_key = f"gold/{domain}/{dataset}/{date_folder}/{filename}"
 
     return filename, s3_key

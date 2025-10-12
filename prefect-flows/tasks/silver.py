@@ -26,17 +26,22 @@ def _build_silver_keys(
     Return (current_filename, current_key, archive_key) for the silver layer.
 
     Pattern:
-      - Current: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}__{jobSlug}__{runId}__silver__current.parquet
-      - Archive: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/archive/{timestamp}__v{sequence}.parquet
+      - Current: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}_{jobSlug}_{runId}.parquet
+      - Archive: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/archive/{timestamp}_v{sequence}.parquet
+
+    Human-friendly naming:
+    - Single underscores instead of double
+    - No redundant "__silver" or "__current" suffix (current version is the main file)
+    - Clean version numbering in archive
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
-    current_filename = f"{workflow_slug}__{job_slug}__{run_id}__silver__current.parquet"
+    current_filename = f"{workflow_slug}_{job_slug}_{run_id}.parquet"
     current_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/{current_filename}"
 
     # Archive: we'll determine version dynamically, for now use v001
-    archive_filename = f"{timestamp}__v001.parquet"
+    archive_filename = f"{timestamp}_v001.parquet"
     archive_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/archive/{archive_filename}"
 
     return current_filename, current_key, archive_key

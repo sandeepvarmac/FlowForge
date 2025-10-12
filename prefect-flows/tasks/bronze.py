@@ -23,12 +23,17 @@ def _build_bronze_key(
     """
     Return (filename, s3_key) for the bronze layer object.
 
-    Pattern: bronze/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}__{jobSlug}__{runId}__bronze__v{sequence}.parquet
+    Pattern: bronze/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}_{jobSlug}_{runId}_v{sequence}.parquet
+
+    Human-friendly naming:
+    - Single underscores instead of double
+    - No redundant "__bronze" suffix (layer is in path)
+    - Clean version numbering: v001, v002, etc.
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
     source_stem = Path(source_filename).stem
 
-    filename = f"{workflow_slug}__{job_slug}__{run_id}__bronze__v{sequence:03d}.parquet"
+    filename = f"{workflow_slug}_{job_slug}_{run_id}_v{sequence:03d}.parquet"
     s3_key = f"bronze/{workflow_slug}/{job_slug}/{date_folder}/{filename}"
 
     return filename, s3_key
