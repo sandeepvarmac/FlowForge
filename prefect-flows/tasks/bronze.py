@@ -10,6 +10,7 @@ from prefect import task, get_run_logger
 from utils.parquet_utils import add_audit_columns, read_csv, write_parquet
 from utils.s3 import S3Client
 from utils.slugify import slugify, generate_run_id
+from utils.metadata_catalog import catalog_bronze_asset
 
 
 def _build_bronze_key(
@@ -81,6 +82,21 @@ def bronze_ingest(
         s3.upload_file(local_parquet, bronze_key)
 
     logger.info("Bronze dataset created: s3://%s/%s", s3.bucket, bronze_key)
+
+    # Write metadata to catalog
+    try:
+        asset_id = catalog_bronze_asset(
+            job_id=job_id,
+            workflow_slug=workflow_slug,
+            job_slug=job_slug,
+            s3_key=bronze_key,
+            row_count=df.height,
+            columns=df.columns,
+            environment="prod",
+        )
+        logger.info(f"✅ Bronze metadata cataloged: {asset_id}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to catalog bronze metadata: {e}")
 
     return {
         "workflow_id": workflow_id,

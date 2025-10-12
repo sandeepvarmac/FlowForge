@@ -16,6 +16,7 @@ from prefect import task, get_run_logger
 # )
 from utils.parquet_utils import read_parquet, write_parquet
 from utils.s3 import S3Client
+from utils.metadata_catalog import catalog_gold_asset
 
 
 def _build_gold_key(
@@ -75,6 +76,23 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
         s3.upload_file(str(gold_file), gold_key)
 
         logger.info(f"✅ Gold layer published: {gold_key} ({len(df)} rows)")
+
+        # Write metadata to catalog
+        try:
+            parent_silver_table = f"{workflow_slug}_{job_slug}_silver"
+            asset_id = catalog_gold_asset(
+                job_id=job_id,
+                workflow_slug=workflow_slug,
+                job_slug=job_slug,
+                s3_key=gold_key,
+                row_count=len(df),
+                columns=df.columns,
+                parent_silver_table=parent_silver_table,
+                environment="prod",
+            )
+            logger.info(f"✅ Gold metadata cataloged: {asset_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to catalog gold metadata: {e}")
 
         return {
             "workflow_id": workflow_id,

@@ -14,6 +14,7 @@ from utils.parquet_utils import (
     write_parquet,
 )
 from utils.s3 import S3Client
+from utils.metadata_catalog import catalog_silver_asset
 
 
 def _build_silver_keys(
@@ -89,6 +90,23 @@ def silver_transform(
         s3.upload_file(local_silver, current_key)
 
     logger.info("Silver dataset ready at %s", current_key)
+
+    # Write metadata to catalog
+    try:
+        parent_bronze_table = f"{workflow_slug}_{job_slug}_bronze"
+        asset_id = catalog_silver_asset(
+            job_id=job_id,
+            workflow_slug=workflow_slug,
+            job_slug=job_slug,
+            s3_key=current_key,
+            row_count=df.height,
+            columns=df.columns,
+            parent_bronze_table=parent_bronze_table,
+            environment="prod",
+        )
+        logger.info(f"✅ Silver metadata cataloged: {asset_id}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to catalog silver metadata: {e}")
 
     return {
         "workflow_id": workflow_id,
