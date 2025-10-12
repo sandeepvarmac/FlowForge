@@ -97,7 +97,9 @@ export default function WorkflowDetailPage() {
   const [selectedExecution, setSelectedExecution] = React.useState<{ jobId: string; jobName: string; executionId: string } | null>(null)
   const [metadataCatalogOpen, setMetadataCatalogOpen] = React.useState(false)
   const [editingJob, setEditingJob] = React.useState<Job | null>(null)
-  
+  const [landingFiles, setLandingFiles] = React.useState<any>(null)
+  const [loadingLandingFiles, setLoadingLandingFiles] = React.useState(false)
+
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
   const latestExecution = React.useMemo(() => (executions.length > 0 ? executions[0] : undefined), [executions])
@@ -133,6 +135,7 @@ export default function WorkflowDetailPage() {
   React.useEffect(() => {
     if (workflow) {
       loadExecutions()
+      loadLandingFiles()
     }
   }, [workflow])
 
@@ -145,6 +148,21 @@ export default function WorkflowDetailPage() {
       console.error('Failed to load executions:', error)
     } finally {
       setLoadingExecutions(false)
+    }
+  }
+
+  const loadLandingFiles = async () => {
+    try {
+      setLoadingLandingFiles(true)
+      const response = await fetch(`/api/workflows/${workflowId}/landing-files`)
+      if (response.ok) {
+        const data = await response.json()
+        setLandingFiles(data)
+      }
+    } catch (error) {
+      console.error('Failed to load landing files:', error)
+    } finally {
+      setLoadingLandingFiles(false)
     }
   }
 
@@ -402,6 +420,90 @@ export default function WorkflowDetailPage() {
                       </React.Fragment>
                     )
                   })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Landing Files */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Landing Files ({landingFiles?.totalFiles || 0})
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadLandingFiles}
+              disabled={loadingLandingFiles}
+            >
+              {loadingLandingFiles ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                "Refresh"
+              )}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {loadingLandingFiles ? (
+              <div className="text-center py-8">
+                <Loader2 className="w-6 h-6 mx-auto mb-3 animate-spin text-primary" />
+                <p className="text-foreground-muted">Loading landing files...</p>
+              </div>
+            ) : !landingFiles || landingFiles.totalFiles === 0 ? (
+              <div className="text-center py-8 text-foreground-muted">
+                <FileText className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                <p>No files in landing folder</p>
+                <p className="text-sm">Files uploaded through job creation will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(landingFiles.filesByJob).map(([jobId, files]: [string, any]) => {
+                  const job = workflow?.jobs.find(j => j.id === jobId)
+                  const jobName = job?.name || `Job ${jobId.slice(0, 8)}`
+
+                  return (
+                    <div key={jobId} className="border border-border rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Database className="w-4 h-4 text-primary" />
+                        <h4 className="font-semibold text-foreground">{jobName}</h4>
+                        <Badge variant="secondary">{files.length} {files.length === 1 ? 'file' : 'files'}</Badge>
+                      </div>
+
+                      <div className="space-y-2">
+                        {files.map((file: any, index: number) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-background-secondary rounded-md hover:bg-background-secondary/80 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="w-4 h-4 text-foreground-muted flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-foreground truncate">
+                                  {file.filename}
+                                </p>
+                                <p className="text-xs text-foreground-muted font-mono truncate">
+                                  {file.s3Path}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 flex-shrink-0">
+                              <div className="text-right">
+                                <p className="text-xs text-foreground-muted">
+                                  {(file.size / 1024).toFixed(1)} KB
+                                </p>
+                                <p className="text-xs text-foreground-muted">
+                                  {formatDistanceToNow(new Date(file.lastModified), { addSuffix: true })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </CardContent>
@@ -789,6 +891,8 @@ export default function WorkflowDetailPage() {
           const newJob = await createJob(workflowId, jobData)
           if (file && newJob?.id) {
             await uploadFile(workflowId, newJob.id, file)
+            // Refresh landing files after upload
+            await loadLandingFiles()
           }
         }}
       />

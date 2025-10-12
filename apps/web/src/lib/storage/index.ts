@@ -71,6 +71,35 @@ export function getFileHash(buffer: Buffer): string {
 }
 
 /**
+ * List files in a MinIO prefix/folder
+ */
+export async function listFiles(prefix: string): Promise<{ key: string; size: number; lastModified: Date }[]> {
+  const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')
+
+  try {
+    const command = new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: prefix,
+    })
+
+    const response = await s3Client.send(command)
+
+    if (!response.Contents) {
+      return []
+    }
+
+    return response.Contents.map(obj => ({
+      key: obj.Key || '',
+      size: obj.Size || 0,
+      lastModified: obj.LastModified || new Date(),
+    })).filter(obj => obj.key !== prefix && obj.key !== prefix + '/') // Remove the folder itself
+  } catch (error) {
+    console.error(`❌ S3 list failed:`, error)
+    throw error
+  }
+}
+
+/**
  * Read file from MinIO (not implemented - use S3Client directly)
  */
 export async function readFile(filepath: string): Promise<Buffer> {
