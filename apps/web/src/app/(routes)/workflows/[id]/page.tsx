@@ -7,6 +7,7 @@ import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions, useJobActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
 import { CreateJobModal, JobExecutionModal, JobCard } from '@/components/jobs'
+import type { Job } from '@/types/workflow'
 import { MetadataCatalog } from '@/components/metadata'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -95,6 +96,7 @@ export default function WorkflowDetailPage() {
   const [executionModalOpen, setExecutionModalOpen] = React.useState(false)
   const [selectedExecution, setSelectedExecution] = React.useState<{ jobId: string; jobName: string; executionId: string } | null>(null)
   const [metadataCatalogOpen, setMetadataCatalogOpen] = React.useState(false)
+  const [editingJob, setEditingJob] = React.useState<Job | null>(null)
   
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
@@ -223,6 +225,11 @@ export default function WorkflowDetailPage() {
         return newSet
       })
     }
+  }
+
+  const handleEditJob = (job: Job) => {
+    setEditingJob(job)
+    setCreateJobModalOpen(true)
   }
 
   return (
@@ -381,6 +388,7 @@ export default function WorkflowDetailPage() {
                           job={job}
                           workflowId={workflowId}
                           onRunJob={handleRunJob}
+                          onEditJob={handleEditJob}
                           isRunning={runningJobs.has(job.id)}
                         />
 
