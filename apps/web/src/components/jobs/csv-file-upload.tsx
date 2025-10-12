@@ -14,11 +14,15 @@ interface CSVFileUploadProps {
   initialFile?: File
   initialSchema?: Array<{ name: string; type: string; sample?: string }>
   initialPreview?: any[]
+  // Reset callback
+  onReset?: () => void
 }
 
 interface UploadState {
   isDragging: boolean
   isProcessing: boolean
+  processingStep?: 'validating' | 'ai-analyzing' | 'detecting-headers' | 'generating-schema' | 'complete'
+  progressPercent?: number
   file: File | null
   error: string | null
   schema: Array<{
@@ -49,14 +53,16 @@ interface UploadState {
   }
 }
 
-export function CSVFileUpload({
-  onFileUpload,
-  expectedColumns = [],
-  maxSizeInMB = 100,
-  initialFile,
-  initialSchema,
-  initialPreview
-}: CSVFileUploadProps) {
+export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUploadProps>(
+  function CSVFileUpload({
+    onFileUpload,
+    expectedColumns = [],
+    maxSizeInMB = 100,
+    initialFile,
+    initialSchema,
+    initialPreview,
+    onReset
+  }, ref) {
   const [state, setState] = React.useState<UploadState>({
     isDragging: false,
     isProcessing: false,
@@ -71,6 +77,11 @@ export function CSVFileUpload({
   })
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  // Expose reset function via ref
+  React.useImperativeHandle(ref, () => ({
+    reset: clearFile
+  }))
 
   const detectDataType = (value: string): string => {
     if (!value || value.trim() === '') return 'string'
@@ -131,27 +142,89 @@ export function CSVFileUpload({
   }
 
   const processFile = async (file: File) => {
-    setState(prev => ({ ...prev, isProcessing: true, error: null, aiValidation: null }))
+    setState(prev => ({ ...prev, isProcessing: true, processingStep: 'validating', error: null, aiValidation: null }))
 
     try {
-      console.log('🤖 Starting AI-powered CSV validation...')
+      console.log('🤖 Starting AI-powered CSV validation (chunked)...')
 
-      // Step 1: Call AI validation endpoint
-      const validationFormData = new FormData()
-      validationFormData.append('file', file)
+      // Step 1: Basic validation (30% progress)
+      setState(prev => ({ ...prev, processingStep: 'validating', progressPercent: 0 }))
 
-      const validationResponse = await fetch('/api/validate-csv', {
+      const basicFormData = new FormData()
+      basicFormData.append('file', file)
+
+      const basicResponse = await fetch('/api/validate-csv-basic', {
         method: 'POST',
-        body: validationFormData
+        body: basicFormData
       })
 
-      const validationResult = await validationResponse.json()
+      const basicResult = await basicResponse.json()
 
-      if (!validationResult.success) {
-        throw new Error(validationResult.error || 'File validation failed')
+      if (!basicResult.success) {
+        throw new Error(basicResult.error || 'Basic validation failed')
       }
 
-      console.log('✅ AI validation complete:', validationResult.validation)
+      console.log('✅ Step 1/3: Basic validation complete (30%)', basicResult.validation)
+      setState(prev => ({ ...prev, progressPercent: 30 }))
+
+      // Step 2: AI header detection (70% progress)
+      setState(prev => ({ ...prev, processingStep: 'ai-analyzing', progressPercent: 30 }))
+
+      const headerResponse = await fetch('/api/validate-csv-headers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstThreeRows: basicResult.metadata.firstThreeRows
+        })
+      })
+
+      const headerResult = await headerResponse.json()
+
+      if (!headerResult.success) {
+        throw new Error(headerResult.error || 'Header detection failed')
+      }
+
+      console.log('✅ Step 2/3: Header detection complete (70%)', headerResult.headerDetection)
+      setState(prev => ({ ...prev, processingStep: 'detecting-headers', progressPercent: 70 }))
+
+      // Step 3: Schema generation (100% progress)
+      setState(prev => ({ ...prev, processingStep: 'generating-schema', progressPercent: 70 }))
+
+      const schemaResponse = await fetch('/api/validate-csv-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstThreeRows: basicResult.metadata.firstThreeRows,
+          hasHeader: headerResult.headerDetection.hasHeader,
+          rowCount: basicResult.metadata.rowCount
+        })
+      })
+
+      const schemaResult = await schemaResponse.json()
+
+      if (!schemaResult.success) {
+        throw new Error(schemaResult.error || 'Schema generation failed')
+      }
+
+      console.log('✅ Step 3/3: Schema generation complete (100%)', schemaResult.schema)
+      setState(prev => ({ ...prev, progressPercent: 100 }))
+
+      // Combine results
+      const validationResult = {
+        success: true,
+        validation: {
+          fileFormat: basicResult.validation.fileFormat,
+          fileSize: basicResult.validation.fileSize,
+          isEmpty: basicResult.validation.isEmpty,
+          headerDetection: {
+            ...headerResult.headerDetection,
+            aiSuggestedColumns: schemaResult.schema.aiSuggestedColumns,
+            suggestedHeaders: schemaResult.schema.suggestedHeaders
+          }
+        }
+      }
+
+      console.log('✅ All validation steps complete:', validationResult.validation)
 
       // Check individual validations
       if (!validationResult.validation.fileFormat.valid) {
@@ -163,20 +236,69 @@ export function CSVFileUpload({
       }
 
       // Store AI validation results
+      setState(prev => ({ ...prev, processingStep: 'detecting-headers' }))
+
       const aiValidation: UploadState['aiValidation'] = {
         fileSizeWarning: validationResult.validation.fileSize.warning,
         headerDetection: validationResult.validation.headerDetection
       }
 
-      // Step 2: Parse CSV
+      // Step 2: Check if AI detected no headers and suggested column names
       const text = await file.text()
+
+      console.log('🔍 Checking for column naming modal trigger:', {
+        hasHeaderDetection: !!aiValidation.headerDetection,
+        hasHeader: aiValidation.headerDetection?.hasHeader,
+        hasSuggestedColumns: !!aiValidation.headerDetection?.aiSuggestedColumns,
+        suggestedColumnsLength: aiValidation.headerDetection?.aiSuggestedColumns?.length
+      })
+
+      if (
+        aiValidation.headerDetection &&
+        !aiValidation.headerDetection.hasHeader &&
+        aiValidation.headerDetection.aiSuggestedColumns &&
+        aiValidation.headerDetection.aiSuggestedColumns.length > 0
+      ) {
+        console.log('🤖 No headers detected - showing column naming modal after progress completes')
+
+        // Continue progress bar to 100%
+        setState(prev => ({ ...prev, processingStep: 'generating-schema' }))
+
+        // Parse CSV without headers to get rows
+        const lines = text.split(/\r?\n/).filter(line => line.trim())
+        const rows = lines.map(line =>
+          line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''))
+        )
+
+        // Small delay to show 100% progress, then show modal
+        setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            isProcessing: false,
+            processingStep: 'complete',
+            aiValidation,
+            showColumnNamingModal: true,
+            pendingFileData: {
+              file,
+              rawText: text,
+              rows
+            }
+          }))
+        }, 500) // Half second delay to show progress completion
+
+        return // Wait for user to choose column names
+      }
+
+      // Step 3: Parse CSV normally (has headers)
+      setState(prev => ({ ...prev, processingStep: 'generating-schema' }))
+
       const { headers, rows } = parseCSV(text)
 
       if (headers.length === 0) {
         throw new Error('No headers found in CSV file')
       }
 
-      // Step 3: Generate schema by analyzing all rows
+      // Step 4: Generate schema by analyzing all rows
       const schema = headers.map((header, columnIndex) => {
         // Get all values for this column
         const allValues = rows.map(row => row[columnIndex] || '').filter(cell => cell && cell.trim())
@@ -220,6 +342,7 @@ export function CSVFileUpload({
       setState(prev => ({
         ...prev,
         isProcessing: false,
+        processingStep: 'complete',
         file,
         schema,
         preview,
@@ -234,6 +357,7 @@ export function CSVFileUpload({
       setState(prev => ({
         ...prev,
         isProcessing: false,
+        processingStep: undefined,
         error: error instanceof Error ? error.message : 'Failed to process file',
         aiValidation: null
       }))
@@ -261,16 +385,129 @@ export function CSVFileUpload({
     setState({
       isDragging: false,
       isProcessing: false,
+      processingStep: undefined,
       file: null,
       error: null,
       schema: null,
       preview: null,
       showPreview: false,
-      aiValidation: null
+      aiValidation: null,
+      showColumnNamingModal: false,
+      pendingFileData: undefined
     })
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+    // Notify parent to reset as well
+    onReset?.()
+  }
+
+  const handleColumnNamesAccept = (columnNames: string[]) => {
+    console.log('✅ User accepted column names:', columnNames)
+
+    if (!state.pendingFileData) {
+      console.error('No pending file data!')
+      return
+    }
+
+    try {
+      // Re-parse CSV with custom headers
+      const { headers, rows } = parseCSV(state.pendingFileData.rawText, columnNames)
+
+      console.log('Parsed with custom headers:', { headers, rowCount: rows.length })
+
+      // Generate schema
+      const schema = headers.map((header, columnIndex) => {
+        const allValues = rows.map(row => row[columnIndex] || '').filter(cell => cell && cell.trim())
+        const samples = allValues.slice(0, 10)
+        const types = samples.map(detectDataType)
+
+        let mostCommonType = 'string'
+        if (types.length > 0) {
+          mostCommonType = types.reduce((a, b, i, arr) =>
+            arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b
+          )
+        }
+
+        const nonEmptyCount = allValues.length
+        const totalRows = rows.length
+        const nullPercentage = totalRows > 0 ? Math.round(((totalRows - nonEmptyCount) / totalRows) * 100) : 0
+
+        return {
+          name: header,
+          type: mostCommonType,
+          sample: samples[0] || '',
+          nonEmptyCount,
+          nullPercentage,
+          uniqueValues: new Set(allValues.slice(0, 10)).size
+        }
+      })
+
+      // Create preview data
+      const preview = rows.slice(0, 20).map(row => {
+        const obj: any = {}
+        headers.forEach((header, index) => {
+          obj[header] = row[index] || ''
+        })
+        return obj
+      })
+
+      // Update state with final schema and preview
+      setState(prev => ({
+        ...prev,
+        file: state.pendingFileData!.file,
+        schema,
+        preview,
+        showPreview: true,
+        showColumnNamingModal: false,
+        pendingFileData: undefined
+      }))
+
+      // Notify parent component
+      onFileUpload(state.pendingFileData.file, schema, preview)
+
+    } catch (error) {
+      console.error('Error processing file with custom headers:', error)
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to process file with custom headers',
+        showColumnNamingModal: false,
+        pendingFileData: undefined
+      }))
+    }
+  }
+
+  const handleColumnNamesCancel = () => {
+    console.log('❌ User cancelled column naming')
+    // Clear everything and reset - including file input
+    setState(prev => ({
+      ...prev,
+      isProcessing: false,
+      showColumnNamingModal: false,
+      pendingFileData: undefined,
+      aiValidation: null
+    }))
+
+    // Clear the file input so user can re-select the same file
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleUseDefaultColumnNames = () => {
+    console.log('🔤 User chose default column names')
+
+    if (!state.pendingFileData) {
+      console.error('No pending file data!')
+      return
+    }
+
+    // Get number of columns from first row
+    const firstRow = state.pendingFileData.rows[0]
+    const defaultHeaders = Array.from({ length: firstRow.length }, (_, i) => `Column_${i + 1}`)
+
+    // Process file with default headers
+    handleColumnNamesAccept(defaultHeaders)
   }
 
   const validateColumns = () => {
@@ -314,9 +551,51 @@ export function CSVFileUpload({
       >
         <div className="p-8 text-center">
           {state.isProcessing ? (
-            <div className="space-y-3">
-              <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
-              <p className="text-sm text-foreground-muted">Running AI-powered validation...</p>
+            <div className="space-y-5 max-w-md mx-auto">
+              {/* Icon with dynamic animation */}
+              <div className="relative w-16 h-16 mx-auto">
+                {state.processingStep === 'ai-analyzing' ? (
+                  <Sparkles className="w-16 h-16 text-purple-500 animate-pulse mx-auto" />
+                ) : (
+                  <div className="animate-spin w-16 h-16 border-4 border-primary border-t-transparent rounded-full"></div>
+                )}
+              </div>
+
+              {/* Dynamic Status Label */}
+              <div className="space-y-2">
+                <p className="text-lg font-semibold text-foreground">
+                  {state.processingStep === 'validating' && 'Checking file...'}
+                  {state.processingStep === 'ai-analyzing' && (
+                    <span className="flex items-center justify-center gap-2">
+                      <Sparkles className="w-5 h-5" />
+                      Analyzing your data...
+                    </span>
+                  )}
+                  {state.processingStep === 'detecting-headers' && 'Finding column names...'}
+                  {state.processingStep === 'generating-schema' && 'Building data structure...'}
+                  {!state.processingStep && 'Getting started...'}
+                </p>
+                <p className="text-sm text-foreground-muted">
+                  Usually takes 10-15 seconds
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-full transition-all duration-700 ease-out"
+                  style={{
+                    width: `${state.progressPercent || 10}%`
+                  }}
+                />
+              </div>
+
+              {/* Progress Percentage */}
+              {state.progressPercent !== undefined && (
+                <p className="text-xs text-foreground-muted font-medium">
+                  {state.progressPercent}% complete
+                </p>
+              )}
             </div>
           ) : state.file ? (
             <div className="space-y-3">
@@ -686,6 +965,23 @@ export function CSVFileUpload({
           </CardContent>
         </Card>
       )}
+
+      {/* Column Name Editor Modal */}
+      {state.showColumnNamingModal &&
+        state.aiValidation?.headerDetection?.aiSuggestedColumns &&
+        state.pendingFileData && (
+        <ColumnNameEditorModal
+          open={state.showColumnNamingModal}
+          onOpenChange={(open) => {
+            if (!open) {
+              handleColumnNamesCancel()
+            }
+          }}
+          columns={state.aiValidation.headerDetection.aiSuggestedColumns}
+          onAccept={handleColumnNamesAccept}
+          onUseDefaults={handleUseDefaultColumnNames}
+        />
+      )}
     </div>
   )
-}
+})

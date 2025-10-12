@@ -6,7 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/compo
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions, useJobActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
-import { CreateJobModal, JobExecutionModal } from '@/components/jobs'
+import { CreateJobModal, JobExecutionModal, JobCard } from '@/components/jobs'
 import { MetadataCatalog } from '@/components/metadata'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -375,210 +375,14 @@ export default function WorkflowDetailPage() {
                   .slice()
                   .sort((a, b) => a.order - b.order)
                   .map((job, index) => {
-                    const jobExecution = jobExecutionLookup[job.id]
-                    const badgeStatus = jobExecution?.status ?? job.status
-
                     return (
-                      <div key={job.id} className="relative">
-                        <div className="border border-border rounded-lg p-4 hover:bg-background-secondary transition-colors">
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-start gap-3">
-                              <div className="w-8 h-8 bg-primary-50 rounded-lg flex items-center justify-center mt-1">
-                                {job.type === 'file-based' && <FileText className="w-4 h-4 text-primary" />}
-                                {job.type === 'database' && <Database className="w-4 h-4 text-primary" />}
-                                {job.type === 'api' && <Cloud className="w-4 h-4 text-primary" />}
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h4 className="font-semibold text-foreground">{job.name}</h4>
-                                  <Badge variant={getStatusVariant(badgeStatus)}>
-                                    {badgeStatus}
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-foreground-muted mb-2">{job.description}</p>
-
-                                <div className="text-xs text-foreground-muted">
-                                  <span className="font-medium">Source:</span> {job.sourceConfig.name} ({job.sourceConfig.type})
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col gap-2">
-                              <div className="text-right text-xs text-foreground-muted">
-                                <div>Order: {job.order}</div>
-                                {job.lastRun && (
-                                  <div className="mt-1">
-                                    Last run: {new Intl.DateTimeFormat('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    }).format(job.lastRun)}
-                                  </div>
-                                )}
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRunJob(job.id)}
-                                disabled={runningJobs.has(job.id)}
-                                className="text-xs"
-                              >
-                                {runningJobs.has(job.id) ? (
-                                  <>
-                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                    Running
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-3 h-3 mr-1" />
-                                    Run Job
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 text-xs">
-                            <div className="flex items-center gap-1">
-                              <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                              <span className="text-foreground-muted">Bronze</span>
-                              {job.destinationConfig.bronzeConfig.enabled && (
-                                <CheckCircle className="w-3 h-3 text-green-600" />
-                              )}
-                            </div>
-
-                            {job.destinationConfig.silverConfig?.enabled && (
-                              <>
-                                <ArrowRight className="w-3 h-3 text-foreground-muted" />
-                                <div className="flex items-center gap-1">
-                                  <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                                  <span className="text-foreground-muted">Silver</span>
-                                  <CheckCircle className="w-3 h-3 text-green-600" />
-                                </div>
-                              </>
-                            )}
-
-                            {job.destinationConfig.goldConfig?.enabled && (
-                              <>
-                                <ArrowRight className="w-3 h-3 text-foreground-muted" />
-                                <div className="flex items-center gap-1">
-                                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                                  <span className="text-foreground-muted">Gold</span>
-                                  <CheckCircle className="w-3 h-3 text-green-600" />
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          {(job.transformationConfig || job.validationConfig) && (
-                            <div className="mt-3 pt-3 border-t border-border text-xs">
-                              <div className="flex gap-4">
-                                {job.transformationConfig && (
-                                  <div className="text-foreground-muted">
-                                    <span className="font-medium">Transformations:</span> {job.transformationConfig.columnMappings.length} mappings
-                                    {job.transformationConfig.lookups && job.transformationConfig.lookups.length > 0 && (
-                                      <span>, {job.transformationConfig.lookups.length} lookups</span>
-                                    )}
-                                  </div>
-                                )}
-                                {job.validationConfig && (
-                                  <div className="text-foreground-muted">
-                                    <span className="font-medium">Validations:</span>
-                                    {job.validationConfig.dataQualityRules?.length || 0} DQ rules,
-                                    {job.validationConfig.reconciliationRules?.length || 0} reconciliation rules
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {jobExecution && (
-                            <div className="mt-4 rounded-lg border border-border bg-background-secondary/60 p-3 text-xs space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="font-semibold text-foreground">Latest run</span>
-                                <Badge variant={getStatusVariant(jobExecution.status)}>
-                                  {jobExecution.status}
-                                </Badge>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-foreground-muted">
-                                <div className="flex items-center justify-between gap-4">
-                                  <span>Started</span>
-                                  <span className="font-medium text-foreground">{formatDateTime(jobExecution.startedAt)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                  <span>Completed</span>
-                                  <span className="font-medium text-foreground">{formatDateTime(jobExecution.completedAt)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                  <span>Duration</span>
-                                  <span className="font-medium text-foreground">{formatDuration(jobExecution.durationMs)}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                  <span>Rows processed</span>
-                                  <span className="font-medium text-foreground">{formatRows(jobExecution.recordsProcessed)}</span>
-                                </div>
-                              </div>
-
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-3 rounded-md bg-blue-50 p-2">
-                                  <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-[11px] font-bold mt-0.5">
-                                    L
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="font-medium text-sm text-blue-900">Landing</div>
-                                    <div className="text-xs text-blue-700 font-mono break-all">
-                                      {jobExecution.landingKey ?? 'Not available'}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {jobExecution.bronzeFilePath && (
-                                  <div className="flex items-start gap-3 rounded-md bg-amber-50 p-2">
-                                    <div className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-white text-[11px] font-bold mt-0.5">
-                                      B
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="font-medium text-sm text-amber-900">Bronze</div>
-                                      <div className="text-xs text-amber-700 font-mono break-all">
-                                        {jobExecution.bronzeFilePath}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {jobExecution.silverFilePath && (
-                                  <div className="flex items-start gap-3 rounded-md bg-gray-50 p-2">
-                                    <div className="w-5 h-5 bg-gray-400 rounded-full flex items-center justify-center text-white text-[11px] font-bold mt-0.5">
-                                      S
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="font-medium text-sm text-gray-900">Silver</div>
-                                      <div className="text-xs text-gray-700 font-mono break-all">
-                                        {jobExecution.silverFilePath}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {jobExecution.goldFilePath && (
-                                  <div className="flex items-start gap-3 rounded-md bg-yellow-50 p-2">
-                                    <div className="w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center text-white text-[11px] font-bold mt-0.5">
-                                      G
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="font-medium text-sm text-yellow-900">Gold</div>
-                                      <div className="text-xs text-yellow-700 font-mono break-all">
-                                        {jobExecution.goldFilePath}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                      <React.Fragment key={job.id}>
+                        <JobCard
+                          job={job}
+                          workflowId={workflowId}
+                          onRunJob={handleRunJob}
+                          isRunning={runningJobs.has(job.id)}
+                        />
 
                         {index < workflow.jobs.length - 1 && (
                           <div className="flex justify-center my-2">
@@ -587,7 +391,7 @@ export default function WorkflowDetailPage() {
                             </div>
                           </div>
                         )}
-                      </div>
+                      </React.Fragment>
                     )
                   })}
               </div>

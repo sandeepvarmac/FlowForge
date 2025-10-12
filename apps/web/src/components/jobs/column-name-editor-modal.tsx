@@ -38,12 +38,12 @@ export function ColumnNameEditorModal({
   onAccept,
   onUseDefaults
 }: ColumnNameEditorModalProps) {
-  const [editedColumns, setEditedColumns] = React.useState<ColumnSuggestion[]>(columns)
+  const [editedColumns, setEditedColumns] = React.useState<ColumnSuggestion[]>(columns ?? [])
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null)
   const [editValue, setEditValue] = React.useState("")
 
   React.useEffect(() => {
-    setEditedColumns(columns)
+    setEditedColumns(columns ?? [])
   }, [columns])
 
   const handleEdit = (index: number) => {

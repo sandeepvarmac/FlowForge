@@ -138,11 +138,13 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
   const [formData, setFormData] = React.useState<JobFormData>(initialFormData)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const csvUploadRef = React.useRef<{ reset: () => void }>(null)
 
   const resetForm = () => {
     setFormData(initialFormData)
     setCurrentStep(1)
     setErrors({})
+    csvUploadRef.current?.reset()
   }
 
   const updateFormData = (updates: Partial<JobFormData>) => {
@@ -388,6 +390,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                     {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' ? 'Sample CSV File (for schema detection)' : 'CSV File'}
                   </FormLabel>
                   <CSVFileUpload
+                    ref={csvUploadRef}
                     onFileUpload={(file, schema, preview) => {
                       // Auto-generate table names from filename
                       const cleanName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -424,6 +427,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                         _detectedSchema: schema,
                         _previewData: preview
                       } as any))
+                    }}
+                    onReset={() => {
+                      // Clear form data related to file upload
+                      setFormData(prev => ({
+                        ...prev,
+                        _uploadedFile: undefined,
+                        _detectedSchema: undefined,
+                        _previewData: undefined
+                      }))
                     }}
                     expectedColumns={['customer_id', 'first_name', 'last_name', 'email', 'phone', 'registration_date', 'status', 'country', 'revenue']}
                     initialFile={formData._uploadedFile}
@@ -1405,8 +1417,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
     }
   }
 
+  const handleModalClose = (isOpen: boolean) => {
+    if (!isOpen) {
+      resetForm()
+    }
+    onOpenChange(isOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleModalClose}>
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Create New Job</DialogTitle>
@@ -1468,7 +1487,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
               )}
             </div>
             <div className="flex space-x-2">
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button variant="ghost" onClick={() => handleModalClose(false)}>
                 Cancel
               </Button>
               {currentStep < 5 ? (
