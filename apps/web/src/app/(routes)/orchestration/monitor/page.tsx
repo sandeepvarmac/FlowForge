@@ -18,7 +18,6 @@ import {
   Layers,
   Database,
   Timer,
-  X,
   ChevronDown,
   ChevronRight,
   Calendar,
@@ -553,12 +552,9 @@ function ExecutionDetailsPanel({ executionDetails, loading, onClose }: any) {
               {execution.workflow_name} • {execution.id}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-background-tertiary rounded-md transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="text-xs text-foreground-muted">
+            Click the execution card to collapse
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-6 space-y-6">
