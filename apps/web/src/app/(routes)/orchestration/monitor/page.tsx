@@ -449,12 +449,17 @@ function ExecutionCard({ execution, isSelected, onSelect }: any) {
     ? (execution.completed_jobs / execution.total_jobs) * 100
     : 0
 
+  const handleClick = () => {
+    // Toggle: if already selected, deselect; otherwise select
+    onSelect(isSelected ? null : execution.id)
+  }
+
   return (
     <Card
       className={`cursor-pointer transition-all hover:shadow-lg ${
         isSelected ? 'ring-2 ring-primary shadow-brand' : ''
       }`}
-      onClick={() => onSelect(execution.id)}
+      onClick={handleClick}
     >
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
