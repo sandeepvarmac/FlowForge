@@ -89,7 +89,7 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
                 job_slug=job_slug,
                 s3_key=gold_key,
                 row_count=len(df),
-                columns=df.columns,
+                dataframe=df,
                 parent_silver_table=parent_silver_table,
                 environment="prod",
             )

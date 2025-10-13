@@ -105,7 +105,7 @@ def silver_transform(
             job_slug=job_slug,
             s3_key=current_key,
             row_count=df.height,
-            columns=df.columns,
+            dataframe=df,
             parent_bronze_table=parent_bronze_table,
             environment="prod",
         )

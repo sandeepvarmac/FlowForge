@@ -66,16 +66,55 @@ def get_file_size_from_s3(s3_key: str) -> int:
         return 0
 
 
-def get_schema_from_columns(columns: List[str]) -> List[Dict[str, Any]]:
-    """Convert column names to schema format."""
-    return [
-        {
-            "name": col,
-            "type": "unknown",  # Polars dataframe could provide types if needed
-            "nullable": True
+def get_schema_from_dataframe(df: Any) -> List[Dict[str, Any]]:
+    """
+    Extract schema with data types from a Polars DataFrame.
+
+    Args:
+        df: Polars DataFrame
+
+    Returns:
+        List of column definitions with name, type, and nullable fields
+    """
+    import polars as pl
+
+    schema = []
+    for col_name in df.columns:
+        dtype = df.schema[col_name]
+
+        # Convert Polars dtype to human-readable string
+        dtype_str = str(dtype)
+
+        # Simplify common types
+        type_mapping = {
+            'Int8': 'integer',
+            'Int16': 'integer',
+            'Int32': 'integer',
+            'Int64': 'integer',
+            'UInt8': 'integer',
+            'UInt16': 'integer',
+            'UInt32': 'integer',
+            'UInt64': 'integer',
+            'Float32': 'float',
+            'Float64': 'float',
+            'Utf8': 'string',
+            'String': 'string',
+            'Boolean': 'boolean',
+            'Date': 'date',
+            'Datetime': 'datetime',
+            'Time': 'time',
         }
-        for col in columns
-    ]
+
+        # Get simplified type or use the Polars type string
+        simplified_type = type_mapping.get(dtype_str, dtype_str.lower())
+
+        schema.append({
+            "name": col_name,
+            "type": simplified_type,
+            "nullable": True  # Default to nullable, could be refined with nullability analysis
+        })
+
+    return schema
 
 
 def upsert_metadata_catalog_entry(
@@ -211,7 +250,7 @@ def catalog_bronze_asset(
     job_slug: str,
     s3_key: str,
     row_count: int,
-    columns: List[str],
+    dataframe: Any,
     environment: str = "prod",
 ) -> str:
     """
@@ -223,14 +262,14 @@ def catalog_bronze_asset(
         job_slug: Job slug
         s3_key: S3 key for the file
         row_count: Number of rows
-        columns: List of column names
+        dataframe: Polars DataFrame to extract schema from
         environment: Environment
 
     Returns:
         Asset ID
     """
     table_name = f"{workflow_slug}_{job_slug}_bronze"
-    schema = get_schema_from_columns(columns)
+    schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(
@@ -253,7 +292,7 @@ def catalog_silver_asset(
     job_slug: str,
     s3_key: str,
     row_count: int,
-    columns: List[str],
+    dataframe: Any,
     parent_bronze_table: str,
     environment: str = "prod",
 ) -> str:
@@ -266,7 +305,7 @@ def catalog_silver_asset(
         job_slug: Job slug
         s3_key: S3 key for the file
         row_count: Number of rows
-        columns: List of column names
+        dataframe: Polars DataFrame to extract schema from
         parent_bronze_table: Name of the parent Bronze table
         environment: Environment
 
@@ -274,7 +313,7 @@ def catalog_silver_asset(
         Asset ID
     """
     table_name = f"{workflow_slug}_{job_slug}_silver"
-    schema = get_schema_from_columns(columns)
+    schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(
@@ -297,7 +336,7 @@ def catalog_gold_asset(
     job_slug: str,
     s3_key: str,
     row_count: int,
-    columns: List[str],
+    dataframe: Any,
     parent_silver_table: str,
     environment: str = "prod",
 ) -> str:
@@ -310,7 +349,7 @@ def catalog_gold_asset(
         job_slug: Job slug
         s3_key: S3 key for the file
         row_count: Number of rows
-        columns: List of column names
+        dataframe: Polars DataFrame to extract schema from
         parent_silver_table: Name of the parent Silver table
         environment: Environment
 
@@ -318,7 +357,7 @@ def catalog_gold_asset(
         Asset ID
     """
     table_name = f"{workflow_slug}_{job_slug}_gold"
-    schema = get_schema_from_columns(columns)
+    schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(

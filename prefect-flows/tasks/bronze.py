@@ -96,7 +96,7 @@ def bronze_ingest(
             job_slug=job_slug,
             s3_key=bronze_key,
             row_count=df.height,
-            columns=df.columns,
+            dataframe=df,
             environment="prod",
         )
         logger.info(f"✅ Bronze metadata cataloged: {asset_id}")
