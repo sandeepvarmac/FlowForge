@@ -16,7 +16,7 @@ from prefect import task, get_run_logger
 # )
 from utils.parquet_utils import read_parquet, write_parquet
 from utils.s3 import S3Client
-from utils.metadata_catalog import catalog_gold_asset
+from utils.metadata_catalog import catalog_gold_asset, update_job_execution_metrics
 
 
 def _build_gold_key(
@@ -96,6 +96,16 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
             logger.info(f"✅ Gold metadata cataloged: {asset_id}")
         except Exception as e:
             logger.warning(f"⚠️ Failed to catalog gold metadata: {e}")
+
+        # Update job execution metrics
+        try:
+            update_job_execution_metrics(
+                job_id=job_id,
+                gold_records=len(df),
+            )
+            logger.info(f"✅ Updated job execution metrics: gold_records={len(df)}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to update job execution metrics: {e}")
 
         return {
             "workflow_id": workflow_id,

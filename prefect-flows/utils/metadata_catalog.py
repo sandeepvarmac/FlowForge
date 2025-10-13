@@ -333,3 +333,86 @@ def catalog_gold_asset(
         environment=environment,
         description=f"Gold layer for {job_slug}",
     )
+
+
+def update_job_execution_metrics(
+    job_id: str,
+    bronze_records: Optional[int] = None,
+    silver_records: Optional[int] = None,
+    gold_records: Optional[int] = None,
+) -> None:
+    """
+    Update record counts for a job execution in the database.
+
+    This function finds the most recent job_execution for the given job_id
+    and updates the bronze_records, silver_records, and/or gold_records columns.
+
+    Args:
+        job_id: Job ID
+        bronze_records: Number of bronze records (optional)
+        silver_records: Number of silver records (optional)
+        gold_records: Number of gold records (optional)
+    """
+    logger = get_run_logger()
+    conn = get_database_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Find the most recent job_execution for this job_id
+        cursor.execute(
+            """
+            SELECT id FROM job_executions
+            WHERE job_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (job_id,)
+        )
+        result = cursor.fetchone()
+
+        if not result:
+            logger.warning(f"No job_execution found for job_id={job_id}")
+            return
+
+        job_execution_id = result[0]
+
+        # Build UPDATE query dynamically based on which metrics are provided
+        updates = []
+        params = []
+
+        if bronze_records is not None:
+            updates.append("bronze_records = ?")
+            params.append(bronze_records)
+
+        if silver_records is not None:
+            updates.append("silver_records = ?")
+            params.append(silver_records)
+
+        if gold_records is not None:
+            updates.append("gold_records = ?")
+            params.append(gold_records)
+
+        if not updates:
+            logger.warning("No metrics provided to update")
+            return
+
+        # Add updated_at timestamp
+        updates.append("updated_at = ?")
+        params.append(datetime.now().isoformat())
+
+        # Add job_execution_id to params
+        params.append(job_execution_id)
+
+        # Execute UPDATE
+        query = f"UPDATE job_executions SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        conn.commit()
+
+        logger.info(f"✅ Updated job_execution metrics for job_id={job_id}: bronze={bronze_records}, silver={silver_records}, gold={gold_records}")
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Failed to update job_execution metrics: {e}")
+        raise
+    finally:
+        conn.close()

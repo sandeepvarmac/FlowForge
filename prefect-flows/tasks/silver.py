@@ -14,7 +14,7 @@ from utils.parquet_utils import (
     write_parquet,
 )
 from utils.s3 import S3Client
-from utils.metadata_catalog import catalog_silver_asset
+from utils.metadata_catalog import catalog_silver_asset, update_job_execution_metrics
 
 
 def _build_silver_keys(
@@ -112,6 +112,16 @@ def silver_transform(
         logger.info(f"✅ Silver metadata cataloged: {asset_id}")
     except Exception as e:
         logger.warning(f"⚠️ Failed to catalog silver metadata: {e}")
+
+    # Update job execution metrics
+    try:
+        update_job_execution_metrics(
+            job_id=job_id,
+            silver_records=df.height,
+        )
+        logger.info(f"✅ Updated job execution metrics: silver_records={df.height}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to update job execution metrics: {e}")
 
     return {
         "workflow_id": workflow_id,

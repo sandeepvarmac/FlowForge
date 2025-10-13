@@ -10,7 +10,7 @@ from prefect import task, get_run_logger
 from utils.parquet_utils import add_audit_columns, read_csv, write_parquet
 from utils.s3 import S3Client
 from utils.slugify import slugify, generate_run_id
-from utils.metadata_catalog import catalog_bronze_asset
+from utils.metadata_catalog import catalog_bronze_asset, update_job_execution_metrics
 
 
 def _build_bronze_key(
@@ -102,6 +102,16 @@ def bronze_ingest(
         logger.info(f"✅ Bronze metadata cataloged: {asset_id}")
     except Exception as e:
         logger.warning(f"⚠️ Failed to catalog bronze metadata: {e}")
+
+    # Update job execution metrics
+    try:
+        update_job_execution_metrics(
+            job_id=job_id,
+            bronze_records=df.height,
+        )
+        logger.info(f"✅ Updated job execution metrics: bronze_records={df.height}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to update job execution metrics: {e}")
 
     return {
         "workflow_id": workflow_id,
