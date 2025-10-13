@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
 import {
   Activity,
@@ -419,6 +420,8 @@ interface ActivityItemProps {
 }
 
 function ActivityItem({ activity }: ActivityItemProps) {
+  const router = useRouter()
+
   const statusConfig: Record<ActivityStatus, { icon: LucideIcon; color: string; bg: string }> = {
     completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
     failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
@@ -429,8 +432,16 @@ function ActivityItem({ activity }: ActivityItemProps) {
   const config = statusConfig[activity.status]
   const StatusIcon = config.icon
 
+  const handleClick = () => {
+    // Navigate to monitor page with this execution selected
+    router.push(`/orchestration/monitor?execution=${activity.id}`)
+  }
+
   return (
-    <div className={`p-3 rounded-lg ${config.bg} hover:opacity-80 transition-opacity cursor-pointer`}>
+    <div
+      onClick={handleClick}
+      className={`p-3 rounded-lg ${config.bg} hover:opacity-80 transition-opacity cursor-pointer`}
+    >
       <div className="flex items-start gap-3">
         <StatusIcon className={`w-5 h-5 ${config.color} flex-shrink-0 mt-0.5 ${activity.status === 'running' ? 'animate-spin' : ''}`} />
         <div className="flex-1 min-w-0">

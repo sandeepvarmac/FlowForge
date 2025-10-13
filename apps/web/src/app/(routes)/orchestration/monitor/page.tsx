@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
 import {
   Activity,
@@ -28,6 +29,7 @@ import { MonitorService } from '@/lib/services/monitor-service'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function MonitorPage() {
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = React.useState<'executions' | 'performance'>('executions')
   const [executions, setExecutions] = React.useState<any[]>([])
   const [stats, setStats] = React.useState<any>(null)
@@ -85,6 +87,14 @@ export default function MonitorPage() {
       setLoadingDetails(false)
     }
   }, [])
+
+  // Handle query parameter for auto-selecting execution
+  React.useEffect(() => {
+    const executionParam = searchParams.get('execution')
+    if (executionParam && !selectedExecution) {
+      setSelectedExecution(executionParam)
+    }
+  }, [searchParams, selectedExecution])
 
   React.useEffect(() => {
     if (activeTab === 'executions') {
