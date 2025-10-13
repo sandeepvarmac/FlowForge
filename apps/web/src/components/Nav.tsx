@@ -25,7 +25,12 @@ import {
   Bell,
   AlertTriangle,
   BarChart3,
-  Search
+  Search,
+  Repeat,
+  Download,
+  Upload,
+  LineChart,
+  FolderKanban
 } from 'lucide-react'
 
 interface NavLink {
@@ -58,7 +63,25 @@ const links: NavLink[] = [
     ]
   },
   { href: '/quality', label: 'Quality', icon: Shield, badge: 'Soon' },
-  { href: '/integrations', label: 'Integrations', icon: Plug, badge: 'Soon' },
+  { href: '/reconciliation', label: 'Reconciliation', icon: Repeat, badge: 'Soon' },
+  {
+    href: '/integrations',
+    label: 'Integrations',
+    icon: Plug,
+    subLinks: [
+      { href: '/integrations/sources', label: 'Sources', icon: Upload },
+      { href: '/integrations/destinations', label: 'Destinations', icon: Download },
+    ]
+  },
+  {
+    href: '/analytics-hub',
+    label: 'Analytics Hub',
+    icon: LineChart,
+    subLinks: [
+      { href: '/analytics-hub/reports', label: 'Reports', icon: FolderKanban },
+      { href: '/analytics-hub/admin', label: 'Admin', icon: Settings },
+    ]
+  },
   {
     href: '/observability',
     label: 'Observability',
@@ -83,6 +106,8 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
   '/pipelines': true,
   '/data-assets': false,
+  '/integrations': false,
+  '/analytics-hub': false,
   '/observability': false
 })
 
