@@ -22,6 +22,36 @@ CREATE TABLE IF NOT EXISTS workflows (
   updated_at INTEGER NOT NULL
 );
 
+-- Workflow Triggers table
+CREATE TABLE IF NOT EXISTS workflow_triggers (
+  id TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL,
+  trigger_type TEXT NOT NULL CHECK(trigger_type IN ('manual', 'scheduled', 'dependency', 'event')),
+  enabled INTEGER DEFAULT 1,
+  trigger_name TEXT,
+
+  -- For scheduled triggers
+  cron_expression TEXT,
+  timezone TEXT DEFAULT 'UTC',
+  next_run_at INTEGER, -- Unix timestamp
+  last_run_at INTEGER, -- Unix timestamp
+
+  -- For dependency triggers
+  depends_on_workflow_id TEXT,
+  dependency_condition TEXT CHECK(dependency_condition IN ('on_success', 'on_failure', 'on_completion')),
+  delay_minutes INTEGER DEFAULT 0,
+
+  -- For event triggers (future)
+  event_type TEXT,
+  event_config TEXT, -- JSON
+
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE,
+  FOREIGN KEY (depends_on_workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
@@ -161,6 +191,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- Indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_workflow_triggers_workflow_id ON workflow_triggers(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_triggers_depends_on ON workflow_triggers(depends_on_workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_triggers_next_run ON workflow_triggers(next_run_at) WHERE trigger_type = 'scheduled';
+CREATE INDEX IF NOT EXISTS idx_workflow_triggers_enabled ON workflow_triggers(enabled, trigger_type);
 CREATE INDEX IF NOT EXISTS idx_jobs_workflow_id ON jobs(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON executions(workflow_id);

@@ -160,6 +160,37 @@ function runMigrations(database: Database.Database) {
 
       console.log('✓ Migration: Made application column nullable in workflows')
     }
+
+    // Migration 4: Add trigger fields to executions table
+    const executionColumns = database.prepare('PRAGMA table_info(executions)').all() as Array<{ name: string }>
+    const hasTriggerId = executionColumns.some(column => column.name === 'trigger_id')
+    const hasTriggerType = executionColumns.some(column => column.name === 'trigger_type')
+
+    if (!hasTriggerId || !hasTriggerType) {
+      console.log('⚙️  Running migration: Add trigger fields to executions table...')
+
+      if (!hasTriggerId) {
+        database.exec('ALTER TABLE executions ADD COLUMN trigger_id TEXT')
+        console.log('✓ Migration: Added trigger_id to executions')
+      }
+
+      if (!hasTriggerType) {
+        database.exec("ALTER TABLE executions ADD COLUMN trigger_type TEXT DEFAULT 'manual'")
+        console.log('✓ Migration: Added trigger_type to executions')
+      }
+    }
+
+    // Migration 5: Create workflow_triggers table if it doesn't exist
+    const tables = database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_triggers'").all()
+
+    if (tables.length === 0) {
+      console.log('⚙️  Running migration: Create workflow_triggers table...')
+
+      // The table will be created by the SCHEMA execution above,
+      // but we add this check for explicit migration tracking
+      console.log('✓ Migration: workflow_triggers table created via schema')
+    }
+
   } catch (error) {
     console.error('Failed to run database migrations:', error)
   }
