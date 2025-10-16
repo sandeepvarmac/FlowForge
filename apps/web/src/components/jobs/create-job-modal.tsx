@@ -362,17 +362,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => updateSourceConfig({
-                        fileConfig: {
-                          ...formData.sourceConfig.fileConfig!,
-                          sourceLocation: 'upload'
-                        }
-                      })}
-                      className={`p-4 border rounded-lg text-left transition-all ${
-                        formData.sourceConfig.fileConfig?.sourceLocation === 'upload' || !formData.sourceConfig.fileConfig?.sourceLocation
-                          ? 'border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50'
-                          : 'border-border hover:border-primary-200 hover:shadow-sm'
-                      }`}
+                      onClick={() => {/* Manual upload is default */}}
+                      className="p-4 border border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50 rounded-lg text-left transition-all"
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <Upload className="w-4 h-4 text-primary" />
@@ -439,8 +430,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   </p>
                 </FormField>
 
-                {(formData.sourceConfig.fileConfig?.sourceLocation === 'upload' || !formData.sourceConfig.fileConfig?.sourceLocation) && (
-                  <FormField>
+                <FormField>
                     <FormLabel>Upload Mode</FormLabel>
                     <Select
                       value={formData.sourceConfig.fileConfig?.uploadMode || 'single'}
@@ -456,7 +446,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                       <option value="directory" disabled>Directory (Coming Soon)</option>
                     </Select>
                   </FormField>
-                )}
 
                 {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' && (
                   <FormField>

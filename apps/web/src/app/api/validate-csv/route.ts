@@ -267,7 +267,7 @@ Return ONLY valid JSON in this exact format:
 
             result.validation.headerDetection.suggestedHeaders = columnNaming.columns.map((col: any) => col.suggestedName)
             result.validation.headerDetection.needsUserInput = true // Always ask user to review AI suggestions
-            console.log('✅ AI suggested column names:', result.validation.headerDetection.suggestedHeaders.slice(0, 5).join(', '), '...')
+            console.log('✅ AI suggested column names:', result.validation.headerDetection.suggestedHeaders?.slice(0, 5).join(', '), '...')
           }
         } catch (columnNamingError) {
           console.error('❌ AI column naming failed:', columnNamingError)

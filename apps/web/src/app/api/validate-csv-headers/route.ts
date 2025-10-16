@@ -119,9 +119,9 @@ Return ONLY valid JSON in this exact format:
       const secondRow = firstThreeRows[1].split(',').map((h: string) => h.trim().replace(/^"|"$/g, ''))
 
       // Simple heuristic: if first row values are short and descriptive, assume headers
-      const avgFirstRowLength = firstRow.reduce((sum, val) => sum + val.length, 0) / firstRow.length
-      const avgSecondRowLength = secondRow.reduce((sum, val) => sum + val.length, 0) / secondRow.length
-      const hasNumericPattern = secondRow.some(val => !isNaN(Number(val)) && val.trim() !== '')
+      const avgFirstRowLength = firstRow.reduce((sum: number, val: string) => sum + val.length, 0) / firstRow.length
+      const avgSecondRowLength = secondRow.reduce((sum: number, val: string) => sum + val.length, 0) / secondRow.length
+      const hasNumericPattern = secondRow.some((val: string) => !isNaN(Number(val)) && val.trim() !== '')
 
       const likelyHasHeaders = avgFirstRowLength < avgSecondRowLength * 0.7 && hasNumericPattern
 
