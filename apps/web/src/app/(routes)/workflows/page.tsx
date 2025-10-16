@@ -7,7 +7,9 @@ import { DeleteConfirmationModal } from '@/components/common/delete-confirmation
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
-import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock } from 'lucide-react'
+import { TriggersService } from '@/lib/services/triggers-service'
+import type { WorkflowTrigger } from '@/types/trigger'
+import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock, Zap, Calendar } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter } from 'next/navigation'
 
@@ -78,6 +80,40 @@ export default function WorkflowsPage() {
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
+  const [workflowTriggers, setWorkflowTriggers] = React.useState<Record<string, WorkflowTrigger[]>>({})
+  const [loadingTriggers, setLoadingTriggers] = React.useState(false)
+
+  React.useEffect(() => {
+    // Load triggers for all workflows
+    const loadAllTriggers = async () => {
+      try {
+        setLoadingTriggers(true)
+        const triggersByWorkflow: Record<string, WorkflowTrigger[]> = {}
+
+        await Promise.all(
+          state.workflows.map(async (workflow) => {
+            try {
+              const triggers = await TriggersService.getTriggers(workflow.id)
+              triggersByWorkflow[workflow.id] = triggers
+            } catch (error) {
+              console.error(`Failed to load triggers for workflow ${workflow.id}:`, error)
+              triggersByWorkflow[workflow.id] = []
+            }
+          })
+        )
+
+        setWorkflowTriggers(triggersByWorkflow)
+      } catch (error) {
+        console.error('Failed to load triggers:', error)
+      } finally {
+        setLoadingTriggers(false)
+      }
+    }
+
+    if (state.workflows.length > 0) {
+      loadAllTriggers()
+    }
+  }, [state.workflows])
 
   // Filter workflows based on search and status
   const filteredWorkflows = state.workflows.filter(workflow => {
@@ -86,6 +122,19 @@ export default function WorkflowsPage() {
     const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter
     return matchesSearch && matchesStatus
   })
+
+  const formatNextRun = (timestamp?: number): string => {
+    if (!timestamp) return 'Not scheduled'
+
+    const nextRun = new Date(timestamp * 1000)
+    const now = new Date()
+
+    if (nextRun < now) {
+      return 'Overdue'
+    }
+
+    return formatDistanceToNow(nextRun, { addSuffix: true })
+  }
 
   const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'edit' | 'view' | 'delete') => {
     switch (action) {
@@ -322,7 +371,7 @@ export default function WorkflowsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 text-sm border-t border-border pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6 text-sm border-t border-border pt-4">
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
                       <p className="font-semibold text-foreground mt-1">{workflow.application}</p>
@@ -336,14 +385,44 @@ export default function WorkflowsPage() {
                       <p className="font-semibold text-foreground mt-1">{workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''}</p>
                     </div>
                     <div>
-                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Created</span>
-                      <p className="font-semibold text-foreground mt-1">
-                        {new Intl.DateTimeFormat('en-US', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          year: 'numeric'
-                        }).format(workflow.createdAt)}
-                      </p>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Triggers</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        {loadingTriggers ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-foreground-muted" />
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4 text-primary" />
+                            <p className="font-semibold text-foreground">
+                              {workflowTriggers[workflow.id]?.length || 0}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Next Run</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        {loadingTriggers ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-foreground-muted" />
+                        ) : (() => {
+                          const triggers = workflowTriggers[workflow.id] || []
+                          const scheduledTriggers = triggers.filter(t => t.triggerType === 'scheduled' && t.enabled)
+                          const nextRun = scheduledTriggers.length > 0
+                            ? Math.min(...scheduledTriggers.map(t => t.nextRunAt || Infinity).filter(t => t !== Infinity))
+                            : null
+
+                          return nextRun ? (
+                            <>
+                              <Calendar className="w-4 h-4 text-green-600" />
+                              <p className="font-semibold text-foreground text-xs">
+                                {formatNextRun(nextRun)}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-foreground-muted">Manual only</p>
+                          )
+                        })()}
+                      </div>
                     </div>
                   </div>
 

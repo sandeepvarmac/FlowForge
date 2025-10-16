@@ -9,6 +9,8 @@ import { WorkflowService } from '@/lib/services/workflow-service'
 import { CreateJobModal, JobExecutionModal, JobCard } from '@/components/jobs'
 import type { Job } from '@/types/workflow'
 import { MetadataCatalog } from '@/components/metadata'
+import { WorkflowTriggersSection } from '@/components/workflows/workflow-triggers-section'
+import { AddTriggerModal } from '@/components/workflows/add-trigger-modal'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -99,6 +101,8 @@ export default function WorkflowDetailPage() {
   const [editingJob, setEditingJob] = React.useState<Job | null>(null)
   const [landingFiles, setLandingFiles] = React.useState<any>(null)
   const [loadingLandingFiles, setLoadingLandingFiles] = React.useState(false)
+  const [addTriggerModalOpen, setAddTriggerModalOpen] = React.useState(false)
+  const [triggerSectionKey, setTriggerSectionKey] = React.useState(0)
 
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
@@ -509,6 +513,13 @@ export default function WorkflowDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Triggers Section */}
+        <WorkflowTriggersSection
+          key={triggerSectionKey}
+          workflowId={workflowId}
+          onAddTrigger={() => setAddTriggerModalOpen(true)}
+        />
+
         {/* Execution History */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -913,6 +924,16 @@ export default function WorkflowDetailPage() {
       <MetadataCatalog
         open={metadataCatalogOpen}
         onOpenChange={setMetadataCatalogOpen}
+      />
+
+      {/* Add Trigger Modal */}
+      <AddTriggerModal
+        open={addTriggerModalOpen}
+        onOpenChange={setAddTriggerModalOpen}
+        workflowId={workflowId}
+        onTriggerCreated={() => {
+          setTriggerSectionKey(prev => prev + 1) // Force reload of triggers section
+        }}
       />
     </div>
   )

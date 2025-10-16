@@ -486,7 +486,7 @@ function ExecutionCard({ execution, isSelected, onSelect }: any) {
             </div>
 
             {/* Metrics */}
-            <div className="flex items-center gap-4 text-sm text-foreground-muted mb-3">
+            <div className="flex items-center gap-4 text-sm text-foreground-muted mb-3 flex-wrap">
               <div className="flex items-center gap-1">
                 <Clock className="w-4 h-4" />
                 {execution.started_at && formatDistanceToNow(new Date(execution.started_at), { addSuffix: true })}
@@ -505,6 +505,38 @@ function ExecutionCard({ execution, isSelected, onSelect }: any) {
                 <div className="flex items-center gap-1">
                   <Database className="w-4 h-4" />
                   {formatNumber(execution.total_records_processed)} records
+                </div>
+              )}
+              {/* Trigger Info */}
+              {execution.trigger_type && (
+                <div className="flex items-center gap-1">
+                  {execution.trigger_type === 'manual' && (
+                    <>
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/>
+                      </svg>
+                      <span>Manual</span>
+                    </>
+                  )}
+                  {execution.trigger_type === 'scheduled' && (
+                    <>
+                      <Clock className="w-4 h-4" />
+                      <span>Scheduled{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
+                    </>
+                  )}
+                  {execution.trigger_type === 'dependency' && (
+                    <>
+                      <GitBranch className="w-4 h-4" />
+                      <span>Triggered{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
+                    </>
+                  )}
+                  {execution.trigger_type === 'event' && (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>Event{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
