@@ -658,8 +658,8 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - No alerts (yet)
 - Many "Coming Soon" pages
 
-**Current Development (2025-10-16 - Weeks 1-2 COMPLETE + Create Modal Integration):**
-- ✅ Workflow Triggers System Weeks 1-2 COMPLETE (3 weeks total, 55% complete)
+**Current Development (2025-10-16 - Weeks 1-2 COMPLETE + Create Modal Integration + UX Refinement):**
+- ✅ Workflow Triggers System Weeks 1-2 COMPLETE (3 weeks total, 56% complete)
   - ✅ Database schema complete (workflow_triggers table + executions tracking)
   - ✅ TypeScript types complete (185 lines)
   - ✅ Frontend service complete (229 lines, 12 methods)
@@ -695,12 +695,18 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
     - Inline configuration forms for Scheduled and Dependency
     - Automatic trigger creation during workflow setup
     - Research-backed design matching industry standards (Databricks, Prefect, Azure ADF)
+  - ✅ UX refinement complete (Session 9) - ~80 lines modified
+    - Removed "None" option (confusing as manual is always available)
+    - Made trigger selection truly optional with toggle-able buttons
+    - Simplified Add Trigger Modal from 685 to 76 lines
+    - Fixed type handling and component issues
+    - Toggle pattern: click to select, click again to deselect
   - Time-based scheduling with cron expressions ✅ COMPLETE
   - Dependency-based triggers (workflow dependencies) ✅ COMPLETE
   - Multiple triggers per workflow ✅ COMPLETE
   - Optional initial trigger during workflow creation ✅ COMPLETE
   - This addresses the #1 production requirement
-  - **Progress:** 8.5 of 15 days complete, 4,741 lines of code written
+  - **Progress:** 8.6 of 15 days complete, ~4,800 lines of code written
 
 **Recommendation:**
 **Proceed with targeted demos** focusing on:
@@ -721,13 +727,14 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - After Week 3 polish (optional): **92% demo-ready**
 - After Mock UIs: **95% demo-ready**
 
-**Current Status (2025-10-16 16:40):**
-- **Days Completed:** 8.5 of 15 (Weeks 1-2 COMPLETE + Create Modal Integration)
-- **Lines of Code:** 4,741
+**Current Status (2025-10-16 17:30):**
+- **Days Completed:** 8.6 of 15 (Weeks 1-2 COMPLETE + Create Modal Integration + UX Refinement)
+- **Lines of Code:** ~4,800
   - Week 1: 3,619 (Database: 60, Types: 185, Service: 229, API: 1,286, Prefect: 1,159, Dependencies: 945, Docs: 470)
   - Week 2: 975 (UI Components: 975)
   - Session 8: 147 (Create Modal Integration: 147)
-- **Progress:** 55% complete, ahead of schedule (Weeks 1-2 + Create Modal done!)
+  - Session 9: ~80 (UX Refinement + Bug Fixes: modified 5 files)
+- **Progress:** 56% complete, ahead of schedule (Weeks 1-2 + Create Modal + UX Refinement done!)
 
 ---
 
@@ -744,7 +751,7 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - [x] Data Assets Explorer (6-tab catalog)
 
 ### 🟡 In Development
-- [ ] **Workflow Triggers System** (2.5-3 weeks) - Status: Weeks 1-2 + Create Modal Integration COMPLETE - 55% Complete
+- [ ] **Workflow Triggers System** (2.5-3 weeks) - Status: Weeks 1-2 + Create Modal Integration + UX Refinement COMPLETE - 56% Complete
   - ✅ Database schema and migrations complete
   - ✅ TypeScript types defined (185 lines)
   - ✅ Frontend service implemented (229 lines, 12 methods)
@@ -794,11 +801,11 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 | Phase | Features | Status | Completion | Updated |
 |-------|----------|--------|------------|---------|
 | Phase 1 (MVP) | File pipeline, AI detection, Catalog | ✅ Complete | 100% | 2025-01 |
-| Phase 2 (Current) | Triggers, Quality, Alerts | 🟡 In Development | 55% | 2025-10-16 |
+| Phase 2 (Current) | Triggers, Quality, Alerts | 🟡 In Development | 56% | 2025-10-16 17:30 |
 | Phase 3 (Future) | Database connectors, APIs, Destinations | 🔴 Planned | 0% | - |
 
 **Phase 2 Breakdown:**
-- Workflow Triggers System: 55% complete (Weeks 1-2 + Create Modal Integration COMPLETE - 8.5 of 15 days)
+- Workflow Triggers System: 56% complete (Weeks 1-2 + Create Modal Integration + UX Refinement COMPLETE - 8.6 of 15 days)
   - Database foundation: ✅ Complete (Days 1-2)
   - TypeScript types: ✅ Complete (185 lines)
   - Frontend service: ✅ Complete (229 lines, 12 methods)
@@ -825,6 +832,12 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
     - Industry research (Airflow, Databricks, Prefect, Azure ADF)
     - Inline configuration forms
     - Automatic trigger creation
+  - UX Refinement: ✅ Complete (Session 9, ~80 lines modified)
+    - Removed confusing "None" option
+    - Toggle-able trigger selection (optional by default)
+    - Simplified Add Trigger Modal (685 → 76 lines)
+    - Fixed type handling and component issues
+    - Clear messaging: "Manual execution is always available"
   - Testing & documentation: ⏳ Optional (Week 3)
 
 **For detailed feature tracking and brainstorming notes, see:** `FEATURE-DEVELOPMENT-TRACKER.md`

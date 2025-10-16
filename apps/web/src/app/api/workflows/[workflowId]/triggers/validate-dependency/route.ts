@@ -82,7 +82,7 @@ export async function POST(
     // Check if workflows exist
     const workflow = db.prepare(`
       SELECT id, name FROM workflows WHERE id = ?
-    `).get(workflowId)
+    `).get(workflowId) as any
 
     if (!workflow) {
       return NextResponse.json(
@@ -93,7 +93,7 @@ export async function POST(
 
     const upstreamWorkflow = db.prepare(`
       SELECT id, name FROM workflows WHERE id = ?
-    `).get(dependsOnWorkflowId)
+    `).get(dependsOnWorkflowId) as any
 
     if (!upstreamWorkflow) {
       return NextResponse.json(

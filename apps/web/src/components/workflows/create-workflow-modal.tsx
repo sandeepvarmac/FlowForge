@@ -36,7 +36,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
   const [tagInput, setTagInput] = React.useState('')
 
   // Initial trigger configuration
-  const [initialTriggerType, setInitialTriggerType] = React.useState<'none' | 'scheduled' | 'dependency' | 'event'>('none')
+  const [initialTriggerType, setInitialTriggerType] = React.useState<'scheduled' | 'dependency' | 'event' | null>(null)
   const [triggerName, setTriggerName] = React.useState('')
 
   // Scheduled trigger config
@@ -100,22 +100,22 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
       const newWorkflow = await createWorkflow(formData)
 
       // Create initial trigger if configured
-      if (newWorkflow?.id && initialTriggerType !== 'none') {
+      if (newWorkflow?.id && initialTriggerType !== null) {
         try {
           if (initialTriggerType === 'scheduled') {
             const cronExpression = cronPreset === 'custom' ? customCron : cronPreset
             await TriggersService.createTrigger(newWorkflow.id, {
-              name: triggerName || `Scheduled - ${CRON_PRESETS.find(p => p.value === cronPreset)?.label || 'Custom'}`,
+              triggerName: triggerName || `Scheduled - ${CRON_PRESETS.find(p => p.value === cronPreset)?.label || 'Custom'}`,
               triggerType: 'scheduled' as TriggerType,
               enabled: true,
-              schedule: cronExpression,
+              cronExpression: cronExpression,
               timezone: timezone
             })
           } else if (initialTriggerType === 'dependency') {
             if (upstreamWorkflowId) {
               const upstreamWorkflow = state.workflows.find(w => w.id === upstreamWorkflowId)
               await TriggersService.createTrigger(newWorkflow.id, {
-                name: triggerName || `Dependency - ${upstreamWorkflow?.name || 'Upstream Workflow'}`,
+                triggerName: triggerName || `Dependency - ${upstreamWorkflow?.name || 'Upstream Workflow'}`,
                 triggerType: 'dependency' as TriggerType,
                 enabled: true,
                 dependsOnWorkflowId: upstreamWorkflowId,
@@ -144,7 +144,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
         tags: [],
         retentionDays: 90
       })
-      setInitialTriggerType('none')
+      setInitialTriggerType(null)
       setTriggerName('')
       setCronPreset('0 2 * * *')
       setCustomCron('')
@@ -266,73 +266,54 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
               </p>
             </div>
 
-            <FormField>
-              <div className="grid grid-cols-2 gap-3">
-                {/* None - Manual Only */}
-                <button
-                  type="button"
-                  onClick={() => setInitialTriggerType('none')}
-                  className={`p-3 border rounded-lg text-left transition-all ${
-                    initialTriggerType === 'none'
-                      ? 'border-primary bg-primary-50 shadow-sm'
-                      : 'border-border bg-background hover:border-primary-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="w-4 h-4" />
-                    <span className="font-medium text-sm">None</span>
-                  </div>
-                  <div className="text-xs text-foreground-muted">Manual execution only</div>
-                </button>
+            <div className="flex gap-3">
+              {/* Scheduled Trigger */}
+              <button
+                type="button"
+                onClick={() => setInitialTriggerType(initialTriggerType === 'scheduled' ? null : 'scheduled')}
+                className={`flex-1 p-3 border rounded-lg text-left transition-all ${
+                  initialTriggerType === 'scheduled'
+                    ? 'border-primary bg-primary-50 shadow-sm ring-2 ring-primary ring-opacity-50'
+                    : 'border-border bg-background hover:border-primary-200 hover:bg-primary-50/20'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock className={`w-4 h-4 ${initialTriggerType === 'scheduled' ? 'text-primary' : ''}`} />
+                  <span className="font-medium text-sm">Scheduled</span>
+                </div>
+                <div className="text-xs text-foreground-muted">Run on a schedule</div>
+              </button>
 
-                {/* Scheduled Trigger */}
-                <button
-                  type="button"
-                  onClick={() => setInitialTriggerType('scheduled')}
-                  className={`p-3 border rounded-lg text-left transition-all ${
-                    initialTriggerType === 'scheduled'
-                      ? 'border-primary bg-primary-50 shadow-sm'
-                      : 'border-border bg-background hover:border-primary-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Clock className="w-4 h-4" />
-                    <span className="font-medium text-sm">Scheduled</span>
-                  </div>
-                  <div className="text-xs text-foreground-muted">Run on a schedule</div>
-                </button>
+              {/* Dependency Trigger */}
+              <button
+                type="button"
+                onClick={() => setInitialTriggerType(initialTriggerType === 'dependency' ? null : 'dependency')}
+                className={`flex-1 p-3 border rounded-lg text-left transition-all ${
+                  initialTriggerType === 'dependency'
+                    ? 'border-primary bg-primary-50 shadow-sm ring-2 ring-primary ring-opacity-50'
+                    : 'border-border bg-background hover:border-primary-200 hover:bg-primary-50/20'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <GitBranch className={`w-4 h-4 ${initialTriggerType === 'dependency' ? 'text-primary' : ''}`} />
+                  <span className="font-medium text-sm">Dependency</span>
+                </div>
+                <div className="text-xs text-foreground-muted">After another workflow</div>
+              </button>
 
-                {/* Dependency Trigger */}
-                <button
-                  type="button"
-                  onClick={() => setInitialTriggerType('dependency')}
-                  className={`p-3 border rounded-lg text-left transition-all ${
-                    initialTriggerType === 'dependency'
-                      ? 'border-primary bg-primary-50 shadow-sm'
-                      : 'border-border bg-background hover:border-primary-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <GitBranch className="w-4 h-4" />
-                    <span className="font-medium text-sm">Dependency</span>
-                  </div>
-                  <div className="text-xs text-foreground-muted">After another workflow</div>
-                </button>
-
-                {/* Event-driven Trigger */}
-                <button
-                  type="button"
-                  disabled
-                  className="p-3 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="w-4 h-4" />
-                    <span className="font-medium text-sm">Event-driven</span>
-                  </div>
-                  <div className="text-xs text-foreground-muted">Coming soon</div>
-                </button>
-              </div>
-            </FormField>
+              {/* Event-driven Trigger */}
+              <button
+                type="button"
+                disabled
+                className="flex-1 p-3 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="w-4 h-4" />
+                  <span className="font-medium text-sm">Event-driven</span>
+                </div>
+                <div className="text-xs text-foreground-muted">Coming soon</div>
+              </button>
+            </div>
 
             {/* Inline Configuration for Scheduled Trigger */}
             {initialTriggerType === 'scheduled' && (

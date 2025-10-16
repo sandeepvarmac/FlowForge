@@ -408,7 +408,10 @@ export default function WorkflowsPage() {
                           const triggers = workflowTriggers[workflow.id] || []
                           const scheduledTriggers = triggers.filter(t => t.triggerType === 'scheduled' && t.enabled)
                           const nextRun = scheduledTriggers.length > 0
-                            ? Math.min(...scheduledTriggers.map(t => t.nextRunAt || Infinity).filter(t => t !== Infinity))
+                            ? Math.min(...scheduledTriggers.map(t => {
+                                const timestamp = typeof t.nextRunAt === 'number' ? t.nextRunAt : (t.nextRunAt ? Math.floor(t.nextRunAt.getTime() / 1000) : Infinity)
+                                return timestamp
+                              }).filter(t => t !== Infinity))
                             : null
 
                           return nextRun ? (

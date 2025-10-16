@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Switch, useToast } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle, Button, Badge, useToast } from '@/components/ui'
 import { Plus, Clock, Link as LinkIcon, Zap, Trash2, Loader2, Calendar, AlertCircle } from 'lucide-react'
 import { TriggersService } from '@/lib/services/triggers-service'
 import type { WorkflowTrigger } from '@/types/trigger'
@@ -248,7 +248,7 @@ export function WorkflowTriggersSection({ workflowId, onAddTrigger }: WorkflowTr
                       {trigger.triggerType === 'scheduled' && trigger.nextRunAt && (
                         <div className="flex items-center gap-2 mt-2 text-xs text-foreground-muted">
                           <Clock className="w-3 h-3" />
-                          <span>Next run: {formatNextRun(trigger.nextRunAt)}</span>
+                          <span>Next run: {formatNextRun(typeof trigger.nextRunAt === 'number' ? trigger.nextRunAt : Math.floor(trigger.nextRunAt.getTime() / 1000))}</span>
                         </div>
                       )}
 
@@ -263,16 +263,22 @@ export function WorkflowTriggersSection({ workflowId, onAddTrigger }: WorkflowTr
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-foreground-muted">
-                      {trigger.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                    <Switch
-                      checked={trigger.enabled}
-                      onCheckedChange={() => handleToggle(trigger.id, trigger.enabled)}
-                      disabled={toggling.has(trigger.id)}
+                  <button
+                    onClick={() => handleToggle(trigger.id, trigger.enabled)}
+                    disabled={toggling.has(trigger.id)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      trigger.enabled ? 'bg-primary' : 'bg-gray-200'
+                    }`}
+                    role="switch"
+                    aria-checked={trigger.enabled}
+                    aria-label={trigger.enabled ? 'Disable trigger' : 'Enable trigger'}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        trigger.enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
                     />
-                  </div>
+                  </button>
 
                   <Button
                     variant="ghost"
