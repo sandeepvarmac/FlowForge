@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS workflows (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  application TEXT NOT NULL,
+  application TEXT, -- Made nullable - workflow is agnostic and can contain multiple source types
   owner TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('manual', 'scheduled', 'running', 'completed', 'failed', 'paused')),
   type TEXT NOT NULL CHECK(type IN ('manual', 'scheduled', 'event-driven')),

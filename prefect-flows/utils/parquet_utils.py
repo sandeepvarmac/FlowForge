@@ -9,11 +9,13 @@ from typing import Iterable, Sequence
 import polars as pl
 
 
-def read_csv(path: str | Path, *, infer_schema_length: int | None = None) -> pl.DataFrame:
+def read_csv(path: str | Path, *, has_header: bool = True, infer_schema_length: int | None = None) -> pl.DataFrame:
     """Read a CSV file into a Polars DataFrame.
 
     Args:
         path: Local path to the CSV file.
+        has_header: Whether the CSV file has a header row (default: True).
+                   If False, Polars auto-generates column names: column_1, column_2, etc.
         infer_schema_length: Optional number of rows used for schema inference.
 
     Returns:
@@ -21,6 +23,7 @@ def read_csv(path: str | Path, *, infer_schema_length: int | None = None) -> pl.
     """
     return pl.read_csv(
         path,
+        has_header=has_header,
         try_parse_dates=True,
         infer_schema_length=infer_schema_length,
         ignore_errors=False,

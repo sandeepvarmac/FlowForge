@@ -546,12 +546,142 @@ function SchemaTab({ asset }: any) {
 }
 
 function SampleTab({ asset }: any) {
+  const [sampleData, setSampleData] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchSampleData = async () => {
+      if (!asset?.file_path) {
+        setError('No file path available for this asset');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await fetch(`/api/data-assets/${asset.id}/sample?limit=100`);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch sample data');
+        }
+
+        const data = await response.json();
+        setSampleData(data);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load sample data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSampleData();
+  }, [asset?.id, asset?.file_path]);
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin w-12 h-12 mx-auto mb-4 border-4 border-primary-200 border-t-primary-600 rounded-full"></div>
+        <p className="text-sm text-gray-600">Loading sample data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+          <X className="w-8 h-8 text-red-600" />
+        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Sample Data</h3>
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
+    );
+  }
+
+  if (!sampleData || !sampleData.rows || sampleData.rows.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">No Sample Data Available</h3>
+        <p className="text-sm text-gray-600">This asset does not contain any data</p>
+      </div>
+    );
+  }
+
+  const { schema, rows, total_rows_in_sample, total_columns } = sampleData;
+
   return (
-    <div className="text-center py-12">
-      <FileText className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Sample Data Preview</h3>
-      <p className="text-sm text-gray-600 mb-4">Coming Soon - Phase 2</p>
-      <p className="text-xs text-gray-500">Interactive data grid with first 100 rows</p>
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Sample Data Preview</h3>
+          <p className="text-xs text-gray-600 mt-1">
+            Showing {total_rows_in_sample} of {asset.row_count?.toLocaleString() || 0} rows · {total_columns} columns
+          </p>
+        </div>
+        <button className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+          <Download className="w-4 h-4" />
+          Export Sample
+        </button>
+      </div>
+
+      {/* Data Table */}
+      <div className="border border-gray-200 rounded-lg overflow-auto max-h-[600px]">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200 bg-gray-100">
+                #
+              </th>
+              {schema.map((col: any, idx: number) => (
+                <th
+                  key={idx}
+                  className="px-3 py-2 text-left text-xs font-semibold text-gray-700 border-r border-gray-200 last:border-r-0 whitespace-nowrap"
+                >
+                  <div>{col.name}</div>
+                  <div className="text-[10px] font-normal text-gray-500 mt-0.5">{col.type}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {rows.map((row: any, rowIdx: number) => (
+              <tr key={rowIdx} className="hover:bg-gray-50">
+                <td className="px-3 py-2 text-xs text-gray-500 border-r border-gray-200 bg-gray-50 font-medium">
+                  {rowIdx + 1}
+                </td>
+                {schema.map((col: any, colIdx: number) => {
+                  const value = row[col.name];
+                  const displayValue = value === null || value === undefined
+                    ? <span className="text-gray-400 italic">null</span>
+                    : typeof value === 'object'
+                    ? JSON.stringify(value)
+                    : String(value);
+
+                  return (
+                    <td
+                      key={colIdx}
+                      className="px-3 py-2 text-xs text-gray-900 border-r border-gray-200 last:border-r-0 max-w-xs truncate"
+                      title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                    >
+                      {displayValue}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer Info */}
+      <div className="text-xs text-gray-500 text-center py-2">
+        Scroll horizontally to view more columns · Click on cells to see full content
+      </div>
     </div>
   );
 }

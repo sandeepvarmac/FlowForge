@@ -3,9 +3,12 @@ prefect>=2.14.0,<3.0.0
 prefect-aws>=0.4.0  # S3 blocks for MinIO/AWS
 
 # Data processing
-polars>=0.20.0      # Fast DataFrame library
-pyarrow>=14.0.0     # Arrow/Parquet support
+polars[excel]>=0.20.0  # Fast DataFrame library with Excel support
+pyarrow>=14.0.0        # Arrow/Parquet support
 numpy<2
+openpyxl>=3.1.0        # Excel file handling (sheet listing)
+xlsxwriter>=3.2.0      # Excel file writing
+fastexcel>=0.7.0       # Fast Excel reading
 
 # Storage and utilities
 boto3>=1.34.0       # S3/MinIO client

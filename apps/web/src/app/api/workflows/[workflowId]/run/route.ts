@@ -84,34 +84,107 @@ export async function POST(
       `).run(jobExecutionId, executionId, job.id, 'running', jobStartTime, jobStartTime, jobStartTime)
 
       const sourceConfig = typeof job.source_config === 'string' ? JSON.parse(job.source_config) : job.source_config
-      const landingKey = sourceConfig?.landingKey || `landing/${workflowId}/${job.id}/${sourceConfig?.fileConfig?.filePath || ''}`
+      const transformationConfig = typeof job.transformation_config === 'string' ? JSON.parse(job.transformation_config) : job.transformation_config
+      const fileConfig = sourceConfig?.fileConfig || {}
+      const uploadMode = fileConfig.uploadMode || 'single'
       const prefectConfig = sourceConfig?.prefect ?? {}
       const deploymentId = prefectConfig.deploymentId || PREFECT_DEPLOYMENT_ID
       const primaryKeys = prefectConfig.parameters?.primary_keys || []
+      const columnMappings = transformationConfig?.columnMappings || null
+      const hasHeader = fileConfig.hasHeader !== false  // Default to true
 
       try {
-        const prefectRun = await triggerPrefectRun(deploymentId, {
-          workflow_id: workflowId,
-          job_id: job.id,
-          workflow_name: workflow.name,
-          job_name: job.name,
-          landing_key: landingKey,
-          primary_keys: primaryKeys,
-          flow_run_id: null  // Will be set by Prefect
-        })
+        let filesToProcess: string[] = []
 
-        const logEntry = [`Prefect flow run created: ${prefectRun.id}`]
+        // Pattern matching: Scan landing zone for matching files
+        if (uploadMode === 'pattern' && fileConfig.filePattern) {
+          console.log(`🔍 Pattern matching mode: scanning for ${fileConfig.filePattern}`)
+
+          const { spawn } = require('child_process')
+          const path = require('path')
+          const prefectFlowsDir = path.join(process.cwd(), '..', '..', 'prefect-flows')
+          const pythonExecutable = path.join(prefectFlowsDir, 'venv', 'Scripts', 'python.exe')
+
+          // Use Python script to find matching files
+          const s3Prefix = `landing/${workflowId}/${job.id}/`
+          const pythonOutput = await new Promise<string>((resolve, reject) => {
+            const proc = spawn(pythonExecutable, [
+              '-c',
+              `import json; from utils.pattern_matcher import find_matching_files; matches = find_matching_files("${s3Prefix}", "${fileConfig.filePattern}"); print(json.dumps([m["key"] for m in matches]))`
+            ], {
+              cwd: prefectFlowsDir,
+              env: { ...process.env }
+            })
+
+            let stdout = ''
+            let stderr = ''
+
+            proc.stdout.on('data', (data: Buffer) => { stdout += data.toString() })
+            proc.stderr.on('data', (data: Buffer) => { stderr += data.toString() })
+
+            proc.on('close', (code: number) => {
+              if (code !== 0) {
+                reject(new Error(`Pattern matching failed: ${stderr || stdout}`))
+              } else {
+                resolve(stdout.trim())
+              }
+            })
+
+            proc.on('error', (error: Error) => {
+              reject(new Error(`Failed to run pattern matcher: ${error.message}`))
+            })
+          })
+
+          filesToProcess = JSON.parse(pythonOutput)
+          console.log(`✅ Found ${filesToProcess.length} files matching pattern: ${filesToProcess.join(', ')}`)
+
+          if (filesToProcess.length === 0) {
+            throw new Error(`No files found matching pattern '${fileConfig.filePattern}' in ${s3Prefix}`)
+          }
+        } else {
+          // Single file mode: use the landingKey directly
+          const landingKey = sourceConfig?.landingKey || `landing/${workflowId}/${job.id}/${fileConfig.filePath || ''}`
+          filesToProcess = [landingKey]
+        }
+
+        // Process each file
+        const flowRuns: string[] = []
+        for (const landingKey of filesToProcess) {
+          const prefectRun = await triggerPrefectRun(deploymentId, {
+            workflow_id: workflowId,
+            job_id: job.id,
+            workflow_name: workflow.name,
+            job_name: job.name,
+            landing_key: landingKey,
+            primary_keys: primaryKeys,
+            column_mappings: columnMappings,
+            has_header: hasHeader,
+            flow_run_id: null  // Will be set by Prefect
+          })
+
+          flowRuns.push(prefectRun.id)
+          console.log(`✅ Prefect flow run created for ${landingKey}: ${prefectRun.id}`)
+        }
+
+        const logEntry = [
+          `Pattern matching mode: ${uploadMode}`,
+          `Files processed: ${filesToProcess.length}`,
+          `Prefect flow runs: ${flowRuns.join(', ')}`
+        ]
+
         db.prepare(`
           UPDATE job_executions
           SET status = ?, logs = ?, updated_at = ?, flow_run_id = ?
           WHERE id = ?
-        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), prefectRun.id, jobExecutionId)
+        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), flowRuns[0], jobExecutionId)
 
         jobResults.push({
           jobId: job.id,
           jobName: job.name,
           status: 'running',
-          flowRunId: prefectRun.id
+          flowRunId: flowRuns[0],
+          filesProcessed: filesToProcess.length,
+          allFlowRuns: flowRuns
         })
 
       } catch (error: any) {

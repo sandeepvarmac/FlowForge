@@ -891,8 +891,10 @@ export default function WorkflowDetailPage() {
           const newJob = await createJob(workflowId, jobData)
           if (file && newJob?.id) {
             await uploadFile(workflowId, newJob.id, file)
-            // Refresh landing files after upload
-            await loadLandingFiles()
+            // Refresh landing files after upload with a small delay to ensure file is written
+            setTimeout(() => {
+              loadLandingFiles()
+            }, 500)
           }
         }}
       />

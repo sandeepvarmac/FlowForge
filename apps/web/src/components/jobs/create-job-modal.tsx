@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FormField, FormLabel, FormError, Select, Textarea } from '@/components/ui/form'
 import { Input } from '@/components/ui'
 import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, TransformationConfig, ValidationConfig } from '@/types/workflow'
-import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles } from 'lucide-react'
+import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
 
@@ -130,6 +130,14 @@ const jobTypes = [
     description: 'REST APIs, GraphQL, Webhooks',
     enabled: false,
     badge: 'Coming Soon'
+  },
+  {
+    value: 'streaming',
+    label: 'Streaming',
+    icon: Activity,
+    description: 'Kafka, Kinesis, Event Hubs, Pub/Sub, CDC',
+    enabled: false,
+    badge: 'Coming Soon'
   }
 ]
 
@@ -171,7 +179,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
     switch (step) {
       case 1:
         if (!formData.name.trim()) newErrors.name = 'Job name is required'
-        if (!formData._uploadedFile) newErrors.file = 'CSV file upload is required'
+        if (!formData._uploadedFile) newErrors.file = 'File upload is required'
         break
       case 2:
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) {
@@ -350,21 +358,105 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                 </h3>
 
                 <FormField>
-                  <FormLabel>Upload Mode</FormLabel>
-                  <Select
-                    value={formData.sourceConfig.fileConfig?.uploadMode || 'single'}
-                    onChange={(e) => updateSourceConfig({
-                      fileConfig: {
-                        ...formData.sourceConfig.fileConfig!,
-                        uploadMode: e.target.value as any
-                      }
-                    })}
-                  >
-                    <option value="single">Single File (Upload one CSV file)</option>
-                    <option value="pattern">Pattern Matching (e.g., customer_*.csv)</option>
-                    <option value="directory" disabled>Directory (Coming Soon)</option>
-                  </Select>
+                  <FormLabel>File Source Location</FormLabel>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateSourceConfig({
+                        fileConfig: {
+                          ...formData.sourceConfig.fileConfig!,
+                          sourceLocation: 'upload'
+                        }
+                      })}
+                      className={`p-4 border rounded-lg text-left transition-all ${
+                        formData.sourceConfig.fileConfig?.sourceLocation === 'upload' || !formData.sourceConfig.fileConfig?.sourceLocation
+                          ? 'border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50'
+                          : 'border-border hover:border-primary-200 hover:shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Upload className="w-4 h-4 text-primary" />
+                        <span className="font-semibold text-sm">Manual Upload</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted leading-relaxed">
+                        Upload files directly from your computer
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled
+                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
+                    >
+                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
+                        Coming Soon
+                      </Badge>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Cloud className="w-4 h-4 text-foreground-muted" />
+                        <span className="font-semibold text-sm">Cloud Storage</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted leading-relaxed">
+                        S3, Azure Blob, GCS buckets
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled
+                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
+                    >
+                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
+                        Coming Soon
+                      </Badge>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Database className="w-4 h-4 text-foreground-muted" />
+                        <span className="font-semibold text-sm">SFTP/FTP Server</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted leading-relaxed">
+                        Secure file transfer protocols
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled
+                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
+                    >
+                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
+                        Coming Soon
+                      </Badge>
+                      <div className="flex items-center gap-2 mb-2">
+                        <HardDrive className="w-4 h-4 text-foreground-muted" />
+                        <span className="font-semibold text-sm">Network Share</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted leading-relaxed">
+                        On-premise file servers
+                      </p>
+                    </button>
+                  </div>
+                  <p className="text-xs text-foreground-muted mt-2">
+                    Select where your source files are located. File format will be auto-detected when you upload.
+                  </p>
                 </FormField>
+
+                {(formData.sourceConfig.fileConfig?.sourceLocation === 'upload' || !formData.sourceConfig.fileConfig?.sourceLocation) && (
+                  <FormField>
+                    <FormLabel>Upload Mode</FormLabel>
+                    <Select
+                      value={formData.sourceConfig.fileConfig?.uploadMode || 'single'}
+                      onChange={(e) => updateSourceConfig({
+                        fileConfig: {
+                          ...formData.sourceConfig.fileConfig!,
+                          uploadMode: e.target.value as any
+                        }
+                      })}
+                    >
+                      <option value="single">Single File (Upload one file)</option>
+                      <option value="pattern">Pattern Matching (e.g., customer_*.csv)</option>
+                      <option value="directory" disabled>Directory (Coming Soon)</option>
+                    </Select>
+                  </FormField>
+                )}
 
                 {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' && (
                   <FormField>
@@ -380,18 +472,20 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                       placeholder="customer_*.csv"
                     />
                     <div className="text-xs text-muted-foreground mt-1">
-                      Example: customer_*.csv will match customer_2024.csv, customer_jan.csv, etc.
+                      Example: customer_*.csv will match customer_2024.csv, customer_jan.csv, etc. Format is auto-detected from file extension.
                     </div>
                   </FormField>
                 )}
 
                 <FormField>
                   <FormLabel required>
-                    {formData.sourceConfig.fileConfig?.uploadMode === 'pattern' ? 'Sample CSV File (for schema detection)' : 'CSV File'}
+                    {formData.sourceConfig.fileConfig?.uploadMode === 'pattern'
+                      ? 'Sample File (for schema detection)'
+                      : 'Data File'}
                   </FormLabel>
                   <CSVFileUpload
                     ref={csvUploadRef}
-                    onFileUpload={(file, schema, preview) => {
+                    onFileUpload={(file, schema, preview, columnMappings) => {
                       // Auto-generate table names from filename
                       const cleanName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, '_')
 
@@ -400,7 +494,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                         fileConfig: {
                           ...formData.sourceConfig.fileConfig!,
                           filePath: file.name,
-                          filePattern: file.name
+                          filePattern: file.name,
+                          // Store hasHeader flag - false if column mappings exist (headerless CSV)
+                          hasHeader: !columnMappings || columnMappings.length === 0
                         }
                       })
 
@@ -420,12 +516,21 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                         }
                       })
 
+                      // Store column mappings in transformationConfig if provided (headerless CSV)
+                      const transformationConfig = columnMappings && columnMappings.length > 0
+                        ? {
+                            columnMappings: columnMappings,
+                            useDirectSql: false
+                          }
+                        : undefined
+
                       setFormData(prev => ({
                         ...prev,
                         name: prev.name || file.name.replace(/\.[^/.]+$/, ""),
                         _uploadedFile: file,
                         _detectedSchema: schema,
-                        _previewData: preview
+                        _previewData: preview,
+                        transformationConfig: transformationConfig
                       } as any))
                     }}
                     onReset={() => {

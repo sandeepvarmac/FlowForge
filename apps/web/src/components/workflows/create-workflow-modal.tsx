@@ -24,7 +24,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
   const [formData, setFormData] = React.useState<WorkflowFormData>({
     name: '',
     description: '',
-    application: 'Flat Files',
+    application: '',
     businessUnit: 'Data Engineering',
     team: 'Data Engineering Team',
     workflowType: 'manual',
@@ -32,7 +32,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
     dataClassification: 'internal',
     priority: 'medium',
     notificationEmail: '',
-    tags: ['csv'],
+    tags: [],
     retentionDays: 90
   })
 
@@ -48,7 +48,6 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
 
     if (!formData.name.trim()) newErrors.name = 'Workflow name is required'
     if (!formData.description.trim()) newErrors.description = 'Description is required'
-    if (!formData.application) newErrors.application = 'Source application is required'
     if (!formData.team) newErrors.team = 'Team is required'
 
     setErrors(newErrors)
@@ -77,7 +76,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
       setFormData({
         name: '',
         description: '',
-        application: 'Flat Files',
+        application: '',
         businessUnit: 'Data Engineering',
         team: 'Data Engineering Team',
         workflowType: 'manual',
@@ -85,7 +84,7 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
         dataClassification: 'internal',
         priority: 'medium',
         notificationEmail: '',
-        tags: ['csv'],
+        tags: [],
         retentionDays: 90
       })
       setErrors({})
@@ -148,32 +147,9 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
             </FormField>
           </div>
 
-          {/* Source & Ownership */}
+          {/* Ownership */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Source & Ownership</h3>
-
-            <FormField>
-              <FormLabel htmlFor="application" required>Source Application</FormLabel>
-              <Select
-                id="application"
-                value={formData.application}
-                onChange={(e) => updateField('application', e.target.value)}
-              >
-                <option value="Flat Files">Flat Files (CSV, Excel, JSON)</option>
-                <option value="SAP">SAP ERP</option>
-                <option value="Salesforce">Salesforce CRM</option>
-                <option value="Oracle">Oracle Database</option>
-                <option value="SQL Server">Microsoft SQL Server</option>
-                <option value="PostgreSQL">PostgreSQL</option>
-                <option value="Snowflake">Snowflake Data Warehouse</option>
-                <option value="REST API">REST API Endpoint</option>
-                <option value="SFTP">SFTP Server</option>
-                <option value="AWS S3">AWS S3 Bucket</option>
-                <option value="Azure Blob">Azure Blob Storage</option>
-                <option value="Google Cloud">Google Cloud Storage</option>
-              </Select>
-              <FormError>{errors.application}</FormError>
-            </FormField>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Ownership</h3>
 
             <div className="grid grid-cols-2 gap-4">
               <FormField>

@@ -112,6 +112,54 @@ function runMigrations(database: Database.Database) {
 
       console.log('✓ Migration: Added environment column to metadata_catalog')
     }
+
+    // Migration 3: Make application column nullable in workflows table
+    const workflowColumns = database.prepare('PRAGMA table_info(workflows)').all() as Array<{ name: string; notnull: number }>
+    const applicationColumn = workflowColumns.find(column => column.name === 'application')
+
+    if (applicationColumn && applicationColumn.notnull === 1) {
+      console.log('⚙️  Running migration: Make application column nullable in workflows...')
+
+      database.exec(`
+        BEGIN TRANSACTION;
+
+        -- Create new workflows table with nullable application column
+        CREATE TABLE workflows_new (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT,
+          application TEXT,
+          owner TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('manual', 'scheduled', 'running', 'completed', 'failed', 'paused')),
+          type TEXT NOT NULL CHECK(type IN ('manual', 'scheduled', 'event-driven')),
+          business_unit TEXT,
+          notification_email TEXT,
+          tags TEXT,
+          last_run INTEGER,
+          next_run INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        -- Copy data from old table
+        INSERT INTO workflows_new
+        SELECT
+          id, name, description, application, owner, status, type,
+          business_unit, notification_email, tags, last_run, next_run,
+          created_at, updated_at
+        FROM workflows;
+
+        -- Drop old table
+        DROP TABLE workflows;
+
+        -- Rename new table
+        ALTER TABLE workflows_new RENAME TO workflows;
+
+        COMMIT;
+      `)
+
+      console.log('✓ Migration: Made application column nullable in workflows')
+    }
   } catch (error) {
     console.error('Failed to run database migrations:', error)
   }

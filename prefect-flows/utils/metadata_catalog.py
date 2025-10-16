@@ -156,10 +156,10 @@ def upsert_metadata_catalog_entry(
     cursor = conn.cursor()
 
     try:
-        # Check if asset already exists for this job + layer
+        # Check if asset already exists for this layer + table_name + environment (matches UNIQUE constraint)
         cursor.execute(
-            "SELECT id FROM metadata_catalog WHERE job_id = ? AND layer = ? AND environment = ?",
-            (job_id, layer, environment)
+            "SELECT id FROM metadata_catalog WHERE layer = ? AND table_name = ? AND environment = ?",
+            (layer, table_name, environment)
         )
         existing = cursor.fetchone()
 
@@ -173,7 +173,8 @@ def upsert_metadata_catalog_entry(
             cursor.execute(
                 """
                 UPDATE metadata_catalog
-                SET table_name = ?,
+                SET job_id = ?,
+                    table_name = ?,
                     schema = ?,
                     row_count = ?,
                     file_size = ?,
@@ -186,6 +187,7 @@ def upsert_metadata_catalog_entry(
                 WHERE id = ?
                 """,
                 (
+                    job_id,
                     table_name,
                     json.dumps(schema),
                     row_count,

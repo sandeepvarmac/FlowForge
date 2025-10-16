@@ -7,7 +7,12 @@ import { Upload, FileText, AlertCircle, CheckCircle2, Eye, X, Sparkles, Clock } 
 import { ColumnNameEditorModal, type ColumnSuggestion } from "./column-name-editor-modal"
 
 interface CSVFileUploadProps {
-  onFileUpload: (file: File, schema: Array<{ name: string; type: string; sample?: string }>, preview: any[]) => void
+  onFileUpload: (
+    file: File,
+    schema: Array<{ name: string; type: string; sample?: string }>,
+    preview: any[],
+    columnMappings?: Array<{ sourceColumn: string; targetColumn: string; dataType: string }>
+  ) => void
   expectedColumns?: string[]
   maxSizeInMB?: number
   // Props for data persistence
@@ -452,6 +457,17 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
         return obj
       })
 
+      // Generate column mappings for headerless CSV
+      // Map from position-based names (column_1, column_2, etc.) to user-selected names
+      // This matches Polars' default naming convention for headerless CSVs
+      const columnMappings = columnNames.map((targetName, index) => ({
+        sourceColumn: `column_${index + 1}`,  // Position-based source column (what Polars generates: column_1, column_2, etc.)
+        targetColumn: targetName,              // User-selected target column name
+        dataType: schema[index].type           // Data type from schema analysis
+      }))
+
+      console.log('Generated column mappings:', columnMappings)
+
       // Update state with final schema and preview
       setState(prev => ({
         ...prev,
@@ -463,8 +479,8 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
         pendingFileData: undefined
       }))
 
-      // Notify parent component
-      onFileUpload(state.pendingFileData.file, schema, preview)
+      // Notify parent component with column mappings
+      onFileUpload(state.pendingFileData.file, schema, preview, columnMappings)
 
     } catch (error) {
       console.error('Error processing file with custom headers:', error)
@@ -624,12 +640,14 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
             <div className="space-y-3">
               <Upload className="w-8 h-8 text-foreground-muted mx-auto" />
               <div>
-                <p className="font-medium text-foreground">Upload your CSV file</p>
+                <p className="font-medium text-foreground">
+                  Upload your data file
+                </p>
                 <p className="text-sm text-foreground-muted mt-1">
                   Drag and drop your file here, or click to browse
                 </p>
                 <p className="text-xs text-foreground-muted mt-2">
-                  Supports CSV files up to {maxSizeInMB}MB
+                  Supports CSV, JSON, Parquet, Excel files up to {maxSizeInMB}MB. Format is auto-detected.
                 </p>
               </div>
               <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
@@ -644,7 +662,7 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
       <input
         ref={fileInputRef}
         type="file"
-        accept=".csv"
+        accept=".csv,.txt,.tsv,.json,.jsonl,.ndjson,.parquet,.xlsx,.xls"
         onChange={handleFileSelect}
         className="hidden"
       />

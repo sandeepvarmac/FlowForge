@@ -41,9 +41,16 @@ def medallion_pipeline(
     job_name: str,
     landing_key: str,
     primary_keys: Optional[List[str]] = None,
+    column_mappings: Optional[List[dict]] = None,
+    has_header: bool = True,
     flow_run_id: Optional[str] = None,
+    file_format: str = "csv",
+    file_options: Optional[dict] = None,
 ) -> dict:
-    """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys."""
+    """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys.
+
+    Supports CSV, JSON, Parquet, and Excel files via pluggable handler framework.
+    """
     logger = get_run_logger()
 
     # Generate human-readable slugs
@@ -68,6 +75,10 @@ def medallion_pipeline(
         job_slug=job_slug,
         run_id=run_id,
         landing_key=landing_key,
+        file_format=file_format,
+        file_options=file_options,
+        column_mappings=column_mappings,
+        has_header=has_header,
     )
 
     silver_result = silver_transform(bronze_result, primary_keys=primary_keys)
