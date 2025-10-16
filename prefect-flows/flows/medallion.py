@@ -15,6 +15,7 @@ from tasks.bronze import bronze_ingest  # noqa: E402
 from tasks.gold import gold_publish  # noqa: E402
 from tasks.silver import silver_transform  # noqa: E402
 from utils.slugify import slugify, generate_run_id  # noqa: E402
+from services.trigger_handler import notify_completion  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -46,10 +47,25 @@ def medallion_pipeline(
     flow_run_id: Optional[str] = None,
     file_format: str = "csv",
     file_options: Optional[dict] = None,
+    execution_id: Optional[str] = None,
 ) -> dict:
     """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys.
 
     Supports CSV, JSON, Parquet, and Excel files via pluggable handler framework.
+
+    Args:
+        workflow_id: Workflow identifier
+        job_id: Job identifier
+        workflow_name: Workflow name
+        job_name: Job name
+        landing_key: S3 key for source data
+        primary_keys: Primary keys for deduplication
+        column_mappings: Column mappings
+        has_header: Whether file has headers
+        flow_run_id: Prefect flow run ID
+        file_format: File format (csv, json, parquet, excel)
+        file_options: File-specific options
+        execution_id: FlowForge execution ID (for dependency triggers)
     """
     logger = get_run_logger()
 
@@ -59,36 +75,74 @@ def medallion_pipeline(
     run_id = generate_run_id(flow_run_id)
 
     logger.info(
-        "Starting medallion pipeline for workflow=%s job=%s landing=%s (slugs: %s/%s, run: %s)",
+        "Starting medallion pipeline for workflow=%s job=%s landing=%s (slugs: %s/%s, run: %s, execution: %s)",
         workflow_id,
         job_id,
         landing_key,
         workflow_slug,
         job_slug,
         run_id,
+        execution_id or "N/A",
     )
 
-    bronze_result = bronze_ingest(
-        workflow_id=workflow_id,
-        job_id=job_id,
-        workflow_slug=workflow_slug,
-        job_slug=job_slug,
-        run_id=run_id,
-        landing_key=landing_key,
-        file_format=file_format,
-        file_options=file_options,
-        column_mappings=column_mappings,
-        has_header=has_header,
-    )
+    # Track execution status for dependency triggers
+    execution_status = "failed"
+    result = None
 
-    silver_result = silver_transform(bronze_result, primary_keys=primary_keys)
-    gold_result = gold_publish(silver_result)
+    try:
+        bronze_result = bronze_ingest(
+            workflow_id=workflow_id,
+            job_id=job_id,
+            workflow_slug=workflow_slug,
+            job_slug=job_slug,
+            run_id=run_id,
+            landing_key=landing_key,
+            file_format=file_format,
+            file_options=file_options,
+            column_mappings=column_mappings,
+            has_header=has_header,
+        )
 
-    return {
-        "bronze": bronze_result,
-        "silver": silver_result,
-        "gold": gold_result,
-    }
+        silver_result = silver_transform(bronze_result, primary_keys=primary_keys)
+        gold_result = gold_publish(silver_result)
+
+        result = {
+            "bronze": bronze_result,
+            "silver": silver_result,
+            "gold": gold_result,
+        }
+
+        # Mark as completed
+        execution_status = "completed"
+        logger.info("Medallion pipeline completed successfully")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Medallion pipeline failed: {e}")
+        execution_status = "failed"
+        raise
+
+    finally:
+        # Notify completion to trigger dependent workflows
+        if execution_id:
+            try:
+                logger.info(
+                    f"Notifying execution completion: {execution_id}, status: {execution_status}"
+                )
+                trigger_result = notify_completion(
+                    execution_id=execution_id,
+                    workflow_id=workflow_id,
+                    status=execution_status
+                )
+                logger.info(
+                    f"Triggered {trigger_result.get('triggeredCount', 0)} dependent workflows"
+                )
+            except Exception as trigger_error:
+                # Don't fail the flow if trigger notification fails
+                logger.warning(
+                    f"Failed to notify execution completion: {trigger_error}"
+                )
 
 
 if __name__ == "__main__":
