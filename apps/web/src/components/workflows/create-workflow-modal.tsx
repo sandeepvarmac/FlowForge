@@ -7,46 +7,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FormField, FormLabel, FormError, Textarea, Select } from "@/components/ui/form"
 import { WorkflowFormData } from "@/types"
 import { useWorkflowActions } from "@/hooks"
-import { Info, X, Clock, GitBranch, Zap } from "lucide-react"
-import { TriggersService } from "@/lib/services/triggers-service"
-import { useAppContext } from "@/lib/context/app-context"
-import type { TriggerType, DependencyCondition } from "@/types/trigger"
+import { Info, X } from "lucide-react"
 
 interface CreateWorkflowModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-// Cron presets for scheduled triggers
-const CRON_PRESETS = [
-  { label: 'Every 15 minutes', value: '*/15 * * * *' },
-  { label: 'Every hour', value: '0 * * * *' },
-  { label: 'Every day at 2 AM', value: '0 2 * * *' },
-  { label: 'Every Monday at 9 AM', value: '0 9 * * 1' },
-  { label: 'Every weekday at 9 AM', value: '0 9 * * 1-5' },
-  { label: 'Custom', value: 'custom' }
-]
-
 export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalProps) {
   const router = useRouter()
-  const { state } = useAppContext()
   const { createWorkflow } = useWorkflowActions()
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<Partial<WorkflowFormData>>({})
   const [tagInput, setTagInput] = React.useState('')
-
-  // Initial trigger configuration
-  const [initialTriggerType, setInitialTriggerType] = React.useState<'scheduled' | 'dependency' | 'event' | null>(null)
-  const [triggerName, setTriggerName] = React.useState('')
-
-  // Scheduled trigger config
-  const [cronPreset, setCronPreset] = React.useState('0 2 * * *') // Daily at 2 AM default
-  const [customCron, setCustomCron] = React.useState('')
-  const [timezone, setTimezone] = React.useState('UTC')
-
-  // Dependency trigger config
-  const [upstreamWorkflowId, setUpstreamWorkflowId] = React.useState('')
-  const [dependencyCondition, setDependencyCondition] = React.useState<DependencyCondition>('on_success')
 
   const [formData, setFormData] = React.useState<WorkflowFormData>({
     name: '',
@@ -99,36 +72,6 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
     try {
       const newWorkflow = await createWorkflow(formData)
 
-      // Create initial trigger if configured
-      if (newWorkflow?.id && initialTriggerType !== null) {
-        try {
-          if (initialTriggerType === 'scheduled') {
-            const cronExpression = cronPreset === 'custom' ? customCron : cronPreset
-            await TriggersService.createTrigger(newWorkflow.id, {
-              triggerName: triggerName || `Scheduled - ${CRON_PRESETS.find(p => p.value === cronPreset)?.label || 'Custom'}`,
-              triggerType: 'scheduled' as TriggerType,
-              enabled: true,
-              cronExpression: cronExpression,
-              timezone: timezone
-            })
-          } else if (initialTriggerType === 'dependency') {
-            if (upstreamWorkflowId) {
-              const upstreamWorkflow = state.workflows.find(w => w.id === upstreamWorkflowId)
-              await TriggersService.createTrigger(newWorkflow.id, {
-                triggerName: triggerName || `Dependency - ${upstreamWorkflow?.name || 'Upstream Workflow'}`,
-                triggerType: 'dependency' as TriggerType,
-                enabled: true,
-                dependsOnWorkflowId: upstreamWorkflowId,
-                dependencyCondition: dependencyCondition
-              })
-            }
-          }
-        } catch (triggerError) {
-          console.error('Failed to create initial trigger:', triggerError)
-          // Don't fail the whole workflow creation if trigger fails
-        }
-      }
-
       // Reset form and close
       setFormData({
         name: '',
@@ -144,13 +87,6 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
         tags: [],
         retentionDays: 90
       })
-      setInitialTriggerType(null)
-      setTriggerName('')
-      setCronPreset('0 2 * * *')
-      setCustomCron('')
-      setTimezone('UTC')
-      setUpstreamWorkflowId('')
-      setDependencyCondition('on_success')
       setErrors({})
       setTagInput('')
       onOpenChange(false)
@@ -255,188 +191,6 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
                 <FormError>{errors.team}</FormError>
               </FormField>
             </div>
-          </div>
-
-          {/* Initial Trigger Configuration */}
-          <div className="space-y-4">
-            <div className="border-b pb-2">
-              <h3 className="text-sm font-semibold text-foreground">Initial Trigger (Optional)</h3>
-              <p className="text-xs text-foreground-muted mt-1">
-                Configure an initial trigger now, or add triggers later from the workflow detail page. Manual execution is always available.
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              {/* Scheduled Trigger */}
-              <button
-                type="button"
-                onClick={() => setInitialTriggerType(initialTriggerType === 'scheduled' ? null : 'scheduled')}
-                className={`flex-1 p-3 border rounded-lg text-left transition-all ${
-                  initialTriggerType === 'scheduled'
-                    ? 'border-primary bg-primary-50 shadow-sm ring-2 ring-primary ring-opacity-50'
-                    : 'border-border bg-background hover:border-primary-200 hover:bg-primary-50/20'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Clock className={`w-4 h-4 ${initialTriggerType === 'scheduled' ? 'text-primary' : ''}`} />
-                  <span className="font-medium text-sm">Scheduled</span>
-                </div>
-                <div className="text-xs text-foreground-muted">Run on a schedule</div>
-              </button>
-
-              {/* Dependency Trigger */}
-              <button
-                type="button"
-                onClick={() => setInitialTriggerType(initialTriggerType === 'dependency' ? null : 'dependency')}
-                className={`flex-1 p-3 border rounded-lg text-left transition-all ${
-                  initialTriggerType === 'dependency'
-                    ? 'border-primary bg-primary-50 shadow-sm ring-2 ring-primary ring-opacity-50'
-                    : 'border-border bg-background hover:border-primary-200 hover:bg-primary-50/20'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <GitBranch className={`w-4 h-4 ${initialTriggerType === 'dependency' ? 'text-primary' : ''}`} />
-                  <span className="font-medium text-sm">Dependency</span>
-                </div>
-                <div className="text-xs text-foreground-muted">After another workflow</div>
-              </button>
-
-              {/* Event-driven Trigger */}
-              <button
-                type="button"
-                disabled
-                className="flex-1 p-3 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Zap className="w-4 h-4" />
-                  <span className="font-medium text-sm">Event-driven</span>
-                </div>
-                <div className="text-xs text-foreground-muted">Coming soon</div>
-              </button>
-            </div>
-
-            {/* Inline Configuration for Scheduled Trigger */}
-            {initialTriggerType === 'scheduled' && (
-              <div className="bg-primary-50/30 border border-primary-200 rounded-lg p-4 space-y-3">
-                <h4 className="text-sm font-medium text-foreground">Configure Schedule</h4>
-
-                <FormField>
-                  <FormLabel htmlFor="triggerName">Trigger Name (Optional)</FormLabel>
-                  <Input
-                    id="triggerName"
-                    placeholder="e.g., Daily Import at 2 AM"
-                    value={triggerName}
-                    onChange={(e) => setTriggerName(e.target.value)}
-                  />
-                </FormField>
-
-                <FormField>
-                  <FormLabel htmlFor="cronPreset">Schedule</FormLabel>
-                  <Select
-                    id="cronPreset"
-                    value={cronPreset}
-                    onChange={(e) => setCronPreset(e.target.value)}
-                  >
-                    {CRON_PRESETS.map(preset => (
-                      <option key={preset.value} value={preset.value}>
-                        {preset.label}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-
-                {cronPreset === 'custom' && (
-                  <FormField>
-                    <FormLabel htmlFor="customCron">Custom Cron Expression</FormLabel>
-                    <Input
-                      id="customCron"
-                      placeholder="0 2 * * *"
-                      value={customCron}
-                      onChange={(e) => setCustomCron(e.target.value)}
-                    />
-                    <p className="text-xs text-foreground-muted mt-1">
-                      Format: minute hour day month weekday
-                    </p>
-                  </FormField>
-                )}
-
-                <FormField>
-                  <FormLabel htmlFor="timezone">Timezone</FormLabel>
-                  <Select
-                    id="timezone"
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                  >
-                    <option value="UTC">UTC</option>
-                    <option value="America/New_York">America/New_York (EST/EDT)</option>
-                    <option value="America/Chicago">America/Chicago (CST/CDT)</option>
-                    <option value="America/Denver">America/Denver (MST/MDT)</option>
-                    <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
-                    <option value="Europe/London">Europe/London (GMT/BST)</option>
-                    <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
-                    <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
-                    <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
-                    <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
-                  </Select>
-                </FormField>
-              </div>
-            )}
-
-            {/* Inline Configuration for Dependency Trigger */}
-            {initialTriggerType === 'dependency' && (
-              <div className="bg-primary-50/30 border border-primary-200 rounded-lg p-4 space-y-3">
-                <h4 className="text-sm font-medium text-foreground">Configure Dependency</h4>
-
-                <FormField>
-                  <FormLabel htmlFor="triggerName">Trigger Name (Optional)</FormLabel>
-                  <Input
-                    id="triggerName"
-                    placeholder="e.g., After Customer ETL"
-                    value={triggerName}
-                    onChange={(e) => setTriggerName(e.target.value)}
-                  />
-                </FormField>
-
-                <FormField>
-                  <FormLabel htmlFor="upstreamWorkflow" required>Upstream Workflow</FormLabel>
-                  <Select
-                    id="upstreamWorkflow"
-                    value={upstreamWorkflowId}
-                    onChange={(e) => setUpstreamWorkflowId(e.target.value)}
-                  >
-                    <option value="">Select a workflow...</option>
-                    {state.workflows
-                      .filter(w => w.id !== formData.name) // Exclude current workflow (if exists)
-                      .map(workflow => (
-                        <option key={workflow.id} value={workflow.id}>
-                          {workflow.name}
-                        </option>
-                      ))}
-                  </Select>
-                  {state.workflows.length === 0 && (
-                    <p className="text-xs text-foreground-muted mt-1">
-                      No workflows available. Create workflows first to set up dependencies.
-                    </p>
-                  )}
-                </FormField>
-
-                <FormField>
-                  <FormLabel htmlFor="dependencyCondition">Trigger Condition</FormLabel>
-                  <Select
-                    id="dependencyCondition"
-                    value={dependencyCondition}
-                    onChange={(e) => setDependencyCondition(e.target.value as DependencyCondition)}
-                  >
-                    <option value="on_success">On Success</option>
-                    <option value="on_failure">On Failure</option>
-                    <option value="always">Always</option>
-                  </Select>
-                  <p className="text-xs text-foreground-muted mt-1">
-                    When should this workflow run after the upstream workflow completes?
-                  </p>
-                </FormField>
-              </div>
-            )}
           </div>
 
           {/* Workflow Configuration */}

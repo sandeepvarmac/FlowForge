@@ -658,8 +658,8 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - No alerts (yet)
 - Many "Coming Soon" pages
 
-**Current Development (2025-10-16 - Weeks 1-2 COMPLETE + Create Modal Integration + UX Refinement):**
-- ✅ Workflow Triggers System Weeks 1-2 COMPLETE (3 weeks total, 56% complete)
+**Current Development (2025-10-17 - Weeks 1-2 COMPLETE + True Databricks Pattern Implementation):**
+- ✅ Workflow Triggers System Weeks 1-2 COMPLETE (3 weeks total, 60% complete)
   - ✅ Database schema complete (workflow_triggers table + executions tracking)
   - ✅ TypeScript types complete (185 lines)
   - ✅ Frontend service complete (229 lines, 12 methods)
@@ -685,28 +685,24 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
     - Comprehensive documentation (470 lines)
   - ✅ UI components complete (Week 2) - 975 lines
     - WorkflowTriggersSection component (290 lines)
-    - AddTriggerModal with two-step wizard (685 lines)
+    - AddTriggerModal with professional wizard (~400 lines redesigned)
     - Workflows List page with Triggers and Next Run columns
     - Executions Monitor with trigger type display
     - Full trigger management: create, enable/disable, delete
-  - ✅ Create Workflow Modal integration complete (Session 8) - 147 lines
-    - Databricks-style hybrid approach (optional initial trigger)
-    - 4 trigger options: None (default), Scheduled, Dependency, Event-driven (coming soon)
-    - Inline configuration forms for Scheduled and Dependency
-    - Automatic trigger creation during workflow setup
-    - Research-backed design matching industry standards (Databricks, Prefect, Azure ADF)
-  - ✅ UX refinement complete (Session 9) - ~80 lines modified
-    - Removed "None" option (confusing as manual is always available)
-    - Made trigger selection truly optional with toggle-able buttons
-    - Simplified Add Trigger Modal from 685 to 76 lines
-    - Fixed type handling and component issues
-    - Toggle pattern: click to select, click again to deselect
+  - ✅ True Databricks Pattern implementation complete (Session 10) - Clean separation
+    - **REMOVED:** Initial trigger configuration from Create Workflow Modal (~150 lines removed)
+    - **REDESIGNED:** Add Trigger Modal with clean UI/UX (~400 lines)
+    - **PATTERN:** Triggers added AFTER workflow creation (matches Databricks, industry standard)
+    - **DEFAULT:** Manual execution only (no triggers) until user explicitly adds them
+    - **UX:** Single source of truth for trigger management (workflow detail page only)
+    - **ARCHITECTURE:** Independent OR logic for multiple triggers (Airflow pattern)
+    - **DECISION DOCUMENT:** Created FINAL-ARCHITECTURE-DECISIONS.md with phased approach
   - Time-based scheduling with cron expressions ✅ COMPLETE
   - Dependency-based triggers (workflow dependencies) ✅ COMPLETE
-  - Multiple triggers per workflow ✅ COMPLETE
-  - Optional initial trigger during workflow creation ✅ COMPLETE
+  - Multiple triggers per workflow with independent OR logic ✅ COMPLETE
+  - Simplified workflow creation (metadata only, no trigger complexity) ✅ COMPLETE
   - This addresses the #1 production requirement
-  - **Progress:** 8.6 of 15 days complete, ~4,800 lines of code written
+  - **Progress:** 9 of 15 days complete, ~5,000 lines of code written
 
 **Recommendation:**
 **Proceed with targeted demos** focusing on:
@@ -727,14 +723,17 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - After Week 3 polish (optional): **92% demo-ready**
 - After Mock UIs: **95% demo-ready**
 
-**Current Status (2025-10-16 17:30):**
-- **Days Completed:** 8.6 of 15 (Weeks 1-2 COMPLETE + Create Modal Integration + UX Refinement)
-- **Lines of Code:** ~4,800
+**Current Status (2025-10-17):**
+- **Days Completed:** 9 of 15 (Weeks 1-2 COMPLETE + True Databricks Pattern Implementation)
+- **Lines of Code:** ~5,000
   - Week 1: 3,619 (Database: 60, Types: 185, Service: 229, API: 1,286, Prefect: 1,159, Dependencies: 945, Docs: 470)
   - Week 2: 975 (UI Components: 975)
-  - Session 8: 147 (Create Modal Integration: 147)
-  - Session 9: ~80 (UX Refinement + Bug Fixes: modified 5 files)
-- **Progress:** 56% complete, ahead of schedule (Weeks 1-2 + Create Modal + UX Refinement done!)
+  - Session 10: ~400 (Add Trigger Modal redesign, -150 lines from Create Modal, net ~250 lines)
+- **Progress:** 60% complete, ahead of schedule (Weeks 1-2 + Databricks Pattern Implementation done!)
+- **Key Architectural Decisions:** Documented in FINAL-ARCHITECTURE-DECISIONS.md
+  - Workflow triggers: Independent OR logic (Airflow pattern)
+  - Job dependencies: Phased evolution (MVP sequential → Phase 1 DAG → Phase 2 parallel)
+  - Databricks pattern: Triggers added AFTER workflow creation, not during
 
 ---
 
@@ -751,7 +750,7 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 - [x] Data Assets Explorer (6-tab catalog)
 
 ### 🟡 In Development
-- [ ] **Workflow Triggers System** (2.5-3 weeks) - Status: Weeks 1-2 + Create Modal Integration + UX Refinement COMPLETE - 56% Complete
+- [ ] **Workflow Triggers System** (2.5-3 weeks) - Status: Weeks 1-2 + True Databricks Pattern COMPLETE - 60% Complete
   - ✅ Database schema and migrations complete
   - ✅ TypeScript types defined (185 lines)
   - ✅ Frontend service implemented (229 lines, 12 methods)
@@ -781,14 +780,16 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
     - AddTriggerModal: two-step wizard for trigger creation (685 lines)
     - Updated Workflow Detail, Workflows List, Executions Monitor pages
     - Full trigger management UI with cron presets and validation
-  - ✅ Create Workflow Modal integration - Complete (Session 8) - 147 lines
-    - Databricks-style hybrid approach (industry standard)
-    - Initial Trigger section with 4 options (None, Scheduled, Dependency, Event-driven)
-    - Inline configuration forms with cron presets and workflow selectors
-    - Automatic trigger creation during workflow setup
-    - Research-backed design from Airflow, Databricks, Prefect, Azure ADF
+  - ✅ True Databricks Pattern implementation - Complete (Session 10) - ~400 lines (net ~250 added)
+    - **REMOVED** initial trigger configuration from Create Workflow Modal (~150 lines)
+    - **REDESIGNED** Add Trigger Modal with clean professional UI (~400 lines)
+    - Matches TRUE Databricks pattern: triggers added AFTER workflow creation
+    - Simplified workflow creation: focus on metadata only
+    - Single source of truth: all trigger management on workflow detail page
+    - Independent OR logic: multiple triggers fire independently (Airflow pattern)
+    - Comprehensive architectural decisions documented in FINAL-ARCHITECTURE-DECISIONS.md
   - ⏳ Testing & documentation - Optional (Week 3)
-  - **Started:** 2025-01-16 | **Days Completed:** 8.5 of 15 | **Weeks 1-2 + Session 8:** ✅ COMPLETE | **ETA:** 1 week remaining (optional)
+  - **Started:** 2025-01-16 | **Days Completed:** 9 of 15 | **Weeks 1-2 + Session 10:** ✅ COMPLETE | **ETA:** 1 week remaining (optional)
   - See `FEATURE-DEVELOPMENT-TRACKER.md` for detailed progress
 
 ### 🔴 Planned Features (Phase 2)
@@ -801,11 +802,11 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
 | Phase | Features | Status | Completion | Updated |
 |-------|----------|--------|------------|---------|
 | Phase 1 (MVP) | File pipeline, AI detection, Catalog | ✅ Complete | 100% | 2025-01 |
-| Phase 2 (Current) | Triggers, Quality, Alerts | 🟡 In Development | 56% | 2025-10-16 17:30 |
+| Phase 2 (Current) | Triggers, Quality, Alerts | 🟡 In Development | 60% | 2025-10-17 |
 | Phase 3 (Future) | Database connectors, APIs, Destinations | 🔴 Planned | 0% | - |
 
 **Phase 2 Breakdown:**
-- Workflow Triggers System: 56% complete (Weeks 1-2 + Create Modal Integration + UX Refinement COMPLETE - 8.6 of 15 days)
+- Workflow Triggers System: 60% complete (Weeks 1-2 + True Databricks Pattern COMPLETE - 9 of 15 days)
   - Database foundation: ✅ Complete (Days 1-2)
   - TypeScript types: ✅ Complete (185 lines)
   - Frontend service: ✅ Complete (229 lines, 12 methods)
@@ -827,17 +828,14 @@ It's built on Prefect, which handles millions of scheduled workflows in producti
     - Workflows List with triggers info
     - Executions Monitor with trigger display
     - Full CRUD UI for trigger management
-  - Create Modal Integration: ✅ Complete (Session 8, 147 lines)
-    - Databricks-style optional initial trigger
-    - Industry research (Airflow, Databricks, Prefect, Azure ADF)
-    - Inline configuration forms
-    - Automatic trigger creation
-  - UX Refinement: ✅ Complete (Session 9, ~80 lines modified)
-    - Removed confusing "None" option
-    - Toggle-able trigger selection (optional by default)
-    - Simplified Add Trigger Modal (685 → 76 lines)
-    - Fixed type handling and component issues
-    - Clear messaging: "Manual execution is always available"
+  - True Databricks Pattern: ✅ Complete (Session 10, ~400 lines redesigned)
+    - REMOVED initial trigger from Create Workflow Modal (~150 lines)
+    - REDESIGNED Add Trigger Modal with professional UI (~400 lines)
+    - Matches TRUE Databricks standard: triggers added AFTER workflow creation
+    - Simplified workflow creation: metadata only, no trigger complexity
+    - Single source of truth: workflow detail page for all trigger management
+    - Independent OR logic: multiple triggers fire independently
+    - Created FINAL-ARCHITECTURE-DECISIONS.md: comprehensive phased approach document
   - Testing & documentation: ⏳ Optional (Week 3)
 
 **For detailed feature tracking and brainstorming notes, see:** `FEATURE-DEVELOPMENT-TRACKER.md`
