@@ -407,14 +407,16 @@ export default function WorkflowsPage() {
                         ) : (() => {
                           const triggers = workflowTriggers[workflow.id] || []
                           const scheduledTriggers = triggers.filter(t => t.triggerType === 'scheduled' && t.enabled)
-                          const nextRun = scheduledTriggers.length > 0
-                            ? Math.min(...scheduledTriggers.map(t => {
-                                const timestamp = typeof t.nextRunAt === 'number' ? t.nextRunAt : (t.nextRunAt ? Math.floor(t.nextRunAt.getTime() / 1000) : Infinity)
-                                return timestamp
-                              }).filter(t => t !== Infinity))
-                            : null
+                          const validTimestamps = scheduledTriggers
+                            .map(t => {
+                              const timestamp = typeof t.nextRunAt === 'number' ? t.nextRunAt : (t.nextRunAt ? Math.floor(t.nextRunAt.getTime() / 1000) : Infinity)
+                              return timestamp
+                            })
+                            .filter(t => t !== Infinity && !isNaN(t))
 
-                          return nextRun ? (
+                          const nextRun = validTimestamps.length > 0 ? Math.min(...validTimestamps) : null
+
+                          return nextRun && nextRun !== Infinity ? (
                             <>
                               <Calendar className="w-4 h-4 text-green-600" />
                               <p className="font-semibold text-foreground text-xs">

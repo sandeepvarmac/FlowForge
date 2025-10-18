@@ -1,96 +1,54 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { Repeat, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { Card, CardContent, Badge } from '@/components/ui'
+import { Repeat, CheckCircle2, AlertCircle, FileSearch, BarChart3, Shield, TrendingUp, Database } from 'lucide-react'
 
 export default function ReconciliationPage() {
+  const features = [
+    { title: 'Source-to-Target Validation', description: 'Verify data matches source files with row counts and checksums', icon: CheckCircle2 },
+    { title: 'Layer-to-Layer Recon', description: 'Track transformations across Bronze → Silver → Gold layers', icon: Database },
+    { title: 'Business Rule Validation', description: 'Apply custom rules for quality and referential integrity', icon: Shield },
+    { title: 'Exception Management', description: 'Detect and flag reconciliation breaks with drill-down', icon: AlertCircle },
+    { title: 'Audit Trail & Reports', description: 'Generate comprehensive reports for compliance and auditing', icon: FileSearch },
+    { title: 'Automated Reconciliation', description: 'Schedule automatic reconciliation runs after job completion', icon: Repeat },
+    { title: 'Threshold Monitoring', description: 'Set acceptable variance thresholds and alert on breaches', icon: TrendingUp },
+    { title: 'Historical Tracking', description: 'Track reconciliation history and trend analysis over time', icon: BarChart3 }
+  ]
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-8">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 mb-4">
-          <Repeat className="w-12 h-12 text-blue-600" />
-        </div>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Data Reconciliation
-        </h1>
-
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Coming Soon
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Data Reconciliation</h1>
+        <p className="text-foreground-muted mt-1">
+          Ensure data integrity by comparing datasets across layers and sources
         </p>
+      </div>
 
-        <div className="bg-background-secondary border border-border rounded-lg p-8 text-left space-y-4">
-          <h2 className="text-xl font-semibold mb-4">What is Data Reconciliation?</h2>
-
-          <p className="text-muted-foreground">
-            Data Reconciliation ensures data integrity and accuracy by comparing datasets across different layers
-            and sources. This feature will help you:
+      {/* Hero Card */}
+      <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-blue-50 to-purple-50">
+        <CardContent className="p-12 text-center">
+          <Repeat className="w-20 h-20 mx-auto mb-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-foreground mb-3">Data Reconciliation</h2>
+          <p className="text-lg text-foreground-muted max-w-2xl mx-auto mb-6">
+            Ensure data integrity and accuracy by comparing datasets across different layers and sources
           </p>
+          <Badge variant="default" className="text-sm px-4 py-2">Coming in Phase 2</Badge>
+        </CardContent>
+      </Card>
 
-          <ul className="space-y-3 mt-4">
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Source-to-Target Validation</p>
-                <p className="text-sm text-muted-foreground">
-                  Verify that data loaded into Bronze layer matches source files with row counts,
-                  checksums, and control totals.
-                </p>
+      {/* Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map((feature, index) => (
+          <Card key={index} className="border-dashed border-2">
+            <CardContent className="p-6">
+              <div className="p-3 rounded-lg bg-blue-50 w-fit mb-4">
+                <feature.icon className="w-6 h-6 text-blue-600" />
               </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Layer-to-Layer Reconciliation</p>
-                <p className="text-sm text-muted-foreground">
-                  Track data transformations across Bronze → Silver → Gold layers, identifying
-                  records added, modified, or filtered at each stage.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Business Rule Validation</p>
-                <p className="text-sm text-muted-foreground">
-                  Apply custom reconciliation rules to validate data quality, referential integrity,
-                  and business logic compliance.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Exception Management</p>
-                <p className="text-sm text-muted-foreground">
-                  Automatically detect and flag reconciliation breaks with detailed drill-down
-                  capabilities for investigation and resolution.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Audit Trail & Reports</p>
-                <p className="text-sm text-muted-foreground">
-                  Generate comprehensive reconciliation reports for compliance, auditing,
-                  and operational monitoring.
-                </p>
-              </div>
-            </li>
-          </ul>
-
-          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400">
-              <strong>Coming in Phase 2:</strong> This feature is currently under development and will be
-              available in the next major release of FlowForge.
-            </p>
-          </div>
-        </div>
+              <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-sm text-foreground-muted">{feature.description}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )

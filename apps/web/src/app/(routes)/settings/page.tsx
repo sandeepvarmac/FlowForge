@@ -1,107 +1,54 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { Settings, Users, Key, Bell, Shield, Palette } from 'lucide-react'
+import { Card, CardContent, Badge } from '@/components/ui'
+import { Settings, Users, Key, Bell, Shield, Palette, FileText, Database } from 'lucide-react'
 
 export default function SettingsPage() {
+  const features = [
+    { title: 'User & Team Management', description: 'Manage users, teams, roles, and RBAC permissions with SSO integration', icon: Users },
+    { title: 'Security & Authentication', description: 'Configure SAML, OAuth, LDAP, API keys, and MFA policies', icon: Key },
+    { title: 'Notifications & Alerts', description: 'Email, Slack, Teams, and webhook notifications with templates', icon: Bell },
+    { title: 'Audit Logging', description: 'Track all actions and changes for compliance (GDPR, HIPAA, SOC 2)', icon: Shield },
+    { title: 'UI Customization', description: 'Customize themes, branding, logo, and color schemes', icon: Palette },
+    { title: 'System Configuration', description: 'Environment variables, resource limits, retention policies', icon: Settings },
+    { title: 'Connection Management', description: 'Manage database connections, cloud credentials, and API keys', icon: Database },
+    { title: 'Backup & Recovery', description: 'Configure automated backups, retention, and disaster recovery', icon: FileText }
+  ]
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-8">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-slate-500/20 to-zinc-500/20 mb-4">
-          <Settings className="w-12 h-12 text-slate-600" />
-        </div>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-600 to-zinc-600 bg-clip-text text-transparent">
-          Settings
-        </h1>
-
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Coming Soon
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+        <p className="text-foreground-muted mt-1">
+          Configure system settings, user management, security, and application preferences
         </p>
+      </div>
 
-        <div className="bg-background-secondary border border-border rounded-lg p-8 text-left space-y-4">
-          <h2 className="text-xl font-semibold mb-4">What are Settings?</h2>
-
-          <p className="text-muted-foreground">
-            Settings provide centralized configuration and management for your FlowForge instance, including
-            user management, security, notifications, and system preferences. This feature will support:
+      {/* Hero Card */}
+      <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-slate-50 to-gray-50">
+        <CardContent className="p-12 text-center">
+          <Settings className="w-20 h-20 mx-auto mb-6 text-slate-600" />
+          <h2 className="text-2xl font-bold text-foreground mb-3">Settings & Configuration</h2>
+          <p className="text-lg text-foreground-muted max-w-2xl mx-auto mb-6">
+            Centralized configuration and management for your FlowForge instance including users, security, and system preferences
           </p>
+          <Badge variant="default" className="text-sm px-4 py-2">Coming in Phase 2</Badge>
+        </CardContent>
+      </Card>
 
-          <ul className="space-y-3 mt-4">
-            <li className="flex items-start gap-3">
-              <Users className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">User & Team Management</p>
-                <p className="text-sm text-muted-foreground">
-                  Manage users, teams, roles, and permissions with support for RBAC (Role-Based Access Control),
-                  SSO integration, and user provisioning.
-                </p>
+      {/* Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map((feature, index) => (
+          <Card key={index} className="border-dashed border-2">
+            <CardContent className="p-6">
+              <div className="p-3 rounded-lg bg-slate-50 w-fit mb-4">
+                <feature.icon className="w-6 h-6 text-slate-600" />
               </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Key className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Security & Authentication</p>
-                <p className="text-sm text-muted-foreground">
-                  Configure authentication methods (SAML, OAuth, LDAP), API keys, service accounts, and
-                  security policies including MFA and session management.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Bell className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Notifications & Alerts</p>
-                <p className="text-sm text-muted-foreground">
-                  Configure email, Slack, Teams, and webhook notifications for pipeline failures, data quality
-                  issues, and system alerts with customizable templates.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Audit Logging & Compliance</p>
-                <p className="text-sm text-muted-foreground">
-                  Track all user actions, system changes, and data access with comprehensive audit logs for
-                  compliance reporting (GDPR, HIPAA, SOC 2).
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Palette className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">UI Customization & Themes</p>
-                <p className="text-sm text-muted-foreground">
-                  Customize the user interface with themes, logo branding, color schemes, and layout preferences
-                  to match your organization's identity.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Settings className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">System Configuration</p>
-                <p className="text-sm text-muted-foreground">
-                  Configure system-wide settings including environment variables, resource limits, retention
-                  policies, backup schedules, and integration endpoints.
-                </p>
-              </div>
-            </li>
-          </ul>
-
-          <div className="mt-6 p-4 bg-slate-500/10 border border-slate-500/20 rounded-lg">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              <strong>Coming in Phase 2:</strong> This feature is currently under development and will be
-              available in the next major release of FlowForge.
-            </p>
-          </div>
-        </div>
+              <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-sm text-foreground-muted">{feature.description}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )

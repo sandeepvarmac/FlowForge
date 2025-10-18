@@ -1,118 +1,54 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { Download, Database, FileText, Cloud, Send, HardDrive } from 'lucide-react'
+import { Card, CardContent, Badge } from '@/components/ui'
+import { Download, Database, FileText, Cloud, Send, HardDrive, Zap, Settings } from 'lucide-react'
 
 export default function DestinationsPage() {
+  const features = [
+    { title: 'Database Destinations', description: 'PostgreSQL, MySQL, SQL Server, Snowflake, BigQuery, Databricks', icon: Database },
+    { title: 'File-Based Exports', description: 'CSV, Parquet, JSON, XML, Avro with compression and partitioning', icon: FileText },
+    { title: 'Cloud Storage', description: 'AWS S3, Azure Blob, Data Lake, GCS with lifecycle management', icon: Cloud },
+    { title: 'SFTP/FTP Delivery', description: 'Secure file transfer with retry logic and PGP encryption', icon: HardDrive },
+    { title: 'API & Webhooks', description: 'REST APIs, GraphQL endpoints with batch and streaming modes', icon: Send },
+    { title: 'Streaming Destinations', description: 'Kafka, Kinesis, Event Hubs with exactly-once delivery', icon: Zap },
+    { title: 'Data Transformation', description: 'Column mapping, type conversions, and business rules', icon: Settings },
+    { title: 'Schema Management', description: 'Automatic schema detection and evolution handling', icon: Database }
+  ]
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-8">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 mb-4">
-          <Download className="w-12 h-12 text-blue-600" />
-        </div>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-          Destination Integrations
-        </h1>
-
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Coming Soon
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Destination Integrations</h1>
+        <p className="text-foreground-muted mt-1">
+          Distribute processed data to databases, cloud storage, APIs, and downstream systems
         </p>
+      </div>
 
-        <div className="bg-background-secondary border border-border rounded-lg p-8 text-left space-y-4">
-          <h2 className="text-xl font-semibold mb-4">What are Destination Integrations?</h2>
-
-          <p className="text-muted-foreground">
-            Destination Integrations enable you to distribute your processed data from Silver and Gold layers to
-            various downstream systems in the formats they require. This feature will support:
+      {/* Hero Card */}
+      <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-blue-50 to-indigo-50">
+        <CardContent className="p-12 text-center">
+          <Download className="w-20 h-20 mx-auto mb-6 text-blue-600" />
+          <h2 className="text-2xl font-bold text-foreground mb-3">Destination Integrations</h2>
+          <p className="text-lg text-foreground-muted max-w-2xl mx-auto mb-6">
+            Distribute your processed data from Silver and Gold layers to various downstream systems in the formats they require
           </p>
+          <Badge variant="default" className="text-sm px-4 py-2">Coming in Phase 2</Badge>
+        </CardContent>
+      </Card>
 
-          <ul className="space-y-3 mt-4">
-            <li className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Database Destinations</p>
-                <p className="text-sm text-muted-foreground">
-                  Write directly to PostgreSQL, MySQL, SQL Server, Oracle, Snowflake, BigQuery,
-                  Databricks, and other data warehouses with automatic schema management and upsert logic.
-                </p>
+      {/* Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map((feature, index) => (
+          <Card key={index} className="border-dashed border-2">
+            <CardContent className="p-6">
+              <div className="p-3 rounded-lg bg-blue-50 w-fit mb-4">
+                <feature.icon className="w-6 h-6 text-blue-600" />
               </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <FileText className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">File-Based Exports</p>
-                <p className="text-sm text-muted-foreground">
-                  Generate CSV, Parquet, JSON, XML, Avro, ORC, or custom delimited files with configurable
-                  formatting, compression (GZIP, ZSTD, Snappy), and partitioning strategies.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Cloud className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Cloud Storage Destinations</p>
-                <p className="text-sm text-muted-foreground">
-                  Push data to AWS S3, Azure Blob Storage, Azure Data Lake, Google Cloud Storage, or other cloud
-                  object stores with automatic partitioning and lifecycle management.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <HardDrive className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">SFTP/FTP Delivery</p>
-                <p className="text-sm text-muted-foreground">
-                  Securely transfer files to remote servers via SFTP, FTPS, or FTP with automatic
-                  retry logic, delivery confirmation, and PGP encryption support.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Send className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">API & Webhook Publishing</p>
-                <p className="text-sm text-muted-foreground">
-                  Send data to REST APIs, GraphQL endpoints, or trigger webhooks for real-time
-                  integration with downstream applications. Supports batch and streaming modes.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Send className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Streaming Destinations</p>
-                <p className="text-sm text-muted-foreground">
-                  Stream data to Kafka, Kinesis, Event Hubs, or Pub/Sub for real-time data pipelines
-                  and event-driven architectures with exactly-once delivery guarantees.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-teal-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Data Transformation & Mapping</p>
-                <p className="text-sm text-muted-foreground">
-                  Apply custom transformations, column mapping, data type conversions, and business rules
-                  before writing to destinations. Supports SQL, Python, and visual mapping tools.
-                </p>
-              </div>
-            </li>
-          </ul>
-
-          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400">
-              <strong>Coming in Phase 2:</strong> This feature is currently under development and will be
-              available in the next major release of FlowForge.
-            </p>
-          </div>
-        </div>
+              <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-sm text-foreground-muted">{feature.description}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )

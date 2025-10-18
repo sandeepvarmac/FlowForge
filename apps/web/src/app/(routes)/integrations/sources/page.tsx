@@ -1,107 +1,54 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { Plug, Database, Cloud, Webhook, FileType, Boxes } from 'lucide-react'
+import { Card, CardContent, Badge } from '@/components/ui'
+import { Upload, Database, Cloud, Webhook, FileType, Boxes, HardDrive, Zap } from 'lucide-react'
 
-export default function IntegrationsPage() {
+export default function SourcesPage() {
+  const features = [
+    { title: 'Database Connectors', description: 'PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Cassandra', icon: Database },
+    { title: 'Cloud Platforms', description: 'AWS (S3, RDS, Redshift), Azure, Google Cloud, Snowflake', icon: Cloud },
+    { title: 'File System', description: 'Local files, network shares (SMB/CIFS), SFTP servers', icon: FileType },
+    { title: 'API & Webhooks', description: 'REST APIs, GraphQL endpoints, and real-time webhooks', icon: Webhook },
+    { title: 'SaaS Platforms', description: 'Salesforce, ServiceNow, Workday, SAP, Microsoft Dynamics', icon: Boxes },
+    { title: 'Streaming Sources', description: 'Kafka, Kinesis, Event Hubs, Pub/Sub for real-time data', icon: Zap },
+    { title: 'FTP/SFTP', description: 'Secure file transfer from remote servers with automation', icon: HardDrive },
+    { title: 'Custom Connectors', description: 'Build custom integrations using Python SDK or REST API', icon: Upload }
+  ]
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-8">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 mb-4">
-          <Plug className="w-12 h-12 text-green-600" />
-        </div>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-          Integrations
-        </h1>
-
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Coming Soon
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Source Integrations</h1>
+        <p className="text-foreground-muted mt-1">
+          Connect to databases, cloud platforms, APIs, SaaS applications, and file systems
         </p>
+      </div>
 
-        <div className="bg-background-secondary border border-border rounded-lg p-8 text-left space-y-4">
-          <h2 className="text-xl font-semibold mb-4">What are Integrations?</h2>
-
-          <p className="text-muted-foreground">
-            Integrations allow FlowForge to seamlessly connect with external data sources, cloud platforms,
-            databases, and third-party services. This feature will support:
+      {/* Hero Card */}
+      <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-green-50 to-emerald-50">
+        <CardContent className="p-12 text-center">
+          <Upload className="w-20 h-20 mx-auto mb-6 text-green-600" />
+          <h2 className="text-2xl font-bold text-foreground mb-3">Source Integrations</h2>
+          <p className="text-lg text-foreground-muted max-w-2xl mx-auto mb-6">
+            Seamlessly connect to external data sources including databases, cloud platforms, APIs, and third-party services
           </p>
+          <Badge variant="default" className="text-sm px-4 py-2">Coming in Phase 2</Badge>
+        </CardContent>
+      </Card>
 
-          <ul className="space-y-3 mt-4">
-            <li className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Database Connectors</p>
-                <p className="text-sm text-muted-foreground">
-                  Connect to PostgreSQL, MySQL, SQL Server, Oracle, MongoDB, Cassandra, Redis, and other
-                  popular databases with native drivers and connection pooling.
-                </p>
+      {/* Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map((feature, index) => (
+          <Card key={index} className="border-dashed border-2">
+            <CardContent className="p-6">
+              <div className="p-3 rounded-lg bg-green-50 w-fit mb-4">
+                <feature.icon className="w-6 h-6 text-green-600" />
               </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Cloud className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Cloud Platform Integration</p>
-                <p className="text-sm text-muted-foreground">
-                  Integrate with AWS (S3, RDS, Redshift), Azure (Blob Storage, SQL Database, Synapse),
-                  Google Cloud (GCS, BigQuery), and Snowflake.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <FileType className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">File System Connectors</p>
-                <p className="text-sm text-muted-foreground">
-                  Access data from local filesystems, network shares (SMB/CIFS), SFTP servers, and
-                  cloud object storage with unified file handling.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Webhook className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">API & Webhook Connectors</p>
-                <p className="text-sm text-muted-foreground">
-                  Connect to REST APIs, GraphQL endpoints, and configure webhooks for real-time data
-                  ingestion from SaaS platforms and custom applications.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Boxes className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">SaaS Platform Integrations</p>
-                <p className="text-sm text-muted-foreground">
-                  Pre-built connectors for Salesforce, ServiceNow, Workday, SAP, Microsoft Dynamics,
-                  and other enterprise SaaS platforms.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Plug className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Custom Integration Builder</p>
-                <p className="text-sm text-muted-foreground">
-                  Build custom integrations using Python SDK, REST API, or visual connector builder with
-                  support for OAuth, API keys, and certificate-based authentication.
-                </p>
-              </div>
-            </li>
-          </ul>
-
-          <div className="mt-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-            <p className="text-sm text-green-600 dark:text-green-400">
-              <strong>Coming in Phase 2:</strong> This feature is currently under development and will be
-              available in the next major release of FlowForge.
-            </p>
-          </div>
-        </div>
+              <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-sm text-foreground-muted">{feature.description}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )

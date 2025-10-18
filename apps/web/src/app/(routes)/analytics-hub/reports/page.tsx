@@ -1,129 +1,54 @@
-'use client'
+"use client"
 
-import * as React from 'react'
-import { LineChart, FolderKanban, BarChart3, PieChart, TrendingUp, Filter } from 'lucide-react'
+import { Card, CardContent, Badge } from '@/components/ui'
+import { FolderKanban, BarChart3, PieChart, FileText, Filter, TrendingUp, Shield, Search } from 'lucide-react'
 
 export default function AnalyticsHubReportsPage() {
+  const features = [
+    { title: 'Power BI Integration', description: 'Embed Power BI reports with interactive filters and real-time refresh', icon: BarChart3 },
+    { title: 'SSRS Reports', description: 'Render SSRS paginated reports with export to PDF/Excel', icon: FileText },
+    { title: 'Excel & Document Viewer', description: 'Display Excel files via Office Web Viewer with inline rendering', icon: PieChart },
+    { title: 'Dynamic Report Catalog', description: 'Organize by modules, departments, and tags with advanced search', icon: FolderKanban },
+    { title: 'SharePoint Integration', description: 'Link to SharePoint documents with role-based access control', icon: TrendingUp },
+    { title: 'Custom Dashboards', description: 'Create dashboards using Tableau, Looker, or React components', icon: BarChart3 },
+    { title: 'Role-Based Access', description: 'Integrate with Azure AD, LDAP, Okta for granular permissions', icon: Shield },
+    { title: 'Usage Analytics', description: 'Track report views, downloads, and user interactions', icon: Search }
+  ]
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-8">
-      <div className="max-w-3xl w-full text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 mb-4">
-          <FolderKanban className="w-12 h-12 text-violet-600" />
-        </div>
-
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-          Analytics Hub - Reports
-        </h1>
-
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Coming Soon
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Analytics Hub - Reports</h1>
+        <p className="text-foreground-muted mt-1">
+          Centralized portal for enterprise reports from Power BI, SSRS, Excel, and SharePoint
         </p>
+      </div>
 
-        <div className="bg-background-secondary border border-border rounded-lg p-8 text-left space-y-4">
-          <h2 className="text-xl font-semibold mb-4">What is the Analytics Hub Reports Portal?</h2>
-
-          <p className="text-muted-foreground">
-            The Analytics Hub provides a centralized, modular, web-based portal to consolidate and provide
-            unified access to enterprise reports from various sources. This feature will support:
+      {/* Hero Card */}
+      <Card className="border-2 border-dashed border-gray-300 bg-gradient-to-br from-violet-50 to-purple-50">
+        <CardContent className="p-12 text-center">
+          <FolderKanban className="w-20 h-20 mx-auto mb-6 text-violet-600" />
+          <h2 className="text-2xl font-bold text-foreground mb-3">Analytics Hub Reports Portal</h2>
+          <p className="text-lg text-foreground-muted max-w-2xl mx-auto mb-6">
+            Modular web-based portal to consolidate and provide unified access to enterprise reports from various sources
           </p>
+          <Badge variant="default" className="text-sm px-4 py-2">Coming in Phase 2</Badge>
+        </CardContent>
+      </Card>
 
-          <ul className="space-y-3 mt-4">
-            <li className="flex items-start gap-3">
-              <BarChart3 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Power BI Integration</p>
-                <p className="text-sm text-muted-foreground">
-                  Embed Power BI reports and dashboards directly in the portal using iframes or Power BI REST APIs.
-                  Support for interactive filters, drill-through, and real-time data refresh.
-                </p>
+      {/* Feature Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {features.map((feature, index) => (
+          <Card key={index} className="border-dashed border-2">
+            <CardContent className="p-6">
+              <div className="p-3 rounded-lg bg-violet-50 w-fit mb-4">
+                <feature.icon className="w-6 h-6 text-violet-600" />
               </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <PieChart className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">SSRS Reports</p>
-                <p className="text-sm text-muted-foreground">
-                  Render SQL Server Reporting Services (SSRS) reports using report viewer components or direct links.
-                  Support for paginated reports, subscriptions, and export to PDF/Excel.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <FolderKanban className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Excel & Document Viewer</p>
-                <p className="text-sm text-muted-foreground">
-                  Display Excel files via Office Web Viewer with preview and direct download options.
-                  Support for Word, PowerPoint, and PDF documents with inline rendering.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <Filter className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Dynamic Report Catalog</p>
-                <p className="text-sm text-muted-foreground">
-                  Reports organized by modules (Holdings, Cash, Performance, Tax), departments (Credit, PE, GIS),
-                  and custom tags (Daily, Monthly, Quarterly). Advanced search, filter, and favorites.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <TrendingUp className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">SharePoint Integration</p>
-                <p className="text-sm text-muted-foreground">
-                  Link to SharePoint-hosted documents with role-based access control. Support for document libraries,
-                  version history, and collaborative editing.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <LineChart className="w-5 h-5 text-pink-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Custom Dashboards</p>
-                <p className="text-sm text-muted-foreground">
-                  Create custom interactive dashboards using Tableau, Looker, Metabase, or custom React components.
-                  Support for data visualization, real-time updates, and drill-down capabilities.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <BarChart3 className="w-5 h-5 text-teal-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Role-Based Access Control</p>
-                <p className="text-sm text-muted-foreground">
-                  Integrate with enterprise identity providers (Azure AD, LDAP, Okta) for authentication.
-                  Granular permissions ensure users only see reports they're authorized to access.
-                </p>
-              </div>
-            </li>
-
-            <li className="flex items-start gap-3">
-              <TrendingUp className="w-5 h-5 text-cyan-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Usage Analytics & Audit Trail</p>
-                <p className="text-sm text-muted-foreground">
-                  Track report views, downloads, and user interactions. Generate usage reports for compliance
-                  and optimization. Full audit logging for data governance requirements.
-                </p>
-              </div>
-            </li>
-          </ul>
-
-          <div className="mt-6 p-4 bg-violet-500/10 border border-violet-500/20 rounded-lg">
-            <p className="text-sm text-violet-600 dark:text-violet-400">
-              <strong>Coming in Phase 2:</strong> This feature is currently under development and will be
-              available in the next major release of FlowForge.
-            </p>
-          </div>
-        </div>
+              <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-sm text-foreground-muted">{feature.description}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )
