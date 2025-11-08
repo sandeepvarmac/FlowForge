@@ -155,15 +155,119 @@ CREATE TABLE IF NOT EXISTS job_executions (
 CREATE TABLE IF NOT EXISTS dq_rules (
   id TEXT PRIMARY KEY,
   job_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  rule_type TEXT NOT NULL CHECK(rule_type IN ('not_null', 'unique', 'range', 'pattern', 'custom')),
+  rule_id TEXT NOT NULL, -- Unique rule identifier (e.g., 'email_format_validation')
+  rule_name TEXT NOT NULL, -- Human-readable name
   column_name TEXT NOT NULL,
-  parameters TEXT, -- JSON
-  severity TEXT NOT NULL CHECK(severity IN ('warning', 'error')),
+  rule_type TEXT NOT NULL CHECK(rule_type IN ('not_null', 'unique', 'range', 'pattern', 'enum', 'custom')),
+  parameters TEXT, -- JSON {min, max, pattern, allowed_values, custom_sql}
+
+  -- AI-generated metadata
+  confidence INTEGER DEFAULT 0, -- AI confidence score (0-100)
+  current_compliance TEXT, -- e.g., "95% of records pass"
+  reasoning TEXT, -- AI explanation for this rule
+  ai_generated INTEGER DEFAULT 0, -- 1 if AI suggested, 0 if user-created
+
+  severity TEXT NOT NULL CHECK(severity IN ('error', 'warning', 'info')),
   is_active INTEGER DEFAULT 1,
   created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
 
   FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+
+-- Quality Rule Execution Results table
+CREATE TABLE IF NOT EXISTS dq_rule_executions (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL, -- FK to dq_rules.id
+  job_execution_id TEXT NOT NULL, -- FK to job_executions.id
+  execution_time INTEGER NOT NULL,
+
+  -- Results
+  status TEXT NOT NULL CHECK(status IN ('passed', 'failed', 'warning', 'skipped')),
+  records_checked INTEGER DEFAULT 0,
+  records_passed INTEGER DEFAULT 0,
+  records_failed INTEGER DEFAULT 0,
+  pass_percentage REAL DEFAULT 0.0,
+
+  -- Failed records (sample)
+  failed_records_sample TEXT, -- JSON array of failed records
+  error_message TEXT,
+
+  created_at INTEGER NOT NULL,
+
+  FOREIGN KEY (rule_id) REFERENCES dq_rules(id) ON DELETE CASCADE,
+  FOREIGN KEY (job_execution_id) REFERENCES job_executions(id) ON DELETE CASCADE
+);
+
+-- Quality Quarantine table (stores records that failed quality checks)
+CREATE TABLE IF NOT EXISTS dq_quarantine (
+  id TEXT PRIMARY KEY,
+  rule_execution_id TEXT NOT NULL,
+  job_execution_id TEXT NOT NULL,
+  record_data TEXT NOT NULL, -- JSON of the failed record
+  failure_reason TEXT NOT NULL,
+  quarantine_status TEXT CHECK(quarantine_status IN ('quarantined', 'approved', 'rejected', 'fixed')),
+  reviewed_by TEXT,
+  reviewed_at INTEGER,
+  created_at INTEGER NOT NULL,
+
+  FOREIGN KEY (rule_execution_id) REFERENCES dq_rule_executions(id) ON DELETE CASCADE,
+  FOREIGN KEY (job_execution_id) REFERENCES job_executions(id) ON DELETE CASCADE
+);
+
+-- Reconciliation Rules table
+CREATE TABLE IF NOT EXISTS reconciliation_rules (
+  id TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL,
+  rule_name TEXT NOT NULL,
+  rule_type TEXT NOT NULL CHECK(rule_type IN ('count', 'sum', 'hash', 'column', 'custom')),
+
+  -- Source and target layers
+  source_layer TEXT NOT NULL CHECK(source_layer IN ('bronze', 'silver', 'gold')),
+  target_layer TEXT NOT NULL CHECK(target_layer IN ('bronze', 'silver', 'gold')),
+
+  -- Configuration
+  source_table TEXT NOT NULL,
+  target_table TEXT,
+  column_name TEXT, -- For sum/column reconciliation
+  tolerance_percentage REAL DEFAULT 0.0, -- Allow X% variance
+
+  -- AI-generated metadata
+  ai_generated INTEGER DEFAULT 0,
+  confidence INTEGER DEFAULT 0,
+  reasoning TEXT,
+
+  is_active INTEGER DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+
+-- Reconciliation Execution Results table
+CREATE TABLE IF NOT EXISTS reconciliation_executions (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL,
+  execution_id TEXT NOT NULL, -- FK to executions.id
+  execution_time INTEGER NOT NULL,
+
+  -- Results
+  status TEXT NOT NULL CHECK(status IN ('passed', 'failed', 'warning')),
+  source_value TEXT, -- Stringified value (could be count, sum, etc.)
+  target_value TEXT,
+  difference TEXT,
+  difference_percentage REAL,
+
+  -- AI explanation
+  ai_explanation TEXT, -- AI-generated explanation of discrepancy
+
+  pass_threshold_met INTEGER DEFAULT 1, -- 1 if within tolerance
+  error_message TEXT,
+
+  created_at INTEGER NOT NULL,
+
+  FOREIGN KEY (rule_id) REFERENCES reconciliation_rules(id) ON DELETE CASCADE,
+  FOREIGN KEY (execution_id) REFERENCES executions(id) ON DELETE CASCADE
 );
 
 -- Metadata Catalog table
@@ -235,5 +339,13 @@ CREATE INDEX IF NOT EXISTS idx_metadata_layer ON metadata_catalog(layer);
 CREATE INDEX IF NOT EXISTS idx_metadata_job_id ON metadata_catalog(job_id);
 CREATE INDEX IF NOT EXISTS idx_metadata_environment ON metadata_catalog(environment);
 CREATE INDEX IF NOT EXISTS idx_dq_rules_job_id ON dq_rules(job_id);
+CREATE INDEX IF NOT EXISTS idx_dq_rules_active ON dq_rules(is_active);
+CREATE INDEX IF NOT EXISTS idx_dq_rule_executions_rule_id ON dq_rule_executions(rule_id);
+CREATE INDEX IF NOT EXISTS idx_dq_rule_executions_job_exec ON dq_rule_executions(job_execution_id);
+CREATE INDEX IF NOT EXISTS idx_dq_quarantine_status ON dq_quarantine(quarantine_status);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_rules_workflow ON reconciliation_rules(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_rules_active ON reconciliation_rules(is_active);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_executions_rule ON reconciliation_executions(rule_id);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_executions_exec ON reconciliation_executions(execution_id);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
 `;
