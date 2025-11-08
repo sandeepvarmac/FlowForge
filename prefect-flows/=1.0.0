@@ -1,0 +1,618 @@
+Collecting prefect
+  Downloading prefect-3.2.15-py3-none-any.whl.metadata (12 kB)
+Collecting boto3
+  Using cached boto3-1.40.55-py3-none-any.whl.metadata (6.6 kB)
+Collecting python-dotenv
+  Using cached python_dotenv-1.1.1-py3-none-any.whl.metadata (24 kB)
+Collecting aiosqlite<1.0.0,>=0.17.0 (from prefect)
+  Using cached aiosqlite-0.21.0-py3-none-any.whl.metadata (4.3 kB)
+Collecting alembic<2.0.0,>=1.7.5 (from prefect)
+  Using cached alembic-1.17.0-py3-none-any.whl.metadata (7.2 kB)
+Collecting anyio<5.0.0,>=4.4.0 (from prefect)
+  Using cached anyio-4.11.0-py3-none-any.whl.metadata (4.1 kB)
+Collecting apprise<2.0.0,>=1.1.0 (from prefect)
+  Using cached apprise-1.9.5-py3-none-any.whl.metadata (56 kB)
+Collecting asgi-lifespan<3.0,>=1.0 (from prefect)
+  Using cached asgi_lifespan-2.1.0-py3-none-any.whl.metadata (10 kB)
+Collecting asyncpg<1.0.0,>=0.23 (from prefect)
+  Downloading asyncpg-0.30.0.tar.gz (957 kB)
+     ---------------------------------------- 957.7/957.7 kB 14.5 MB/s  0:00:00
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting cachetools<6.0,>=5.3 (from prefect)
+  Downloading cachetools-5.5.2-py3-none-any.whl.metadata (5.4 kB)
+Collecting click<8.2,>=8.0 (from prefect)
+  Using cached click-8.1.8-py3-none-any.whl.metadata (2.3 kB)
+Collecting cloudpickle<4.0,>=2.0 (from prefect)
+  Using cached cloudpickle-3.1.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting coolname<3.0.0,>=1.0.4 (from prefect)
+  Using cached coolname-2.2.0-py2.py3-none-any.whl.metadata (6.2 kB)
+Collecting cryptography>=36.0.1 (from prefect)
+  Using cached cryptography-46.0.3-cp311-abi3-win_amd64.whl.metadata (5.7 kB)
+Collecting dateparser<2.0.0,>=1.1.1 (from prefect)
+  Using cached dateparser-1.2.2-py3-none-any.whl.metadata (29 kB)
+Collecting docker<8.0,>=4.0 (from prefect)
+  Using cached docker-7.1.0-py3-none-any.whl.metadata (3.8 kB)
+Collecting exceptiongroup>=1.0.0 (from prefect)
+  Using cached exceptiongroup-1.3.0-py3-none-any.whl.metadata (6.7 kB)
+Collecting fastapi<1.0.0,>=0.111.0 (from prefect)
+  Downloading fastapi-0.119.1-py3-none-any.whl.metadata (28 kB)
+Collecting fsspec>=2022.5.0 (from prefect)
+  Using cached fsspec-2025.9.0-py3-none-any.whl.metadata (10 kB)
+Collecting graphviz>=0.20.1 (from prefect)
+  Using cached graphviz-0.21-py3-none-any.whl.metadata (12 kB)
+Collecting griffe<2.0.0,>=0.49.0 (from prefect)
+  Using cached griffe-1.14.0-py3-none-any.whl.metadata (5.1 kB)
+Collecting httpcore<2.0.0,>=1.0.5 (from prefect)
+  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting httpx!=0.23.2,>=0.23 (from httpx[http2]!=0.23.2,>=0.23->prefect)
+  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting humanize<5.0.0,>=4.9.0 (from prefect)
+  Using cached humanize-4.14.0-py3-none-any.whl.metadata (7.8 kB)
+Collecting jinja2-humanize-extension>=0.4.0 (from prefect)
+  Using cached jinja2_humanize_extension-0.4.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting jinja2<4.0.0,>=3.0.0 (from prefect)
+  Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting jsonpatch<2.0,>=1.32 (from prefect)
+  Using cached jsonpatch-1.33-py2.py3-none-any.whl.metadata (3.0 kB)
+Collecting jsonschema<5.0.0,>=4.0.0 (from prefect)
+  Using cached jsonschema-4.25.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting opentelemetry-api<2.0.0,>=1.27.0 (from prefect)
+  Downloading opentelemetry_api-1.38.0-py3-none-any.whl.metadata (1.5 kB)
+Collecting orjson<4.0,>=3.7 (from prefect)
+  Using cached orjson-3.11.3-cp314-cp314-win_amd64.whl.metadata (43 kB)
+Collecting packaging<24.3,>=21.3 (from prefect)
+  Downloading packaging-24.2-py3-none-any.whl.metadata (3.2 kB)
+Collecting pathspec>=0.8.0 (from prefect)
+  Using cached pathspec-0.12.1-py3-none-any.whl.metadata (21 kB)
+Collecting pendulum<4,>=3.0.0 (from prefect)
+  Using cached pendulum-3.1.0-py3-none-any.whl.metadata (6.8 kB)
+Collecting prometheus-client>=0.20.0 (from prefect)
+  Downloading prometheus_client-0.23.1-py3-none-any.whl.metadata (1.9 kB)
+Collecting pydantic!=2.10.0,<3.0.0,>=2.9 (from prefect)
+  Using cached pydantic-2.12.3-py3-none-any.whl.metadata (87 kB)
+Collecting pydantic-core<3.0.0,>=2.12.0 (from prefect)
+  Using cached pydantic_core-2.41.4-cp314-cp314-win_amd64.whl.metadata (7.4 kB)
+Collecting pydantic-extra-types<3.0.0,>=2.8.2 (from prefect)
+  Downloading pydantic_extra_types-2.10.6-py3-none-any.whl.metadata (4.0 kB)
+Collecting pydantic-settings>2.2.1 (from prefect)
+  Using cached pydantic_settings-2.11.0-py3-none-any.whl.metadata (3.4 kB)
+Collecting python-dateutil<3.0.0,>=2.8.2 (from prefect)
+  Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting python-slugify<9.0,>=5.0 (from prefect)
+  Using cached python_slugify-8.0.4-py2.py3-none-any.whl.metadata (8.5 kB)
+Collecting python-socks<3.0,>=2.5.3 (from python-socks[asyncio]<3.0,>=2.5.3->prefect)
+  Downloading python_socks-2.7.2-py3-none-any.whl.metadata (8.0 kB)
+Collecting pytz<2026,>=2021.1 (from prefect)
+  Using cached pytz-2025.2-py2.py3-none-any.whl.metadata (22 kB)
+Collecting pyyaml<7.0.0,>=5.4.1 (from prefect)
+  Using cached pyyaml-6.0.3-cp314-cp314-win_amd64.whl.metadata (2.4 kB)
+Collecting readchar<5.0.0,>=4.0.0 (from prefect)
+  Using cached readchar-4.2.1-py3-none-any.whl.metadata (7.5 kB)
+Collecting rfc3339-validator<0.2.0,>=0.1.4 (from prefect)
+  Using cached rfc3339_validator-0.1.4-py2.py3-none-any.whl.metadata (1.5 kB)
+Collecting rich<14.0,>=11.0 (from prefect)
+  Downloading rich-13.9.4-py3-none-any.whl.metadata (18 kB)
+Collecting ruamel-yaml>=0.17.0 (from prefect)
+  Using cached ruamel.yaml-0.18.15-py3-none-any.whl.metadata (25 kB)
+Collecting sniffio<2.0.0,>=1.3.0 (from prefect)
+  Using cached sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+Collecting sqlalchemy<3.0.0,>=2.0 (from sqlalchemy[asyncio]<3.0.0,>=2.0->prefect)
+  Using cached sqlalchemy-2.0.44-py3-none-any.whl.metadata (9.5 kB)
+Collecting toml>=0.10.0 (from prefect)
+  Using cached toml-0.10.2-py2.py3-none-any.whl.metadata (7.1 kB)
+Collecting typer!=0.12.2,<0.16.0,>=0.12.0 (from prefect)
+  Downloading typer-0.15.4-py3-none-any.whl.metadata (15 kB)
+Collecting typing-extensions<5.0.0,>=4.10.0 (from prefect)
+  Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting ujson<6.0.0,>=5.8.0 (from prefect)
+  Using cached ujson-5.11.0-cp314-cp314-win_amd64.whl.metadata (9.6 kB)
+Collecting uv>=0.6.0 (from prefect)
+  Downloading uv-0.9.4-py3-none-win_amd64.whl.metadata (12 kB)
+Collecting uvicorn!=0.29.0,>=0.14.0 (from prefect)
+  Using cached uvicorn-0.38.0-py3-none-any.whl.metadata (6.8 kB)
+Collecting websockets<16.0,>=13.0 (from prefect)
+  Downloading websockets-15.0.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting Mako (from alembic<2.0.0,>=1.7.5->prefect)
+  Using cached mako-1.3.10-py3-none-any.whl.metadata (2.9 kB)
+Collecting idna>=2.8 (from anyio<5.0.0,>=4.4.0->prefect)
+  Using cached idna-3.11-py3-none-any.whl.metadata (8.4 kB)
+Collecting requests (from apprise<2.0.0,>=1.1.0->prefect)
+  Using cached requests-2.32.5-py3-none-any.whl.metadata (4.9 kB)
+Collecting requests-oauthlib (from apprise<2.0.0,>=1.1.0->prefect)
+  Using cached requests_oauthlib-2.0.0-py2.py3-none-any.whl.metadata (11 kB)
+Collecting markdown (from apprise<2.0.0,>=1.1.0->prefect)
+  Using cached markdown-3.9-py3-none-any.whl.metadata (5.1 kB)
+Collecting certifi (from apprise<2.0.0,>=1.1.0->prefect)
+  Using cached certifi-2025.10.5-py3-none-any.whl.metadata (2.5 kB)
+Collecting tzdata (from apprise<2.0.0,>=1.1.0->prefect)
+  Using cached tzdata-2025.2-py2.py3-none-any.whl.metadata (1.4 kB)
+Collecting colorama (from click<8.2,>=8.0->prefect)
+  Using cached colorama-0.4.6-py2.py3-none-any.whl.metadata (17 kB)
+Collecting regex>=2024.9.11 (from dateparser<2.0.0,>=1.1.1->prefect)
+  Using cached regex-2025.9.18-cp314-cp314-win_amd64.whl.metadata (41 kB)
+Collecting tzlocal>=0.2 (from dateparser<2.0.0,>=1.1.1->prefect)
+  Using cached tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting pywin32>=304 (from docker<8.0,>=4.0->prefect)
+  Using cached pywin32-311-cp314-cp314-win_amd64.whl.metadata (10 kB)
+Collecting urllib3>=1.26.0 (from docker<8.0,>=4.0->prefect)
+  Using cached urllib3-2.5.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting starlette<0.49.0,>=0.40.0 (from fastapi<1.0.0,>=0.111.0->prefect)
+  Downloading starlette-0.48.0-py3-none-any.whl.metadata (6.3 kB)
+Collecting h11>=0.16 (from httpcore<2.0.0,>=1.0.5->prefect)
+  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting MarkupSafe>=2.0 (from jinja2<4.0.0,>=3.0.0->prefect)
+  Using cached markupsafe-3.0.3-cp314-cp314-win_amd64.whl.metadata (2.8 kB)
+Collecting jsonpointer>=1.9 (from jsonpatch<2.0,>=1.32->prefect)
+  Using cached jsonpointer-3.0.0-py2.py3-none-any.whl.metadata (2.3 kB)
+Collecting attrs>=22.2.0 (from jsonschema<5.0.0,>=4.0.0->prefect)
+  Using cached attrs-25.4.0-py3-none-any.whl.metadata (10 kB)
+Collecting jsonschema-specifications>=2023.03.6 (from jsonschema<5.0.0,>=4.0.0->prefect)
+  Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+Collecting referencing>=0.28.4 (from jsonschema<5.0.0,>=4.0.0->prefect)
+  Using cached referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+Collecting rpds-py>=0.7.1 (from jsonschema<5.0.0,>=4.0.0->prefect)
+  Using cached rpds_py-0.27.1-cp314-cp314-win_amd64.whl.metadata (4.3 kB)
+Collecting importlib-metadata<8.8.0,>=6.0 (from opentelemetry-api<2.0.0,>=1.27.0->prefect)
+  Downloading importlib_metadata-8.7.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting zipp>=3.20 (from importlib-metadata<8.8.0,>=6.0->opentelemetry-api<2.0.0,>=1.27.0->prefect)
+  Downloading zipp-3.23.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting annotated-types>=0.6.0 (from pydantic!=2.10.0,<3.0.0,>=2.9->prefect)
+  Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic!=2.10.0,<3.0.0,>=2.9->prefect)
+  Using cached typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting six>=1.5 (from python-dateutil<3.0.0,>=2.8.2->prefect)
+  Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting text-unidecode>=1.3 (from python-slugify<9.0,>=5.0->prefect)
+  Using cached text_unidecode-1.3-py2.py3-none-any.whl.metadata (2.4 kB)
+Collecting markdown-it-py>=2.2.0 (from rich<14.0,>=11.0->prefect)
+  Using cached markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich<14.0,>=11.0->prefect)
+  Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
+Collecting greenlet>=1 (from sqlalchemy<3.0.0,>=2.0->sqlalchemy[asyncio]<3.0.0,>=2.0->prefect)
+  Using cached greenlet-3.2.4-cp314-cp314-win_amd64.whl.metadata (4.2 kB)
+Collecting shellingham>=1.3.0 (from typer!=0.12.2,<0.16.0,>=0.12.0->prefect)
+  Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Collecting botocore<1.41.0,>=1.40.55 (from boto3)
+  Using cached botocore-1.40.55-py3-none-any.whl.metadata (5.7 kB)
+Collecting jmespath<2.0.0,>=0.7.1 (from boto3)
+  Using cached jmespath-1.0.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting s3transfer<0.15.0,>=0.14.0 (from boto3)
+  Using cached s3transfer-0.14.0-py3-none-any.whl.metadata (1.7 kB)
+Collecting cffi>=2.0.0 (from cryptography>=36.0.1->prefect)
+  Using cached cffi-2.0.0-cp314-cp314-win_amd64.whl.metadata (2.6 kB)
+Collecting pycparser (from cffi>=2.0.0->cryptography>=36.0.1->prefect)
+  Using cached pycparser-2.23-py3-none-any.whl.metadata (993 bytes)
+Collecting h2<5,>=3 (from httpx[http2]!=0.23.2,>=0.23->prefect)
+  Using cached h2-4.3.0-py3-none-any.whl.metadata (5.1 kB)
+Collecting hyperframe<7,>=6.1 (from h2<5,>=3->httpx[http2]!=0.23.2,>=0.23->prefect)
+  Using cached hyperframe-6.1.0-py3-none-any.whl.metadata (4.3 kB)
+Collecting hpack<5,>=4.1 (from h2<5,>=3->httpx[http2]!=0.23.2,>=0.23->prefect)
+  Using cached hpack-4.1.0-py3-none-any.whl.metadata (4.6 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich<14.0,>=11.0->prefect)
+  Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Collecting charset_normalizer<4,>=2 (from requests->apprise<2.0.0,>=1.1.0->prefect)
+  Using cached charset_normalizer-3.4.4-cp314-cp314-win_amd64.whl.metadata (38 kB)
+Collecting oauthlib>=3.0.0 (from requests-oauthlib->apprise<2.0.0,>=1.1.0->prefect)
+  Using cached oauthlib-3.3.1-py3-none-any.whl.metadata (7.9 kB)
+Downloading prefect-3.2.15-py3-none-any.whl (6.0 MB)
+   ---------------------------------------- 6.0/6.0 MB 12.0 MB/s  0:00:00
+Using cached aiosqlite-0.21.0-py3-none-any.whl (15 kB)
+Using cached alembic-1.17.0-py3-none-any.whl (247 kB)
+Using cached anyio-4.11.0-py3-none-any.whl (109 kB)
+Using cached apprise-1.9.5-py3-none-any.whl (1.4 MB)
+Using cached asgi_lifespan-2.1.0-py3-none-any.whl (10 kB)
+Downloading cachetools-5.5.2-py3-none-any.whl (10 kB)
+Using cached click-8.1.8-py3-none-any.whl (98 kB)
+Using cached cloudpickle-3.1.1-py3-none-any.whl (20 kB)
+Using cached coolname-2.2.0-py2.py3-none-any.whl (37 kB)
+Using cached dateparser-1.2.2-py3-none-any.whl (315 kB)
+Using cached docker-7.1.0-py3-none-any.whl (147 kB)
+Downloading fastapi-0.119.1-py3-none-any.whl (108 kB)
+Using cached griffe-1.14.0-py3-none-any.whl (144 kB)
+Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Using cached humanize-4.14.0-py3-none-any.whl (132 kB)
+Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+Using cached jsonpatch-1.33-py2.py3-none-any.whl (12 kB)
+Using cached jsonschema-4.25.1-py3-none-any.whl (90 kB)
+Downloading opentelemetry_api-1.38.0-py3-none-any.whl (65 kB)
+Downloading importlib_metadata-8.7.0-py3-none-any.whl (27 kB)
+Using cached orjson-3.11.3-cp314-cp314-win_amd64.whl (131 kB)
+Downloading packaging-24.2-py3-none-any.whl (65 kB)
+Using cached pendulum-3.1.0-py3-none-any.whl (111 kB)
+Using cached pydantic-2.12.3-py3-none-any.whl (462 kB)
+Using cached pydantic_core-2.41.4-cp314-cp314-win_amd64.whl (2.0 MB)
+Downloading pydantic_extra_types-2.10.6-py3-none-any.whl (40 kB)
+Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Using cached python_slugify-8.0.4-py2.py3-none-any.whl (10 kB)
+Downloading python_socks-2.7.2-py3-none-any.whl (55 kB)
+Using cached pytz-2025.2-py2.py3-none-any.whl (509 kB)
+Using cached pyyaml-6.0.3-cp314-cp314-win_amd64.whl (156 kB)
+Using cached readchar-4.2.1-py3-none-any.whl (9.3 kB)
+Using cached rfc3339_validator-0.1.4-py2.py3-none-any.whl (3.5 kB)
+Downloading rich-13.9.4-py3-none-any.whl (242 kB)
+Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
+Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
+Downloading sqlalchemy-2.0.44-py3-none-any.whl (1.9 MB)
+   ---------------------------------------- 1.9/1.9 MB 17.5 MB/s  0:00:00
+Downloading starlette-0.48.0-py3-none-any.whl (73 kB)
+Downloading typer-0.15.4-py3-none-any.whl (45 kB)
+Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+Using cached ujson-5.11.0-cp314-cp314-win_amd64.whl (45 kB)
+Downloading websockets-15.0.1-py3-none-any.whl (169 kB)
+Using cached boto3-1.40.55-py3-none-any.whl (139 kB)
+Using cached botocore-1.40.55-py3-none-any.whl (14.1 MB)
+Using cached jmespath-1.0.1-py3-none-any.whl (20 kB)
+Using cached s3transfer-0.14.0-py3-none-any.whl (85 kB)
+Using cached urllib3-2.5.0-py3-none-any.whl (129 kB)
+Using cached python_dotenv-1.1.1-py3-none-any.whl (20 kB)
+Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Using cached attrs-25.4.0-py3-none-any.whl (67 kB)
+Using cached colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+Using cached cryptography-46.0.3-cp311-abi3-win_amd64.whl (3.5 MB)
+Using cached cffi-2.0.0-cp314-cp314-win_amd64.whl (185 kB)
+Using cached exceptiongroup-1.3.0-py3-none-any.whl (16 kB)
+Using cached fsspec-2025.9.0-py3-none-any.whl (199 kB)
+Using cached graphviz-0.21-py3-none-any.whl (47 kB)
+Using cached greenlet-3.2.4-cp314-cp314-win_amd64.whl (303 kB)
+Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+Using cached h2-4.3.0-py3-none-any.whl (61 kB)
+Using cached hpack-4.1.0-py3-none-any.whl (34 kB)
+Using cached hyperframe-6.1.0-py3-none-any.whl (13 kB)
+Using cached idna-3.11-py3-none-any.whl (71 kB)
+Using cached jinja2_humanize_extension-0.4.0-py3-none-any.whl (4.8 kB)
+Using cached jsonpointer-3.0.0-py2.py3-none-any.whl (7.6 kB)
+Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+Using cached markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
+Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Using cached markupsafe-3.0.3-cp314-cp314-win_amd64.whl (15 kB)
+Using cached pathspec-0.12.1-py3-none-any.whl (31 kB)
+Downloading prometheus_client-0.23.1-py3-none-any.whl (61 kB)
+Using cached pydantic_settings-2.11.0-py3-none-any.whl (48 kB)
+Using cached pywin32-311-cp314-cp314-win_amd64.whl (9.7 MB)
+Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
+Using cached regex-2025.9.18-cp314-cp314-win_amd64.whl (278 kB)
+Using cached requests-2.32.5-py3-none-any.whl (64 kB)
+Using cached charset_normalizer-3.4.4-cp314-cp314-win_amd64.whl (107 kB)
+Using cached certifi-2025.10.5-py3-none-any.whl (163 kB)
+Using cached rpds_py-0.27.1-cp314-cp314-win_amd64.whl (233 kB)
+Using cached ruamel.yaml-0.18.15-py3-none-any.whl (119 kB)
+Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+Using cached text_unidecode-1.3-py2.py3-none-any.whl (78 kB)
+Using cached toml-0.10.2-py2.py3-none-any.whl (16 kB)
+Using cached typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Using cached tzdata-2025.2-py2.py3-none-any.whl (347 kB)
+Using cached tzlocal-5.3.1-py3-none-any.whl (18 kB)
+Downloading uv-0.9.4-py3-none-win_amd64.whl (21.4 MB)
+   ---------------------------------------- 21.4/21.4 MB 18.6 MB/s  0:00:01
+Using cached uvicorn-0.38.0-py3-none-any.whl (68 kB)
+Downloading zipp-3.23.0-py3-none-any.whl (10 kB)
+Using cached mako-1.3.10-py3-none-any.whl (78 kB)
+Using cached markdown-3.9-py3-none-any.whl (107 kB)
+Using cached pycparser-2.23-py3-none-any.whl (118 kB)
+Using cached requests_oauthlib-2.0.0-py2.py3-none-any.whl (24 kB)
+Using cached oauthlib-3.3.1-py3-none-any.whl (160 kB)
+Building wheels for collected packages: asyncpg
+  Building wheel for asyncpg (pyproject.toml): started
+  Building wheel for asyncpg (pyproject.toml): finished with status 'error'
+  error: subprocess-exited-with-error
+  
+  Building wheel for asyncpg (pyproject.toml) did not run successfully.
+  exit code: 1
+  
+  [299 lines of output]
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+  !!
+  
+          ********************************************************************************
+          Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+  
+          By 2026-Feb-18, you need to update your project and remove deprecated calls
+          or your builds will no longer be supported.
+  
+          See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+          ********************************************************************************
+  
+  !!
+    corresp(dist, value, root_dir)
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+  !!
+  
+          ********************************************************************************
+          Please consider removing the following classifiers in favor of a SPDX license expression:
+  
+          License :: OSI Approved :: Apache Software License
+  
+          See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+          ********************************************************************************
+  
+  !!
+    dist._finalize_license_expression()
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\dist.py:759: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+  !!
+  
+          ********************************************************************************
+          Please consider removing the following classifiers in favor of a SPDX license expression:
+  
+          License :: OSI Approved :: Apache Software License
+  
+          See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+          ********************************************************************************
+  
+  !!
+    self._finalize_license_expression()
+  running bdist_wheel
+  running build
+  running build_py
+  creating build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\cluster.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\compat.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\connection.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\connect_utils.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\connresource.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\cursor.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\introspection.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\pool.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\prepared_stmt.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\serverversion.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\transaction.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\types.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\utils.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\_asyncio_compat.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\_version.py -> build\lib.win-amd64-cpython-314\asyncpg
+  copying asyncpg\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg
+  creating build\lib.win-amd64-cpython-314\asyncpg\exceptions
+  copying asyncpg\exceptions\_base.py -> build\lib.win-amd64-cpython-314\asyncpg\exceptions
+  copying asyncpg\exceptions\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg\exceptions
+  creating build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\types.py -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  creating build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  creating build\lib.win-amd64-cpython-314\asyncpg\_testbase
+  copying asyncpg\_testbase\fuzzer.py -> build\lib.win-amd64-cpython-314\asyncpg\_testbase
+  copying asyncpg\_testbase\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg\_testbase
+  creating build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\__init__.py -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  running egg_info
+  writing asyncpg.egg-info\PKG-INFO
+  writing dependency_links to asyncpg.egg-info\dependency_links.txt
+  writing requirements to asyncpg.egg-info\requires.txt
+  writing top-level names to asyncpg.egg-info\top_level.txt
+  reading manifest file 'asyncpg.egg-info\SOURCES.txt'
+  reading manifest template 'MANIFEST.in'
+  warning: no files found matching '*.py' under directory 'examples'
+  adding license file 'LICENSE'
+  adding license file 'AUTHORS'
+  writing manifest file 'asyncpg.egg-info\SOURCES.txt'
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\command\build_py.py:212: _Warning: Package 'asyncpg.pgproto' is absent from the `packages` configuration.
+  !!
+  
+          ********************************************************************************
+          ############################
+          # Package would be ignored #
+          ############################
+          Python recognizes 'asyncpg.pgproto' as an importable package[^1],
+          but it is absent from setuptools' `packages` configuration.
+  
+          This leads to an ambiguous overall configuration. If you want to distribute this
+          package, please make sure that 'asyncpg.pgproto' is explicitly added
+          to the `packages` configuration field.
+  
+          Alternatively, you can also rely on setuptools' discovery methods
+          (for example by using `find_namespace_packages(...)`/`find_namespace:`
+          instead of `find_packages(...)`/`find:`).
+  
+          You can read more about "package discovery" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/package_discovery.html
+  
+          If you don't want 'asyncpg.pgproto' to be distributed and are
+          already explicitly excluding 'asyncpg.pgproto' via
+          `find_namespace_packages(...)/find_namespace` or `find_packages(...)/find`,
+          you can try to use `exclude_package_data`, or `include-package-data=False` in
+          combination with a more fine grained `package-data` configuration.
+  
+          You can read more about "package data files" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/datafiles.html
+  
+  
+          [^1]: For Python, any directory (with suitable naming) can be imported,
+                even if it does not contain any `.py` files.
+                On the other hand, currently there is no concept of package data
+                directory, all directories are treated like packages.
+          ********************************************************************************
+  
+  !!
+    check.warn(importable)
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\command\build_py.py:212: _Warning: Package 'asyncpg.protocol' is absent from the `packages` configuration.
+  !!
+  
+          ********************************************************************************
+          ############################
+          # Package would be ignored #
+          ############################
+          Python recognizes 'asyncpg.protocol' as an importable package[^1],
+          but it is absent from setuptools' `packages` configuration.
+  
+          This leads to an ambiguous overall configuration. If you want to distribute this
+          package, please make sure that 'asyncpg.protocol' is explicitly added
+          to the `packages` configuration field.
+  
+          Alternatively, you can also rely on setuptools' discovery methods
+          (for example by using `find_namespace_packages(...)`/`find_namespace:`
+          instead of `find_packages(...)`/`find:`).
+  
+          You can read more about "package discovery" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/package_discovery.html
+  
+          If you don't want 'asyncpg.protocol' to be distributed and are
+          already explicitly excluding 'asyncpg.protocol' via
+          `find_namespace_packages(...)/find_namespace` or `find_packages(...)/find`,
+          you can try to use `exclude_package_data`, or `include-package-data=False` in
+          combination with a more fine grained `package-data` configuration.
+  
+          You can read more about "package data files" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/datafiles.html
+  
+  
+          [^1]: For Python, any directory (with suitable naming) can be imported,
+                even if it does not contain any `.py` files.
+                On the other hand, currently there is no concept of package data
+                directory, all directories are treated like packages.
+          ********************************************************************************
+  
+  !!
+    check.warn(importable)
+  C:\Users\sandeep.varma\AppData\Local\Temp\pip-build-env-ujom_d62\overlay\Lib\site-packages\setuptools\command\build_py.py:212: _Warning: Package 'asyncpg.protocol.record' is absent from the `packages` configuration.
+  !!
+  
+          ********************************************************************************
+          ############################
+          # Package would be ignored #
+          ############################
+          Python recognizes 'asyncpg.protocol.record' as an importable package[^1],
+          but it is absent from setuptools' `packages` configuration.
+  
+          This leads to an ambiguous overall configuration. If you want to distribute this
+          package, please make sure that 'asyncpg.protocol.record' is explicitly added
+          to the `packages` configuration field.
+  
+          Alternatively, you can also rely on setuptools' discovery methods
+          (for example by using `find_namespace_packages(...)`/`find_namespace:`
+          instead of `find_packages(...)`/`find:`).
+  
+          You can read more about "package discovery" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/package_discovery.html
+  
+          If you don't want 'asyncpg.protocol.record' to be distributed and are
+          already explicitly excluding 'asyncpg.protocol.record' via
+          `find_namespace_packages(...)/find_namespace` or `find_packages(...)/find`,
+          you can try to use `exclude_package_data`, or `include-package-data=False` in
+          combination with a more fine grained `package-data` configuration.
+  
+          You can read more about "package data files" on setuptools documentation page:
+  
+          - https://setuptools.pypa.io/en/latest/userguide/datafiles.html
+  
+  
+          [^1]: For Python, any directory (with suitable naming) can be imported,
+                even if it does not contain any `.py` files.
+                On the other hand, currently there is no concept of package data
+                directory, all directories are treated like packages.
+          ********************************************************************************
+  
+  !!
+    check.warn(importable)
+  copying asyncpg\pgproto\__init__.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\buffer.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\buffer.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\consts.pxi -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\cpythonx.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\debug.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\frb.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\frb.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\hton.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\pgproto.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\pgproto.pyi -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\pgproto.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\tohex.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\pgproto\uuid.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto
+  copying asyncpg\protocol\consts.pxi -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\coreproto.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\coreproto.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\cpythonx.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\encodings.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\pgtypes.pxi -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\prepared_stmt.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\prepared_stmt.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\protocol.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\protocol.pyi -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\protocol.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\scram.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\scram.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\settings.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  copying asyncpg\protocol\settings.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol
+  creating build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\__init__.pxd -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\bits.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\bytea.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\context.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\datetime.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\float.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\geometry.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\hstore.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\int.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\json.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\jsonpath.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\misc.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\network.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\numeric.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\pg_snapshot.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\text.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\tid.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\pgproto\codecs\uuid.pyx -> build\lib.win-amd64-cpython-314\asyncpg\pgproto\codecs
+  copying asyncpg\protocol\codecs\array.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\base.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\base.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\pgproto.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\range.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\record.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  copying asyncpg\protocol\codecs\textutils.pyx -> build\lib.win-amd64-cpython-314\asyncpg\protocol\codecs
+  creating build\lib.win-amd64-cpython-314\asyncpg\protocol\record
+  copying asyncpg\protocol\record\__init__.pxd -> build\lib.win-amd64-cpython-314\asyncpg\protocol\record
+  running build_ext
+  building 'asyncpg.pgproto.pgproto' extension
+  creating build\temp.win-amd64-cpython-314\Release\asyncpg\pgproto
+  "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\cl.exe" /c /nologo /O2 /W3 /GL /DNDEBUG /MD -IC:\Python314\include -IC:\Python314\Include "-IC:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\include" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\ucrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\shared" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\um" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\winrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\cppwinrt" /Tcasyncpg/pgproto/pgproto.c /Fobuild\temp.win-amd64-cpython-314\Release\asyncpg\pgproto\pgproto.obj -O2
+  pgproto.c
+  asyncpg/pgproto/pgproto.c(46100): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/pgproto/pgproto.c(46215): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/pgproto/pgproto.c(46332): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/pgproto/pgproto.c(46759): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/pgproto/pgproto.c(46967): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\link.exe" /nologo /INCREMENTAL:NO /LTCG /DLL /MANIFEST:EMBED,ID=2 /MANIFESTUAC:NO /LIBPATH:C:\Python314\libs /LIBPATH:C:\Python314 /LIBPATH:C:\Python314\PCbuild\amd64 "/LIBPATH:C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\lib\x64" "/LIBPATH:C:\Program Files (x86)\Windows Kits\10\lib\10.0.19041.0\ucrt\x64" "/LIBPATH:C:\Program Files (x86)\Windows Kits\10\lib\10.0.19041.0\um\x64" /EXPORT:PyInit_pgproto build\temp.win-amd64-cpython-314\Release\asyncpg\pgproto\pgproto.obj /OUT:build\lib.win-amd64-cpython-314\asyncpg\pgproto\pgproto.cp314-win_amd64.pyd /IMPLIB:build\temp.win-amd64-cpython-314\Release\asyncpg\pgproto\pgproto.cp314-win_amd64.lib
+     Creating library build\temp.win-amd64-cpython-314\Release\asyncpg\pgproto\pgproto.cp314-win_amd64.lib and object build\temp.win-amd64-cpython-314\Release\asyncpg\pgproto\pgproto.cp314-win_amd64.exp
+  Generating code
+  Finished generating code
+  building 'asyncpg.protocol.protocol' extension
+  creating build\temp.win-amd64-cpython-314\Release\asyncpg\protocol
+  creating build\temp.win-amd64-cpython-314\Release\asyncpg\protocol\record
+  "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\cl.exe" /c /nologo /O2 /W3 /GL /DNDEBUG /MD -Iasyncpg/pgproto/ -IC:\Python314\include -IC:\Python314\Include "-IC:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\include" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\ucrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\shared" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\um" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\winrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\cppwinrt" /Tcasyncpg/protocol/protocol.c /Fobuild\temp.win-amd64-cpython-314\Release\asyncpg\protocol\protocol.obj -O2
+  protocol.c
+  asyncpg/protocol/protocol.c(105237): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/protocol/protocol.c(105587): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  asyncpg/protocol/protocol.c(105725): warning C4244: '=': conversion from 'Py_ssize_t' to 'long', possible loss of data
+  "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\bin\HostX86\x64\cl.exe" /c /nologo /O2 /W3 /GL /DNDEBUG /MD -Iasyncpg/pgproto/ -IC:\Python314\include -IC:\Python314\Include "-IC:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.29.30133\include" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\ucrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\shared" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\um" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\winrt" "-IC:\Program Files (x86)\Windows Kits\10\include\10.0.19041.0\cppwinrt" /Tcasyncpg/protocol/record/recordobj.c /Fobuild\temp.win-amd64-cpython-314\Release\asyncpg\protocol\record\recordobj.obj -O2
+  recordobj.c
+  asyncpg/protocol/record/recordobj.c(121): error C2143: syntax error: missing ';' before '}'
+  asyncpg/protocol/record/recordobj.c(495): warning C4996: '_PyUnicodeWriter_Init': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(500): warning C4996: '_PyUnicodeWriter_WriteStr': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(512): warning C4996: '_PyUnicodeWriter_WriteChar': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(540): warning C4996: '_PyUnicodeWriter_WriteStr': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(547): warning C4996: '_PyUnicodeWriter_WriteChar': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(552): warning C4996: '_PyUnicodeWriter_WriteStr': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(560): warning C4996: '_PyUnicodeWriter_WriteChar': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(566): warning C4996: '_PyUnicodeWriter_Finish': deprecated in 3.14
+  asyncpg/protocol/record/recordobj.c(570): warning C4996: '_PyUnicodeWriter_Dealloc': deprecated in 3.14
+  error: command 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Tools\\MSVC\\14.29.30133\\bin\\HostX86\\x64\\cl.exe' failed with exit code 2
+  [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+  ERROR: Failed building wheel for asyncpg
+Failed to build asyncpg
+error: failed-wheel-build-for-install
+
+Failed to build installable wheels for some pyproject.toml based projects
+
+asyncpg

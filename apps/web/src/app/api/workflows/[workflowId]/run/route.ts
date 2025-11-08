@@ -2,7 +2,47 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
 
 const PREFECT_API_URL = (process.env.PREFECT_API_URL || 'http://127.0.0.1:4200/api').replace(/\/$/, '')
+
+// Legacy deployment ID (fallback)
 const PREFECT_DEPLOYMENT_ID = process.env.PREFECT_DEPLOYMENT_ID || '6418e5a3-9205-4fa6-a5fe-6e852c32281a'
+
+// Environment-based deployment IDs
+const DEPLOYMENT_IDS = {
+  production: process.env.PREFECT_DEPLOYMENT_ID_PRODUCTION,
+  uat: process.env.PREFECT_DEPLOYMENT_ID_UAT,
+  qa: process.env.PREFECT_DEPLOYMENT_ID_QA,
+  development: process.env.PREFECT_DEPLOYMENT_ID_DEVELOPMENT,
+}
+
+/**
+ * Get deployment ID based on workflow environment and team
+ */
+function getDeploymentId(workflow: any): string {
+  const environment = workflow.environment || 'production'
+  const team = workflow.team
+
+  // Try environment + team combination first (e.g., PREFECT_DEPLOYMENT_PRODUCTION_FINANCE)
+  if (team) {
+    const teamKey = `${environment}_${team}`.toUpperCase().replace(/-/g, '_')
+    const teamDeploymentId = process.env[`PREFECT_DEPLOYMENT_${teamKey}`]
+
+    if (teamDeploymentId) {
+      console.log(`✅ Using team-based deployment: ${environment}/${team}`)
+      return teamDeploymentId
+    }
+  }
+
+  // Fallback to environment-only deployment
+  const envDeploymentId = DEPLOYMENT_IDS[environment as keyof typeof DEPLOYMENT_IDS]
+  if (envDeploymentId) {
+    console.log(`✅ Using environment-based deployment: ${environment}`)
+    return envDeploymentId
+  }
+
+  // Final fallback to legacy deployment
+  console.warn(`⚠️  No deployment configured for ${environment}/${team || 'no-team'}, using legacy deployment`)
+  return PREFECT_DEPLOYMENT_ID
+}
 
 interface PrefectRunResponse {
   id: string
@@ -61,7 +101,10 @@ export async function POST(
       )
     }
 
+    const workflowEnvironment = workflow.environment || 'production'
+    const workflowTeam = workflow.team || 'shared'
     console.log(`🚀 Scheduling Prefect runs for workflow ${workflow.name} (${workflowId})`)
+    console.log(`   Environment: ${workflowEnvironment}, Team: ${workflowTeam}`)
 
     const executionId = `exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
     const startTime = new Date().toISOString()
@@ -88,7 +131,10 @@ export async function POST(
       const fileConfig = sourceConfig?.fileConfig || {}
       const uploadMode = fileConfig.uploadMode || 'single'
       const prefectConfig = sourceConfig?.prefect ?? {}
-      const deploymentId = prefectConfig.deploymentId || PREFECT_DEPLOYMENT_ID
+
+      // Use environment-based deployment ID
+      const deploymentId = prefectConfig.deploymentId || getDeploymentId(workflow)
+
       const primaryKeys = prefectConfig.parameters?.primary_keys || []
       const columnMappings = transformationConfig?.columnMappings || null
       const hasHeader = fileConfig.hasHeader !== false  // Default to true

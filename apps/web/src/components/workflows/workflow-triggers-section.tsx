@@ -6,6 +6,7 @@ import { Plus, Clock, Link as LinkIcon, Zap, Trash2, Loader2, Calendar, AlertCir
 import { TriggersService } from '@/lib/services/triggers-service'
 import type { WorkflowTrigger } from '@/types/trigger'
 import { formatDistanceToNow } from 'date-fns'
+import cronstrue from 'cronstrue'
 
 interface WorkflowTriggersSectionProps {
   workflowId: string
@@ -41,7 +42,17 @@ const getTriggerBadgeVariant = (triggerType: string) => {
 const formatTriggerDescription = (trigger: WorkflowTrigger): string => {
   if (trigger.triggerType === 'scheduled') {
     if (trigger.cronExpression) {
-      return `Runs ${trigger.cronExpression} (${trigger.timezone || 'UTC'})`
+      try {
+        // Convert cron expression to human-readable format
+        const description = cronstrue.toString(trigger.cronExpression, {
+          use24HourTimeFormat: true,
+          throwExceptionOnParseError: false
+        })
+        return description
+      } catch (error) {
+        // Fallback to showing the cron expression if parsing fails
+        return `Runs ${trigger.cronExpression}`
+      }
     }
     return 'Scheduled trigger'
   }
@@ -241,9 +252,20 @@ export function WorkflowTriggersSection({ workflowId, onAddTrigger }: WorkflowTr
                         )}
                       </div>
 
-                      <p className="text-sm text-foreground-muted">
-                        {formatTriggerDescription(trigger)}
-                      </p>
+                      <div
+                        className="flex items-center gap-2 flex-wrap"
+                        title={trigger.triggerType === 'scheduled' && trigger.cronExpression ? `Cron: ${trigger.cronExpression}` : undefined}
+                      >
+                        <p className="text-sm text-foreground-muted">
+                          {formatTriggerDescription(trigger)}
+                        </p>
+
+                        {trigger.triggerType === 'scheduled' && trigger.timezone && (
+                          <Badge variant="outline" className="text-xs">
+                            {trigger.timezone}
+                          </Badge>
+                        )}
+                      </div>
 
                       {trigger.triggerType === 'scheduled' && trigger.nextRunAt && (
                         <div className="flex items-center gap-2 mt-2 text-xs text-foreground-muted">

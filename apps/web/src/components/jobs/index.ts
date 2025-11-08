@@ -1,5 +1,6 @@
 export { CreateJobModal } from './create-job-modal'
 export { CSVFileUpload } from './csv-file-upload'
+export { DatabaseSourceConfig } from './database-source-config'
 export { JobExecutionModal } from './job-execution-modal'
 export { JobCardWithDelete } from './job-card-with-delete'
 export { JobCard } from './job-card'

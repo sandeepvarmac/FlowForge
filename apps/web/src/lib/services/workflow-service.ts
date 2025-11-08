@@ -249,8 +249,8 @@ export class WorkflowService {
   }
 
   // Update job configuration
-  static async updateJob(jobId: string, updates: Partial<Job>): Promise<Job> {
-    const response = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
+  static async updateJob(workflowId: string, jobId: string, updates: Partial<Job>): Promise<Job> {
+    const response = await fetch(`${this.baseUrl}/workflows/${workflowId}/jobs/${jobId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -261,7 +261,7 @@ export class WorkflowService {
     }
 
     const result = await response.json()
-    console.log(`Updated job ${jobId}`)
+    console.log(`Updated job ${jobId} in workflow ${workflowId}`)
     return this.hydrateJob(result.job)
   }
 

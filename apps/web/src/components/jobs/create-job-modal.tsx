@@ -9,12 +9,18 @@ import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, Tran
 import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
+import { DatabaseSourceConfig } from './database-source-config'
+import { CreateConnectionModal } from '@/components/database'
+import { DatabaseConnection } from '@/types/database-connection'
 
 interface CreateJobModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   workflowId: string
   onJobCreate: (job: Omit<Job, 'id' | 'createdAt' | 'updatedAt'>, uploadedFile?: File) => void
+  mode?: 'create' | 'edit'
+  editingJob?: Job | null
+  cloningJob?: Job | null
 }
 
 interface JobFormData {
@@ -50,6 +56,12 @@ const initialFormData: JobFormData = {
       hasHeader: true,
       skipRows: 0,
       compressionType: 'none'
+    },
+    databaseConfig: {
+      tableName: '',
+      isIncremental: false,
+      deltaColumn: '',
+      lastWatermark: ''
     }
   },
   destinationConfig: {
@@ -112,8 +124,8 @@ const jobTypes = [
     label: 'Database',
     icon: Database,
     description: 'SQL Server, PostgreSQL, Oracle, MySQL, Snowflake',
-    enabled: false,
-    badge: 'Coming Soon'
+    enabled: true,
+    badge: null
   },
   {
     value: 'nosql',
@@ -141,22 +153,94 @@ const jobTypes = [
   }
 ]
 
-export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: CreateJobModalProps) {
+export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mode = 'create', editingJob = null, cloningJob = null }: CreateJobModalProps) {
   const [currentStep, setCurrentStep] = React.useState(1)
   const [formData, setFormData] = React.useState<JobFormData>(initialFormData)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const csvUploadRef = React.useRef<{ reset: () => void }>(null)
+  const [availableConnections, setAvailableConnections] = React.useState<DatabaseConnection[]>([])
+  const [isCreatingConnection, setIsCreatingConnection] = React.useState(false)
+  const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null)
 
-  const resetForm = () => {
+  const resetForm = React.useCallback(() => {
     setFormData(initialFormData)
     setCurrentStep(1)
     setErrors({})
     csvUploadRef.current?.reset()
-  }
+  }, [])
+
+  // Populate form data when editing or cloning
+  React.useEffect(() => {
+    if (mode === 'edit' && editingJob && open) {
+      setFormData({
+        name: editingJob.name,
+        description: editingJob.description,
+        type: editingJob.type,
+        order: editingJob.order,
+        sourceConfig: editingJob.sourceConfig,
+        destinationConfig: editingJob.destinationConfig,
+        transformationConfig: editingJob.transformationConfig,
+        validationConfig: editingJob.validationConfig
+      })
+      setCurrentStep(1)
+    } else if (cloningJob && open) {
+      // When cloning, pre-fill data with modified name
+      const clonedName = `${cloningJob.name} (Copy)`
+      setFormData({
+        name: clonedName,
+        description: cloningJob.description,
+        type: cloningJob.type,
+        order: cloningJob.order + 1, // Increment order for the clone
+        sourceConfig: cloningJob.sourceConfig,
+        destinationConfig: cloningJob.destinationConfig,
+        transformationConfig: cloningJob.transformationConfig,
+        validationConfig: cloningJob.validationConfig
+      })
+      setCurrentStep(1)
+    } else if (mode === 'create' && !cloningJob && open) {
+      resetForm()
+    }
+  }, [mode, editingJob, cloningJob, open, resetForm])
 
   const updateFormData = (updates: Partial<JobFormData>) => {
     setFormData(prev => ({ ...prev, ...updates }))
+  }
+
+  // Fetch available connections when modal opens and job type is database
+  React.useEffect(() => {
+    if (open && formData.type === 'database') {
+      fetchConnections()
+    }
+  }, [open, formData.type])
+
+  const fetchConnections = async () => {
+    try {
+      const response = await fetch('/api/database-connections')
+      const data = await response.json()
+      if (data.success) {
+        setAvailableConnections(data.connections)
+      }
+    } catch (error) {
+      console.error('Failed to fetch connections:', error)
+    }
+  }
+
+  const handleConnectionSelect = (connectionId: string) => {
+    const connection = availableConnections.find(c => c.id === connectionId)
+    if (connection) {
+      setSelectedConnectionId(connectionId)
+      updateSourceConfig({
+        type: connection.type,
+        connection: {
+          host: connection.host,
+          port: connection.port,
+          database: connection.database,
+          username: connection.username,
+          password: connection.password
+        }
+      })
+    }
   }
 
   const updateSourceConfig = (updates: Partial<DataSourceConfig>) => {
@@ -179,7 +263,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
     switch (step) {
       case 1:
         if (!formData.name.trim()) newErrors.name = 'Job name is required'
-        if (!formData._uploadedFile) newErrors.file = 'File upload is required'
+        // In edit mode, file upload is optional (can keep existing file)
+        if (mode === 'create' && !formData._uploadedFile) {
+          newErrors.file = 'File upload is required'
+        }
         break
       case 2:
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) {
@@ -245,7 +332,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
     resetForm()
   }
 
-  const renderStepContent = () => {
+  function renderStepContent() {
     switch (currentStep) {
       case 1:
         return (
@@ -349,16 +436,16 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
                   Upload Data Source
-                  {formData._uploadedFile && (
-                    <Badge variant="success" className="text-xs">
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      AI Schema Detected
-                    </Badge>
-                  )}
-                </h3>
+                      {formData._uploadedFile && (
+                        <Badge variant="success" className="text-xs">
+                          <Sparkles className="w-3 h-3 mr-1" />
+                          AI Schema Detected
+                        </Badge>
+                      )}
+                    </h3>
 
-                <FormField>
-                  <FormLabel>File Source Location</FormLabel>
+                    <FormField>
+                      <FormLabel>File Source Location</FormLabel>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -472,9 +559,68 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                       ? 'Sample File (for schema detection)'
                       : 'Data File'}
                   </FormLabel>
-                  <CSVFileUpload
-                    ref={csvUploadRef}
-                    onFileUpload={(file, schema, preview, columnMappings) => {
+
+                  {/* Show existing file info in edit mode */}
+                  {mode === 'edit' && editingJob && !formData._uploadedFile && (
+                    <div className="border-2 border-dashed border-border rounded-lg p-6 bg-background-secondary/30">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center flex-shrink-0">
+                          <FileText className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-foreground mb-1">Current Source File</h4>
+                          <p className="text-sm text-foreground font-mono truncate mb-2">
+                            {editingJob.sourceConfig.fileConfig?.filePath || 'File reference stored'}
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs text-foreground-muted">
+                            {editingJob.sourceConfig.fileConfig?.hasHeader !== undefined && (
+                              <span className="px-2 py-1 bg-background-secondary rounded">
+                                Headers: {editingJob.sourceConfig.fileConfig.hasHeader ? 'Yes' : 'No'}
+                              </span>
+                            )}
+                            {editingJob.sourceConfig.fileConfig?.delimiter && (
+                              <span className="px-2 py-1 bg-background-secondary rounded">
+                                Delimiter: {editingJob.sourceConfig.fileConfig.delimiter}
+                              </span>
+                            )}
+                            {editingJob.sourceConfig.fileConfig?.encoding && (
+                              <span className="px-2 py-1 bg-background-secondary rounded">
+                                Encoding: {editingJob.sourceConfig.fileConfig.encoding}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-amber-800">
+                            <p className="font-semibold mb-1">About File Replacement</p>
+                            <p>The source file is stored in the landing zone and referenced by this job. You can upload a replacement file below if needed, but the existing data will continue to be used unless replaced.</p>
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 w-full"
+                        onClick={() => {
+                          // Trigger file input click
+                          csvUploadRef.current?.reset()
+                        }}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload Replacement File (Optional)
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Show CSV upload component if creating or if replacing file */}
+                  {(mode === 'create' || !editingJob || formData._uploadedFile) && (
+                    <CSVFileUpload
+                      ref={csvUploadRef}
+                      onFileUpload={(file, schema, preview, columnMappings) => {
                       // Auto-generate table names from filename
                       const cleanName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, '_')
 
@@ -531,11 +677,12 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                         _previewData: undefined
                       }))
                     }}
-                    expectedColumns={['customer_id', 'first_name', 'last_name', 'email', 'phone', 'registration_date', 'status', 'country', 'revenue']}
-                    initialFile={formData._uploadedFile}
-                    initialSchema={formData._detectedSchema}
-                    initialPreview={formData._previewData}
-                  />
+                      expectedColumns={['customer_id', 'first_name', 'last_name', 'email', 'phone', 'registration_date', 'status', 'country', 'revenue']}
+                      initialFile={formData._uploadedFile}
+                      initialSchema={formData._detectedSchema}
+                      initialPreview={formData._previewData}
+                    />
+                  )}
                   {errors.file && <FormError>{errors.file}</FormError>}
                 </FormField>
 
@@ -577,6 +724,94 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                       </p>
                     </CardContent>
                   </Card>
+                )}
+              </div>
+            )}
+
+            {/* Database Source Configuration - Only shown for database jobs */}
+            {formData.type === 'database' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
+                  <Database className="w-4 h-4" />
+                  Database Connection
+                </h3>
+
+                {/* Connection Picker */}
+                <FormField>
+                  <FormLabel required>Select Connection</FormLabel>
+                  <div className="flex gap-2">
+                    <Select
+                      value={selectedConnectionId || ''}
+                      onChange={(e) => handleConnectionSelect(e.target.value)}
+                      className="flex-1"
+                    >
+                      <option value="">-- Select a database connection --</option>
+                      {availableConnections.map((conn) => (
+                        <option key={conn.id} value={conn.id}>
+                          {conn.name} ({conn.type === 'sql-server' ? 'SQL Server' : conn.type === 'postgresql' ? 'PostgreSQL' : conn.type === 'mysql' ? 'MySQL' : 'Oracle'})
+                        </option>
+                      ))}
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsCreatingConnection(true)}
+                      className="whitespace-nowrap"
+                    >
+                      + New Connection
+                    </Button>
+                  </div>
+                  {errors.connection && <FormError>{errors.connection}</FormError>}
+                  <p className="text-xs text-foreground-muted mt-2">
+                    Select an existing connection or create a new one to connect to your database
+                  </p>
+                </FormField>
+
+                {/* Database Connection Configuration Component */}
+                {formData.sourceConfig.type && formData.sourceConfig.type !== 'csv' && (
+                  <DatabaseSourceConfig
+                    dbType={formData.sourceConfig.type}
+                    connection={formData.sourceConfig.connection || {}}
+                    databaseConfig={formData.sourceConfig.databaseConfig || {
+                      tableName: '',
+                      isIncremental: false,
+                      deltaColumn: '',
+                      lastWatermark: ''
+                    }}
+                    onConnectionChange={(connection) => {
+                      updateSourceConfig({ connection })
+                    }}
+                    onDatabaseConfigChange={(databaseConfig) => {
+                      updateSourceConfig({ databaseConfig })
+                    }}
+                    onSchemaDetected={(schema) => {
+                      // Store detected schema
+                      setFormData(prev => ({
+                        ...prev,
+                        _detectedSchema: schema
+                      }))
+
+                      // Auto-generate table name from source table
+                      const tableName = formData.sourceConfig.databaseConfig?.tableName
+                      if (tableName) {
+                        const cleanName = tableName.toLowerCase().replace(/[^a-z0-9]/g, '_')
+                        updateDestinationConfig({
+                          bronzeConfig: {
+                            ...formData.destinationConfig.bronzeConfig!,
+                            tableName: `bronze_${cleanName}`
+                          },
+                          silverConfig: {
+                            ...formData.destinationConfig.silverConfig!,
+                            tableName: `silver_${cleanName}`
+                          },
+                          goldConfig: {
+                            ...formData.destinationConfig.goldConfig!,
+                            tableName: `gold_${cleanName}`
+                          }
+                        })
+                      }
+                    }}
+                  />
                 )}
               </div>
             )}
@@ -1497,7 +1732,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                   <CardContent className="text-sm text-green-800">
                     <p>
                       Your job is configured and ready to process <strong>{formData._detectedSchema.length} columns</strong> through the medallion architecture.
-                      Click "Create Job" to add this job to your workflow.
+                      {mode === 'edit' ? ' Click "Save Changes" to update this job.' : ' Click "Create Job" to add this job to your workflow.'}
                     </p>
                   </CardContent>
                 </Card>
@@ -1519,12 +1754,19 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleModalClose}>
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Create New Job</DialogTitle>
+          <DialogTitle>
+            {mode === 'edit' ? 'Edit Job' : cloningJob ? 'Clone Job' : 'Create New Job'}
+          </DialogTitle>
           <DialogDescription>
-            Configure a new data processing job for your workflow
+            {mode === 'edit'
+              ? 'Update job configuration and settings'
+              : cloningJob
+                ? 'Create a new job based on existing configuration'
+                : 'Configure a new data processing job for your workflow'}
           </DialogDescription>
         </DialogHeader>
 
@@ -1591,7 +1833,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
                 </Button>
               ) : (
                 <Button onClick={handleSubmit}>
-                  Create Job
+                  {mode === 'edit' ? 'Save Changes' : 'Create Job'}
                 </Button>
               )}
             </div>
@@ -1599,5 +1841,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate }: 
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <CreateConnectionModal
+      open={isCreatingConnection}
+      onOpenChange={setIsCreatingConnection}
+      onConnectionCreated={(connection) => {
+        fetchConnections()
+        handleConnectionSelect(connection.id)
+      }}
+    />
+  </>
   )
 }

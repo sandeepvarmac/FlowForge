@@ -4,6 +4,33 @@
  */
 
 export const SCHEMA = `
+-- Database Connections table (for reusable database source connections)
+CREATE TABLE IF NOT EXISTS database_connections (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  type TEXT NOT NULL CHECK(type IN ('sql-server', 'postgresql', 'mysql', 'oracle')),
+
+  -- Connection details (encrypted in production)
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL,
+  database TEXT NOT NULL,
+  username TEXT NOT NULL,
+  password TEXT NOT NULL,
+
+  -- Additional settings
+  ssl_enabled INTEGER DEFAULT 0,
+  connection_timeout INTEGER DEFAULT 30,
+
+  -- Metadata
+  last_tested_at INTEGER,
+  last_test_status TEXT CHECK(last_test_status IN ('success', 'failed')),
+  last_test_message TEXT,
+
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- Workflows table
 CREATE TABLE IF NOT EXISTS workflows (
   id TEXT PRIMARY KEY,
@@ -191,6 +218,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- Indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_database_connections_type ON database_connections(type);
+CREATE INDEX IF NOT EXISTS idx_database_connections_name ON database_connections(name);
 CREATE INDEX IF NOT EXISTS idx_workflow_triggers_workflow_id ON workflow_triggers(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_triggers_depends_on ON workflow_triggers(depends_on_workflow_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_triggers_next_run ON workflow_triggers(next_run_at) WHERE trigger_type = 'scheduled';

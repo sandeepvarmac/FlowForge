@@ -191,6 +191,72 @@ function runMigrations(database: Database.Database) {
       console.log('✓ Migration: workflow_triggers table created via schema')
     }
 
+    // Migration 6: Add environment and team columns to workflows
+    const workflowCols = database.prepare('PRAGMA table_info(workflows)').all() as Array<{ name: string }>
+    const hasEnvironmentCol = workflowCols.some(column => column.name === 'environment')
+    const hasTeamCol = workflowCols.some(column => column.name === 'team')
+
+    if (!hasEnvironmentCol || !hasTeamCol) {
+      console.log('⚙️  Running migration: Add environment and team columns to workflows...')
+
+      if (!hasEnvironmentCol) {
+        database.exec("ALTER TABLE workflows ADD COLUMN environment TEXT DEFAULT 'production' CHECK(environment IN ('production', 'uat', 'qa', 'development'))")
+        console.log('✓ Migration: Added environment column to workflows')
+      }
+
+      if (!hasTeamCol) {
+        // Rename business_unit to team if exists, otherwise add team
+        const hasBusinessUnit = workflowCols.some(column => column.name === 'business_unit')
+
+        if (hasBusinessUnit) {
+          // SQLite doesn't support RENAME COLUMN directly, so we need to recreate table
+          database.exec(`
+            BEGIN TRANSACTION;
+
+            CREATE TABLE workflows_temp (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              description TEXT,
+              application TEXT,
+              owner TEXT NOT NULL,
+              status TEXT NOT NULL CHECK(status IN ('manual', 'scheduled', 'running', 'completed', 'failed', 'paused')),
+              type TEXT NOT NULL CHECK(type IN ('manual', 'scheduled', 'event-driven')),
+              team TEXT,
+              notification_email TEXT,
+              tags TEXT,
+              last_run INTEGER,
+              next_run INTEGER,
+              environment TEXT DEFAULT 'production' CHECK(environment IN ('production', 'uat', 'qa', 'development')),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+
+            INSERT INTO workflows_temp
+            SELECT
+              id, name, description, application, owner, status, type,
+              business_unit as team,
+              notification_email, tags, last_run, next_run,
+              COALESCE(environment, 'production') as environment,
+              created_at, updated_at
+            FROM workflows;
+
+            DROP TABLE workflows;
+            ALTER TABLE workflows_temp RENAME TO workflows;
+
+            CREATE INDEX IF NOT EXISTS idx_workflows_environment ON workflows(environment);
+            CREATE INDEX IF NOT EXISTS idx_workflows_team ON workflows(team);
+            CREATE INDEX IF NOT EXISTS idx_workflows_env_team ON workflows(environment, team);
+
+            COMMIT;
+          `)
+          console.log('✓ Migration: Renamed business_unit to team in workflows')
+        } else {
+          database.exec("ALTER TABLE workflows ADD COLUMN team TEXT")
+          console.log('✓ Migration: Added team column to workflows')
+        }
+      }
+    }
+
   } catch (error) {
     console.error('Failed to run database migrations:', error)
   }

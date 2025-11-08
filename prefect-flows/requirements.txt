@@ -18,6 +18,7 @@ pydantic-settings>=2.1.0
 
 # Database
 psycopg2-binary>=2.9.9  # PostgreSQL adapter
+pymssql>=2.2.0          # SQL Server adapter
 sqlalchemy>=2.0.23
 
 # Utilities

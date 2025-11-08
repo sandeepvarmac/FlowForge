@@ -6,12 +6,13 @@
  */
 
 import React from 'react';
-import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink } from 'lucide-react';
+import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink, Upload, Workflow, Sparkles } from 'lucide-react';
 import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { EnvironmentBadge } from '@/components/data-assets/EnvironmentBadge';
 import { QualityIndicator } from '@/components/data-assets/QualityIndicator';
 import { AssetCard } from '@/components/data-assets/AssetCard';
 import { formatDistanceToNow } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 type Layer = 'bronze' | 'silver' | 'gold';
 type Environment = 'dev' | 'qa' | 'uat' | 'prod';
@@ -19,6 +20,8 @@ type QualityStatus = 'healthy' | 'issues' | 'no-rules';
 type DetailTab = 'overview' | 'schema' | 'sample' | 'quality' | 'lineage' | 'jobs';
 
 export default function DataAssetsExplorerPage() {
+  const router = useRouter();
+
   // Filters state
   const [selectedEnvironment, setSelectedEnvironment] = React.useState<Environment>('prod');
   const [selectedLayers, setSelectedLayers] = React.useState<Layer[]>([]);
@@ -294,10 +297,52 @@ export default function DataAssetsExplorerPage() {
             {loading ? (
               <div className="text-center py-12 text-gray-500">Loading assets...</div>
             ) : assets.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <Database className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No assets found</p>
-                <p className="text-sm mt-1">Try adjusting your filters</p>
+              <div className="text-center py-12 px-6 text-gray-500">
+                <Database className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {searchQuery || selectedLayers.length > 0 || selectedWorkflows.length > 0 || selectedQualityStatus.length > 0
+                    ? 'No Assets Match Your Filters'
+                    : 'No Data Assets Yet'}
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  {searchQuery || selectedLayers.length > 0 || selectedWorkflows.length > 0 || selectedQualityStatus.length > 0
+                    ? 'Try adjusting your filters or search query'
+                    : 'Your data catalog will appear here once you run your first workflow'}
+                </p>
+
+                {!(searchQuery || selectedLayers.length > 0 || selectedWorkflows.length > 0 || selectedQualityStatus.length > 0) && (
+                  <div className="space-y-3 max-w-xs mx-auto">
+                    <button
+                      onClick={() => router.push('/workflows')}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                    >
+                      <Workflow className="w-4 h-4" />
+                      Create Your First Workflow
+                    </button>
+                    <div className="text-xs text-gray-500">
+                      <div className="flex items-center gap-2 justify-center mb-2">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        <span className="font-semibold">Quick Start:</span>
+                      </div>
+                      <ol className="text-left space-y-1 pl-8 list-decimal">
+                        <li>Upload a CSV file</li>
+                        <li>AI detects schema in 3 seconds</li>
+                        <li>Configure Bronze/Silver/Gold</li>
+                        <li>Run workflow</li>
+                        <li>Data appears here!</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
+                {(searchQuery || selectedLayers.length > 0 || selectedWorkflows.length > 0 || selectedQualityStatus.length > 0) && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="px-4 py-2 text-sm text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
+                  >
+                    Clear All Filters
+                  </button>
+                )}
               </div>
             ) : (
               assets.map(asset => (

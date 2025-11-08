@@ -69,9 +69,9 @@ export function useJobActions() {
     try {
       setLoading(`update-${jobId}`)
       setError(null)
-      
-      const updatedJob = await WorkflowService.updateJob(jobId, updates)
-      
+
+      const updatedJob = await WorkflowService.updateJob(workflowId, jobId, updates)
+
       dispatch({
         type: 'UPDATE_JOB',
         payload: {
@@ -79,7 +79,9 @@ export function useJobActions() {
           job: updatedJob
         }
       })
-      
+
+      return updatedJob
+
     } catch (err) {
       setError('Failed to update job')
       throw err

@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
-import { ArrowRight, Zap, Database, GitBranch, Sparkles, Shield, BarChart3, CheckCircle2, Clock, Eye } from 'lucide-react'
+import { ArrowRight, Zap, Database, GitBranch, Sparkles, Shield, BarChart3, CheckCircle2, Clock, Eye, Search } from 'lucide-react'
 import Image from 'next/image'
 import { CreateWorkflowModal } from '@/components/workflows'
 
@@ -112,16 +112,37 @@ export default function HomePage() {
               Build robust data pipelines with Medallion Architecture. Transform raw data into business-ready insights with AI-powered automation.
             </p>
 
-            {/* CTA Button */}
-            <div className="flex justify-center">
+            {/* Dual CTA Buttons */}
+            <div className="flex flex-col sm:flex-row justify-center gap-4 items-center">
               <Button
                 size="lg"
-                className="bg-brand-gradient hover:shadow-brand-lg text-white px-8 py-6 text-lg transition-all"
+                className="bg-brand-gradient hover:shadow-brand-lg text-white px-8 py-6 text-lg transition-all w-full sm:w-auto"
                 onClick={() => setShowCreateModal(true)}
               >
                 Create a New Workflow
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-2 border-primary hover:bg-primary hover:text-white px-8 py-6 text-lg transition-all w-full sm:w-auto"
+                onClick={() => router.push('/data-assets/explorer')}
+              >
+                <Search className="mr-2 w-5 h-5" />
+                Explore Data
+              </Button>
+            </div>
+
+            {/* CTA Helper Text */}
+            <div className="flex flex-col sm:flex-row justify-center gap-6 mt-4 text-sm text-slate-500 max-w-2xl mx-auto">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-primary font-semibold">New users:</span>
+                <span>Start building pipelines</span>
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-primary font-semibold">Explorers:</span>
+                <span>Browse data catalog</span>
+              </div>
             </div>
 
             {/* Stats */}

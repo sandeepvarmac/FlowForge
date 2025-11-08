@@ -1,9 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
 import { randomUUID } from 'crypto'
+import { Cron } from 'croner'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+/**
+ * Calculate next run time from cron expression
+ * Returns Unix timestamp (seconds) or null if invalid
+ */
+function calculateNextRun(cronExpression: string, timezone: string = 'UTC'): number | null {
+  try {
+    const cron = new Cron(cronExpression, { timezone })
+    const nextRun = cron.nextRun()
+    cron.stop() // Clean up
+    if (!nextRun) return null
+    return Math.floor(nextRun.getTime() / 1000) // Convert to Unix timestamp (seconds)
+  } catch (error) {
+    console.error('Error parsing cron expression:', error)
+    return null
+  }
+}
 
 /**
  * Map database row to API response format
@@ -186,6 +204,20 @@ export async function POST(
     const triggerId = randomUUID()
     const now = Date.now()
 
+    // Calculate next_run_at for scheduled triggers
+    let nextRunAt = null
+    if (body.triggerType === 'scheduled' && body.cronExpression) {
+      const timezone = body.timezone || 'UTC'
+      nextRunAt = calculateNextRun(body.cronExpression, timezone)
+
+      if (nextRunAt === null) {
+        return NextResponse.json(
+          { error: 'Invalid cron expression. Please check the format.' },
+          { status: 400 }
+        )
+      }
+    }
+
     db.prepare(`
       INSERT INTO workflow_triggers (
         id, workflow_id, trigger_type, enabled, trigger_name,
@@ -202,7 +234,7 @@ export async function POST(
       body.triggerName || null,
       body.cronExpression || null,
       body.timezone || 'UTC',
-      body.nextRunAt || null,
+      nextRunAt,
       null, // last_run_at
       body.dependsOnWorkflowId || null,
       body.dependencyCondition || null,

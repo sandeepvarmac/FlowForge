@@ -9,7 +9,6 @@ import {
 import { Button } from '@/components/ui'
 import {
   MoreVertical,
-  Eye,
   Edit,
   Play,
   Copy,
@@ -53,12 +52,6 @@ export function JobActionsMenu({
         </Button>
       }
     >
-      {onView && (
-        <DropdownMenuItem onClick={onView}>
-          <Eye className="w-4 h-4" />
-          <span>View Details</span>
-        </DropdownMenuItem>
-      )}
       {onEdit && (
         <DropdownMenuItem onClick={onEdit}>
           <Edit className="w-4 h-4" />
@@ -77,7 +70,7 @@ export function JobActionsMenu({
           <span>Clone Job</span>
         </DropdownMenuItem>
       )}
-      {(onView || onEdit || onRun || onClone) && onDelete && (
+      {(onEdit || onRun || onClone) && onDelete && (
         <DropdownMenuSeparator />
       )}
       {onDelete && (

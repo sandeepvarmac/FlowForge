@@ -9,7 +9,8 @@ import { useWorkflowActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
 import { TriggersService } from '@/lib/services/triggers-service'
 import type { WorkflowTrigger } from '@/types/trigger'
-import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock, Zap, Calendar } from 'lucide-react'
+import { Search, Filter, MoreVertical, Play, Pause, Settings, Loader2, Eye, Trash2, Clock, Zap, Calendar, ChevronLeft, ChevronRight, Copy, Download, GitBranch, X } from 'lucide-react'
+import type { WorkflowFormData } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 import { useRouter } from 'next/navigation'
 
@@ -23,9 +24,203 @@ const getStatusVariant = (status: string) => {
       return 'default'
     case 'manual':
       return 'secondary'
+    case 'dependency':
+      return 'default'
     case 'paused':
       return 'warning'
     case 'failed':
+      return 'destructive'
+    default:
+      return 'secondary'
+  }
+}
+
+const getEnvironmentVariant = (env: string) => {
+  switch (env) {
+    case 'prod':
+    case 'production':
+      return 'destructive'
+    case 'uat':
+      return 'warning'
+    case 'qa':
+      return 'default'
+    case 'dev':
+    case 'development':
+      return 'secondary'
+    default:
+      return 'secondary'
+  }
+}
+
+const getEnvironmentLabel = (env: string) => {
+  switch (env) {
+    case 'prod':
+      return 'PRODUCTION'
+    case 'uat':
+      return 'UAT'
+    case 'qa':
+      return 'QA'
+    case 'dev':
+      return 'DEVELOPMENT'
+    default:
+      return env.toUpperCase()
+  }
+}
+
+const getPriorityVariant = (priority: string) => {
+  switch (priority) {
+    case 'critical':
+      return 'destructive'
+    case 'high':
+      return 'warning'
+    case 'medium':
+      return 'default'
+    case 'low':
+      return 'secondary'
+    default:
+      return 'secondary'
+  }
+}
+
+const getDataClassificationVariant = (classification: string) => {
+  switch (classification) {
+    case 'pii':
+      return 'destructive'
+    case 'confidential':
+      return 'warning'
+    case 'internal':
+      return 'default'
+    case 'public':
+      return 'secondary'
+    default:
+      return 'secondary'
+  }
+}
+
+const getDataClassificationLabel = (classification: string) => {
+  switch (classification) {
+    case 'pii':
+      return 'PII/Sensitive'
+    case 'confidential':
+      return 'Confidential'
+    case 'internal':
+      return 'Internal'
+    case 'public':
+      return 'Public'
+    default:
+      return classification
+  }
+}
+
+const getHealthVariant = (health: string) => {
+  switch (health) {
+    case 'excellent':
+      return 'success'
+    case 'good':
+      return 'default'
+    case 'fair':
+      return 'warning'
+    case 'poor':
+      return 'destructive'
+    default:
+      return 'secondary'
+  }
+}
+
+const getHealthLabel = (health: string) => {
+  switch (health) {
+    case 'excellent':
+      return 'Excellent'
+    case 'good':
+      return 'Good'
+    case 'fair':
+      return 'Fair'
+    case 'poor':
+      return 'Poor'
+    default:
+      return 'Unknown'
+  }
+}
+
+const getHealthIcon = (health: string) => {
+  switch (health) {
+    case 'excellent':
+      return '●'
+    case 'good':
+      return '●'
+    case 'fair':
+      return '●'
+    case 'poor':
+      return '●'
+    default:
+      return '○'
+  }
+}
+
+// SLA Helper Functions
+const getSLATargetHours = (priority: string): number => {
+  switch (priority) {
+    case 'critical':
+      return 2 // 2 hours for critical
+    case 'high':
+      return 4 // 4 hours for high
+    case 'medium':
+      return 8 // 8 hours for medium
+    case 'low':
+      return 24 // 24 hours for low
+    default:
+      return 8
+  }
+}
+
+const calculateSLAStatus = (
+  lastExecution: any,
+  priority: string
+): { status: 'meeting' | 'at-risk' | 'breached' | 'unknown'; message: string } => {
+  if (!lastExecution || !lastExecution.startTime) {
+    return { status: 'unknown', message: 'No execution data' }
+  }
+
+  const targetHours = getSLATargetHours(priority)
+  const targetMs = targetHours * 60 * 60 * 1000
+
+  // If still running, check how long it's been running
+  if (lastExecution.status === 'running') {
+    const runningTime = Date.now() - new Date(lastExecution.startTime).getTime()
+    const percentageUsed = (runningTime / targetMs) * 100
+
+    if (percentageUsed >= 100) {
+      return { status: 'breached', message: `Exceeded ${targetHours}h SLA` }
+    } else if (percentageUsed >= 75) {
+      return { status: 'at-risk', message: `At ${percentageUsed.toFixed(0)}% of ${targetHours}h SLA` }
+    } else {
+      return { status: 'meeting', message: `Within ${targetHours}h SLA` }
+    }
+  }
+
+  // For completed/failed executions, check if it completed within SLA
+  if (lastExecution.duration) {
+    const percentageUsed = (lastExecution.duration / targetMs) * 100
+
+    if (percentageUsed >= 100) {
+      return { status: 'breached', message: `Exceeded ${targetHours}h SLA` }
+    } else if (percentageUsed >= 90) {
+      return { status: 'at-risk', message: `Used ${percentageUsed.toFixed(0)}% of ${targetHours}h SLA` }
+    } else {
+      return { status: 'meeting', message: `Met ${targetHours}h SLA` }
+    }
+  }
+
+  return { status: 'unknown', message: 'Insufficient data' }
+}
+
+const getSLAVariant = (status: string) => {
+  switch (status) {
+    case 'meeting':
+      return 'success'
+    case 'at-risk':
+      return 'warning'
+    case 'breached':
       return 'destructive'
     default:
       return 'secondary'
@@ -71,7 +266,7 @@ const formatRows = (value?: number) => {
 
 export default function WorkflowsPage() {
   const router = useRouter()
-  const { state } = useAppContext()
+  const { state, dispatch } = useAppContext()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, deleteWorkflow, isLoading, error } = useWorkflowActions()
   const { toast } = useToast()
   const [createModalOpen, setCreateModalOpen] = React.useState(false)
@@ -82,46 +277,130 @@ export default function WorkflowsPage() {
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
   const [workflowTriggers, setWorkflowTriggers] = React.useState<Record<string, WorkflowTrigger[]>>({})
   const [loadingTriggers, setLoadingTriggers] = React.useState(false)
+  const [currentPage, setCurrentPage] = React.useState(1)
+  const workflowsPerPage = 20
+  const [workflowMetrics, setWorkflowMetrics] = React.useState<Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }>>({})
+
+  // Filter panel state
+  const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
+  const [environmentFilters, setEnvironmentFilters] = React.useState<string[]>([])
+  const [priorityFilters, setPriorityFilters] = React.useState<string[]>([])
+  const [dataClassificationFilters, setDataClassificationFilters] = React.useState<string[]>([])
 
   React.useEffect(() => {
-    // Load triggers for all workflows
-    const loadAllTriggers = async () => {
+    // Load triggers and metrics for all workflows
+    const loadAllData = async () => {
       try {
         setLoadingTriggers(true)
         const triggersByWorkflow: Record<string, WorkflowTrigger[]> = {}
+        const metricsByWorkflow: Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }> = {}
 
         await Promise.all(
           state.workflows.map(async (workflow) => {
             try {
+              // Load triggers
               const triggers = await TriggersService.getTriggers(workflow.id)
               triggersByWorkflow[workflow.id] = triggers
+
+              // Load execution history to calculate metrics
+              const response = await fetch(`/api/workflows/${workflow.id}/executions`)
+              if (response.ok) {
+                const data = await response.json()
+                const executions = data.executions || []
+
+                // Calculate success rate from last 10 executions
+                const recentExecutions = executions.slice(0, 10)
+                const completedCount = recentExecutions.filter((e: any) => e.status === 'completed').length
+                const totalCount = recentExecutions.length
+                const successRate = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
+
+                // Determine health status
+                let health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' = 'unknown'
+                if (totalCount === 0) {
+                  health = 'unknown'
+                } else if (successRate >= 95) {
+                  health = 'excellent'
+                } else if (successRate >= 80) {
+                  health = 'good'
+                } else if (successRate >= 60) {
+                  health = 'fair'
+                } else {
+                  health = 'poor'
+                }
+
+                metricsByWorkflow[workflow.id] = {
+                  successRate,
+                  totalRuns: executions.length,
+                  health
+                }
+              } else {
+                metricsByWorkflow[workflow.id] = {
+                  successRate: 0,
+                  totalRuns: 0,
+                  health: 'unknown'
+                }
+              }
             } catch (error) {
-              console.error(`Failed to load triggers for workflow ${workflow.id}:`, error)
+              console.error(`Failed to load data for workflow ${workflow.id}:`, error)
               triggersByWorkflow[workflow.id] = []
+              metricsByWorkflow[workflow.id] = {
+                successRate: 0,
+                totalRuns: 0,
+                health: 'unknown'
+              }
             }
           })
         )
 
         setWorkflowTriggers(triggersByWorkflow)
+        setWorkflowMetrics(metricsByWorkflow)
       } catch (error) {
-        console.error('Failed to load triggers:', error)
+        console.error('Failed to load workflow data:', error)
       } finally {
         setLoadingTriggers(false)
       }
     }
 
     if (state.workflows.length > 0) {
-      loadAllTriggers()
+      loadAllData()
     }
   }, [state.workflows])
 
-  // Filter workflows based on search and status
+  // Filter workflows based on search, status, and advanced filters
   const filteredWorkflows = state.workflows.filter(workflow => {
     const matchesSearch = workflow.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          workflow.application.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter
-    return matchesSearch && matchesStatus
+
+    // Advanced filters
+    const matchesEnvironment = environmentFilters.length === 0 ||
+      (workflow.environment && environmentFilters.includes(workflow.environment))
+    const matchesPriority = priorityFilters.length === 0 ||
+      (workflow.priority && priorityFilters.includes(workflow.priority))
+    const matchesDataClassification = dataClassificationFilters.length === 0 ||
+      (workflow.dataClassification && dataClassificationFilters.includes(workflow.dataClassification))
+
+    return matchesSearch && matchesStatus && matchesEnvironment && matchesPriority && matchesDataClassification
   })
+
+  // Calculate active filter count
+  const activeFilterCount = environmentFilters.length + priorityFilters.length + dataClassificationFilters.length
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, statusFilter, environmentFilters, priorityFilters, dataClassificationFilters])
+
+  // Calculate pagination
+  const totalWorkflows = filteredWorkflows.length
+  const totalPages = Math.ceil(totalWorkflows / workflowsPerPage)
+  const startIndex = (currentPage - 1) * workflowsPerPage
+  const endIndex = startIndex + workflowsPerPage
+  const paginatedWorkflows = filteredWorkflows.slice(startIndex, endIndex)
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }
 
   const formatNextRun = (timestamp?: number): string => {
     if (!timestamp) return 'Not scheduled'
@@ -136,7 +415,40 @@ export default function WorkflowsPage() {
     return formatDistanceToNow(nextRun, { addSuffix: true })
   }
 
-  const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'edit' | 'view' | 'delete') => {
+  // Filter panel handlers
+  const toggleFilterValue = (filterType: 'environment' | 'priority' | 'dataClassification', value: string) => {
+    const setters = {
+      environment: setEnvironmentFilters,
+      priority: setPriorityFilters,
+      dataClassification: setDataClassificationFilters
+    }
+    const currentFilters = {
+      environment: environmentFilters,
+      priority: priorityFilters,
+      dataClassification: dataClassificationFilters
+    }
+
+    const currentValues = currentFilters[filterType]
+    const setter = setters[filterType]
+
+    if (currentValues.includes(value)) {
+      setter(currentValues.filter(v => v !== value))
+    } else {
+      setter([...currentValues, value])
+    }
+  }
+
+  const clearAllFilters = () => {
+    setEnvironmentFilters([])
+    setPriorityFilters([])
+    setDataClassificationFilters([])
+  }
+
+  const removeFilter = (filterType: 'environment' | 'priority' | 'dataClassification', value: string) => {
+    toggleFilterValue(filterType, value)
+  }
+
+  const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'view' | 'delete') => {
     switch (action) {
       case 'run':
         await runWorkflow(workflowId)
@@ -149,10 +461,6 @@ export default function WorkflowsPage() {
         break
       case 'view':
         router.push(`/workflows/${workflowId}`)
-        break
-      case 'edit':
-        console.log(`Edit workflow ${workflowId}`)
-        // TODO: Implement edit workflow
         break
       case 'delete':
         const workflow = state.workflows.find(w => w.id === workflowId)
@@ -186,6 +494,28 @@ export default function WorkflowsPage() {
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleCloneWorkflow = async (workflowId: string, workflowName: string) => {
+    toast({
+      type: 'info',
+      title: 'Cloning Workflow',
+      description: `Creating a copy of "${workflowName}"...`
+    })
+    // TODO: Implement clone functionality
+  }
+
+  const handleExportWorkflow = async (workflowId: string, workflowName: string) => {
+    toast({
+      type: 'info',
+      title: 'Exporting Workflow',
+      description: `Preparing export for "${workflowName}"...`
+    })
+    // TODO: Implement export functionality
+  }
+
+  const handleViewLineage = (workflowId: string) => {
+    router.push(`/data-assets/lineage?workflowId=${workflowId}`)
   }
 
   return (
@@ -237,16 +567,203 @@ export default function WorkflowsPage() {
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
           </select>
-          <Button variant="outline" size="sm" className="h-10">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 relative"
+            onClick={() => setFilterPanelOpen(!filterPanelOpen)}
+          >
             <Filter className="w-4 h-4 mr-2" />
             Filters
+            {activeFilterCount > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs">
+                {activeFilterCount}
+              </Badge>
+            )}
           </Button>
         </div>
       </div>
 
+      {/* Filter Side Panel */}
+      {filterPanelOpen && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+            onClick={() => setFilterPanelOpen(false)}
+          />
+
+          {/* Side Panel */}
+          <div className="fixed right-0 top-0 h-full w-96 bg-background border-l border-border shadow-2xl z-50 overflow-y-auto animate-in slide-in-from-right duration-300">
+            {/* Panel Header */}
+            <div className="sticky top-0 bg-background border-b border-border px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Filters</h2>
+                {activeFilterCount > 0 && (
+                  <p className="text-sm text-foreground-muted mt-1">
+                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                  </p>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setFilterPanelOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Filter Content */}
+            <div className="px-6 py-4 space-y-6">
+              {/* Environment Filter */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Environment</h3>
+                <div className="space-y-2">
+                  {['development', 'qa', 'uat', 'production'].map((env) => (
+                    <label key={env} className="flex items-center space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={environmentFilters.includes(env)}
+                        onChange={() => toggleFilterValue('environment', env)}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-foreground group-hover:text-primary transition-colors capitalize">
+                        {getEnvironmentLabel(env)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Priority Filter */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Priority</h3>
+                <div className="space-y-2">
+                  {['critical', 'high', 'medium', 'low'].map((priority) => (
+                    <label key={priority} className="flex items-center space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={priorityFilters.includes(priority)}
+                        onChange={() => toggleFilterValue('priority', priority)}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-foreground group-hover:text-primary transition-colors capitalize">
+                        {priority}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Data Classification Filter */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Data Classification</h3>
+                <div className="space-y-2">
+                  {['pii', 'confidential', 'internal', 'public'].map((classification) => (
+                    <label key={classification} className="flex items-center space-x-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={dataClassificationFilters.includes(classification)}
+                        onChange={() => toggleFilterValue('dataClassification', classification)}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0"
+                      />
+                      <span className="text-sm text-foreground group-hover:text-primary transition-colors">
+                        {getDataClassificationLabel(classification)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Panel Footer */}
+            <div className="sticky bottom-0 bg-background border-t border-border px-6 py-4 flex items-center justify-between gap-3">
+              <Button
+                variant="outline"
+                onClick={clearAllFilters}
+                className="flex-1"
+                disabled={activeFilterCount === 0}
+              >
+                Clear All
+              </Button>
+              <Button
+                onClick={() => setFilterPanelOpen(false)}
+                className="flex-1"
+              >
+                Apply Filters
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Active Filters Display */}
+      {activeFilterCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-foreground-muted">Active filters:</span>
+          {environmentFilters.map((env) => (
+            <Badge key={`env-${env}`} variant="secondary" className="gap-1">
+              {getEnvironmentLabel(env)}
+              <button
+                onClick={() => removeFilter('environment', env)}
+                className="ml-1 hover:text-destructive transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+          {priorityFilters.map((priority) => (
+            <Badge key={`priority-${priority}`} variant="secondary" className="gap-1 capitalize">
+              Priority: {priority}
+              <button
+                onClick={() => removeFilter('priority', priority)}
+                className="ml-1 hover:text-destructive transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+          {dataClassificationFilters.map((classification) => (
+            <Badge key={`classification-${classification}`} variant="secondary" className="gap-1">
+              {getDataClassificationLabel(classification)}
+              <button
+                onClick={() => removeFilter('dataClassification', classification)}
+                className="ml-1 hover:text-destructive transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllFilters}
+            className="h-7 text-xs"
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
+
+      {/* Results Summary */}
+      {filteredWorkflows.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-foreground-muted">
+          <p>
+            Showing {startIndex + 1} to {Math.min(endIndex, totalWorkflows)} of {totalWorkflows} workflow{totalWorkflows !== 1 ? 's' : ''}
+          </p>
+          {totalPages > 1 && (
+            <p>
+              Page {currentPage} of {totalPages}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Workflows List */}
       <div className="grid gap-4">
-        {filteredWorkflows.length === 0 ? (
+        {paginatedWorkflows.length === 0 ? (
           <Card className="p-8 text-center">
             <div className="text-foreground-muted">
               {state.workflows.length === 0 ? (
@@ -266,7 +783,7 @@ export default function WorkflowsPage() {
             </div>
           </Card>
         ) : (
-          filteredWorkflows.map((workflow) => {
+          paginatedWorkflows.map((workflow) => {
             const completedJobs = workflow.jobs.filter(job => job.status === 'completed').length
             const failedJobs = workflow.jobs.filter(job => job.status === 'failed').length
             const runningJobs = workflow.jobs.filter(job => job.status === 'running').length
@@ -291,16 +808,66 @@ export default function WorkflowsPage() {
               <Card key={workflow.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <CardTitle className="text-lg text-foreground group-hover:text-primary-700 transition-colors">
-                        {workflow.name}
-                      </CardTitle>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={getStatusVariant(workflow.status)}>
-                          {workflow.status}
-                        </Badge>
-                        {workflow.status === 'running' && (
-                          <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-4 mb-3">
+                        <CardTitle className="text-lg text-foreground group-hover:text-primary-700 transition-colors">
+                          {workflow.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={getStatusVariant(workflow.status)}>
+                            {workflow.status}
+                          </Badge>
+                          {workflow.status === 'running' && (
+                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                          )}
+                        </div>
+                      </div>
+
+                      {workflow.description && (
+                        <p className="text-sm text-foreground-muted mb-3 line-clamp-1">
+                          {workflow.description}
+                        </p>
+                      )}
+
+                      {/* Enterprise Metadata Badges */}
+                      <div className="flex items-center gap-2 flex-wrap mt-2">
+                        {workflow.environment && (
+                          <Badge variant={getEnvironmentVariant(workflow.environment)} className="text-xs font-medium">
+                            {getEnvironmentLabel(workflow.environment)}
+                          </Badge>
+                        )}
+                        {workflow.priority && (
+                          <Badge variant={getPriorityVariant(workflow.priority)} className="text-xs font-medium">
+                            Priority: {workflow.priority.charAt(0).toUpperCase() + workflow.priority.slice(1)}
+                          </Badge>
+                        )}
+                        {/* SLA Status Indicator */}
+                        {workflow.priority && workflow.lastExecution && (() => {
+                          const slaStatus = calculateSLAStatus(workflow.lastExecution, workflow.priority)
+                          return slaStatus.status !== 'unknown' && (
+                            <Badge variant={getSLAVariant(slaStatus.status)} className="text-xs font-medium">
+                              SLA: {slaStatus.message}
+                            </Badge>
+                          )
+                        })()}
+                        {workflow.dataClassification && (
+                          <Badge variant={getDataClassificationVariant(workflow.dataClassification)} className="text-xs font-medium">
+                            Data Classification: {getDataClassificationLabel(workflow.dataClassification)}
+                          </Badge>
+                        )}
+                        {workflow.tags && workflow.tags.length > 0 && (
+                          <>
+                            {workflow.tags.slice(0, 3).map((tag: string) => (
+                              <Badge key={tag} variant="outline" className="text-xs">
+                                {tag}
+                              </Badge>
+                            ))}
+                            {workflow.tags.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{workflow.tags.length - 3} more
+                              </Badge>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -315,11 +882,7 @@ export default function WorkflowsPage() {
                       >
                         <DropdownMenuItem onClick={() => handleWorkflowAction(workflow.id, 'view')}>
                           <Eye className="w-4 h-4" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleWorkflowAction(workflow.id, 'edit')}>
-                          <Settings className="w-4 h-4" />
-                          Edit Workflow
+                          View Workflow
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
@@ -371,6 +934,48 @@ export default function WorkflowsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
+                  {/* Health Metrics Bar */}
+                  {workflowMetrics[workflow.id] && workflowMetrics[workflow.id].health !== 'unknown' && (
+                    <div className="mb-4 p-3 rounded-lg bg-background-secondary/40 border border-border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium uppercase text-foreground-muted">Health</span>
+                            <Badge variant={getHealthVariant(workflowMetrics[workflow.id].health)} className="text-xs">
+                              {getHealthIcon(workflowMetrics[workflow.id].health)} {getHealthLabel(workflowMetrics[workflow.id].health)}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium uppercase text-foreground-muted">Success Rate</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {workflowMetrics[workflow.id].successRate.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium uppercase text-foreground-muted">Total Runs</span>
+                            <span className="text-sm font-semibold text-foreground">
+                              {workflowMetrics[workflow.id].totalRuns}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Visual Progress Bar */}
+                        <div className="flex-1 max-w-xs">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                workflowMetrics[workflow.id].successRate >= 95 ? 'bg-green-500' :
+                                workflowMetrics[workflow.id].successRate >= 80 ? 'bg-blue-500' :
+                                workflowMetrics[workflow.id].successRate >= 60 ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${workflowMetrics[workflow.id].successRate}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6 text-sm border-t border-border pt-4">
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
@@ -402,31 +1007,18 @@ export default function WorkflowsPage() {
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Next Run</span>
                       <div className="flex items-center gap-2 mt-1">
-                        {loadingTriggers ? (
-                          <Loader2 className="w-3 h-3 animate-spin text-foreground-muted" />
-                        ) : (() => {
-                          const triggers = workflowTriggers[workflow.id] || []
-                          const scheduledTriggers = triggers.filter(t => t.triggerType === 'scheduled' && t.enabled)
-                          const validTimestamps = scheduledTriggers
-                            .map(t => {
-                              const timestamp = typeof t.nextRunAt === 'number' ? t.nextRunAt : (t.nextRunAt ? Math.floor(t.nextRunAt.getTime() / 1000) : Infinity)
-                              return timestamp
-                            })
-                            .filter(t => t !== Infinity && !isNaN(t))
-
-                          const nextRun = validTimestamps.length > 0 ? Math.min(...validTimestamps) : null
-
-                          return nextRun && nextRun !== Infinity ? (
-                            <>
-                              <Calendar className="w-4 h-4 text-green-600" />
-                              <p className="font-semibold text-foreground text-xs">
-                                {formatNextRun(nextRun)}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-xs text-foreground-muted">Manual only</p>
-                          )
-                        })()}
+                        {workflow.nextRun ? (
+                          <>
+                            <Calendar className="w-4 h-4 text-green-600" />
+                            <p className="font-semibold text-foreground text-xs">
+                              {formatDistanceToNow(workflow.nextRun, { addSuffix: true })}
+                            </p>
+                          </>
+                        ) : workflow.status === 'dependency' ? (
+                          <p className="text-xs text-foreground-muted">On dependency</p>
+                        ) : (
+                          <p className="text-xs text-foreground-muted">Manual only</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -501,12 +1093,126 @@ export default function WorkflowsPage() {
                       </p>
                     </div>
                   )}
+
+                  {/* Quick Actions Bar */}
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase text-foreground-muted">Quick Actions</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => handleCloneWorkflow(workflow.id, workflow.name)}
+                        >
+                          <Copy className="w-3 h-3 mr-1" />
+                          Clone
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => handleExportWorkflow(workflow.id, workflow.name)}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Export
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => handleViewLineage(workflow.id)}
+                        >
+                          <GitBranch className="w-3 h-3 mr-1" />
+                          Lineage
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
               </CardContent>
             </Card>
             )
           })
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6 border-t border-border pt-6">
+          <div className="text-sm text-foreground-muted">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(1)}
+              disabled={currentPage === 1}
+              className="h-9"
+            >
+              First
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="h-9"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Previous
+            </Button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number
+                if (totalPages <= 5) {
+                  pageNum = i + 1
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i
+                } else {
+                  pageNum = currentPage - 2 + i
+                }
+
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => goToPage(pageNum)}
+                    className="h-9 w-9 p-0"
+                  >
+                    {pageNum}
+                  </Button>
+                )
+              })}
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="h-9"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="h-9"
+            >
+              Last
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Create Workflow Modal */}
       <CreateWorkflowModal

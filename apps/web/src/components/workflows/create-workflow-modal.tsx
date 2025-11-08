@@ -10,31 +10,56 @@ import { useWorkflowActions } from "@/hooks"
 import { Info, X } from "lucide-react"
 
 interface CreateWorkflowModalProps {
+  mode?: 'create' | 'edit'
+  workflowId?: string
+  initialData?: Partial<WorkflowFormData>
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalProps) {
+const defaultFormData: WorkflowFormData = {
+  name: '',
+  description: '',
+  application: '',
+  businessUnit: 'Data Engineering',
+  team: 'Data Engineering Team',
+  workflowType: 'manual',
+  environment: 'development',
+  dataClassification: 'internal',
+  priority: 'medium',
+  notificationEmail: '',
+  tags: [],
+  retentionDays: 90
+}
+
+export function CreateWorkflowModal({
+  mode = 'create',
+  workflowId,
+  initialData,
+  open,
+  onOpenChange,
+  onSuccess
+}: CreateWorkflowModalProps) {
   const router = useRouter()
   const { createWorkflow } = useWorkflowActions()
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<Partial<WorkflowFormData>>({})
   const [tagInput, setTagInput] = React.useState('')
 
-  const [formData, setFormData] = React.useState<WorkflowFormData>({
-    name: '',
-    description: '',
-    application: '',
-    businessUnit: 'Data Engineering',
-    team: 'Data Engineering Team',
-    workflowType: 'manual',
-    environment: 'dev',
-    dataClassification: 'internal',
-    priority: 'medium',
-    notificationEmail: '',
-    tags: [],
-    retentionDays: 90
-  })
+  const [formData, setFormData] = React.useState<WorkflowFormData>(defaultFormData)
+
+  // Initialize form data when initialData changes
+  React.useEffect(() => {
+    if (mode === 'edit' && initialData) {
+      setFormData({
+        ...defaultFormData,
+        ...initialData
+      })
+    } else {
+      setFormData(defaultFormData)
+    }
+  }, [mode, initialData, open])
 
   const updateField = (field: keyof WorkflowFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -70,33 +95,54 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
 
     setLoading(true)
     try {
-      const newWorkflow = await createWorkflow(formData)
+      if (mode === 'edit' && workflowId) {
+        // Update existing workflow
+        const response = await fetch(`/api/workflows/${workflowId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            application: formData.application,
+            owner: formData.team, // Using team as owner
+            team: formData.team,
+            environment: formData.environment,
+            notificationEmail: formData.notificationEmail,
+            tags: formData.tags
+          })
+        })
 
-      // Reset form and close
-      setFormData({
-        name: '',
-        description: '',
-        application: '',
-        businessUnit: 'Data Engineering',
-        team: 'Data Engineering Team',
-        workflowType: 'manual',
-        environment: 'dev',
-        dataClassification: 'internal',
-        priority: 'medium',
-        notificationEmail: '',
-        tags: [],
-        retentionDays: 90
-      })
-      setErrors({})
-      setTagInput('')
-      onOpenChange(false)
+        if (!response.ok) {
+          throw new Error('Failed to update workflow')
+        }
 
-      // Auto-navigate to workflow detail page
-      if (newWorkflow?.id) {
-        router.push(`/workflows/${newWorkflow.id}`)
+        // Reset form and close
+        setFormData(defaultFormData)
+        setErrors({})
+        setTagInput('')
+        onOpenChange(false)
+
+        // Call onSuccess callback
+        if (onSuccess) {
+          onSuccess()
+        }
+      } else {
+        // Create new workflow
+        const newWorkflow = await createWorkflow(formData)
+
+        // Reset form and close
+        setFormData(defaultFormData)
+        setErrors({})
+        setTagInput('')
+        onOpenChange(false)
+
+        // Auto-navigate to workflow detail page
+        if (newWorkflow?.id) {
+          router.push(`/workflows/${newWorkflow.id}`)
+        }
       }
     } catch (error) {
-      console.error('Failed to create workflow:', error)
+      console.error(`Failed to ${mode} workflow:`, error)
     } finally {
       setLoading(false)
     }
@@ -111,9 +157,11 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Create New Workflow</DialogTitle>
+          <DialogTitle>{mode === 'edit' ? 'Edit Workflow' : 'Create New Workflow'}</DialogTitle>
           <DialogDescription>
-            Configure a new data processing workflow for your enterprise data platform
+            {mode === 'edit'
+              ? 'Update workflow configuration and metadata'
+              : 'Configure a new data processing workflow for your enterprise data platform'}
           </DialogDescription>
         </DialogHeader>
 
@@ -144,6 +192,76 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
                 rows={3}
               />
               <FormError>{errors.description}</FormError>
+            </FormField>
+
+            <FormField>
+              <FormLabel htmlFor="application">Application/System</FormLabel>
+              <Select
+                id="application"
+                value={formData.application || ''}
+                onChange={(e) => updateField('application', e.target.value)}
+              >
+                <option value="">Select an application...</option>
+                <optgroup label="CRM Systems">
+                  <option value="Salesforce CRM">Salesforce CRM</option>
+                  <option value="Microsoft Dynamics 365">Microsoft Dynamics 365</option>
+                  <option value="HubSpot">HubSpot</option>
+                  <option value="Zoho CRM">Zoho CRM</option>
+                </optgroup>
+                <optgroup label="ERP Systems">
+                  <option value="SAP ERP">SAP ERP</option>
+                  <option value="Oracle ERP">Oracle ERP</option>
+                  <option value="NetSuite">NetSuite</option>
+                  <option value="Microsoft Dynamics 365 ERP">Microsoft Dynamics 365 ERP</option>
+                </optgroup>
+                <optgroup label="E-Commerce">
+                  <option value="Shopify">Shopify</option>
+                  <option value="Magento">Magento</option>
+                  <option value="WooCommerce">WooCommerce</option>
+                  <option value="BigCommerce">BigCommerce</option>
+                </optgroup>
+                <optgroup label="Marketing">
+                  <option value="Marketo">Marketo</option>
+                  <option value="Pardot">Pardot</option>
+                  <option value="Mailchimp">Mailchimp</option>
+                  <option value="Adobe Marketing Cloud">Adobe Marketing Cloud</option>
+                </optgroup>
+                <optgroup label="HR Systems">
+                  <option value="Workday">Workday</option>
+                  <option value="BambooHR">BambooHR</option>
+                  <option value="ADP">ADP</option>
+                  <option value="SuccessFactors">SuccessFactors</option>
+                </optgroup>
+                <optgroup label="Financial">
+                  <option value="QuickBooks">QuickBooks</option>
+                  <option value="Xero">Xero</option>
+                  <option value="FreshBooks">FreshBooks</option>
+                  <option value="Sage">Sage</option>
+                </optgroup>
+                <optgroup label="Data & Analytics">
+                  <option value="Snowflake">Snowflake</option>
+                  <option value="Databricks">Databricks</option>
+                  <option value="Google Analytics">Google Analytics</option>
+                  <option value="Tableau">Tableau</option>
+                  <option value="Power BI">Power BI</option>
+                </optgroup>
+                <optgroup label="Cloud Storage">
+                  <option value="AWS S3">AWS S3</option>
+                  <option value="Azure Blob Storage">Azure Blob Storage</option>
+                  <option value="Google Cloud Storage">Google Cloud Storage</option>
+                </optgroup>
+                <optgroup label="Other">
+                  <option value="Customer Portal">Customer Portal</option>
+                  <option value="Internal System">Internal System</option>
+                  <option value="Legacy System">Legacy System</option>
+                  <option value="Custom Application">Custom Application</option>
+                </optgroup>
+              </Select>
+              <p className="text-xs text-foreground-muted mt-1">
+                <Info className="w-3 h-3 inline mr-1" />
+                The application or system this workflow integrates with
+              </p>
+              <FormError>{errors.application}</FormError>
             </FormField>
           </div>
 
@@ -197,17 +315,26 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-foreground border-b pb-2">Workflow Configuration</h3>
 
+            {/* Trigger Info Note */}
+            <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-blue-800">
+                <span className="font-semibold">Note:</span> Workflows start as manual by default. You can add scheduled or dependency triggers after creation via the "Triggers" tab.
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-4">
               <FormField>
                 <FormLabel htmlFor="environment">Environment</FormLabel>
                 <Select
                   id="environment"
-                  value={formData.environment || 'dev'}
+                  value={formData.environment || 'development'}
                   onChange={(e) => updateField('environment', e.target.value)}
                 >
-                  <option value="dev">Development</option>
+                  <option value="development">Development</option>
                   <option value="qa">QA/Testing</option>
-                  <option value="prod">Production</option>
+                  <option value="uat">UAT</option>
+                  <option value="production">Production</option>
                 </Select>
               </FormField>
 
@@ -326,7 +453,9 @@ export function CreateWorkflowModal({ open, onOpenChange }: CreateWorkflowModalP
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? 'Creating...' : 'Create Workflow'}
+            {loading
+              ? (mode === 'edit' ? 'Saving...' : 'Creating...')
+              : (mode === 'edit' ? 'Save Changes' : 'Create Workflow')}
           </Button>
         </DialogFooter>
       </DialogContent>

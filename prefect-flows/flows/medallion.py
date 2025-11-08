@@ -12,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tasks.bronze import bronze_ingest  # noqa: E402
+from tasks.database_bronze import ingest_from_database  # noqa: E402
 from tasks.gold import gold_publish  # noqa: E402
 from tasks.silver import silver_transform  # noqa: E402
 from utils.slugify import slugify, generate_run_id  # noqa: E402
@@ -40,7 +41,7 @@ def medallion_pipeline(
     job_id: str,
     workflow_name: str,
     job_name: str,
-    landing_key: str,
+    landing_key: str = None,
     primary_keys: Optional[List[str]] = None,
     column_mappings: Optional[List[dict]] = None,
     has_header: bool = True,
@@ -48,17 +49,22 @@ def medallion_pipeline(
     file_format: str = "csv",
     file_options: Optional[dict] = None,
     execution_id: Optional[str] = None,
+    source_type: str = "file",
+    source_config: Optional[dict] = None,
+    destination_config: Optional[dict] = None,
+    batch_id: Optional[str] = None,
 ) -> dict:
     """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys.
 
-    Supports CSV, JSON, Parquet, and Excel files via pluggable handler framework.
+    Supports file-based ingestion (CSV, JSON, Parquet, Excel) and database ingestion
+    (SQL Server, PostgreSQL, MySQL).
 
     Args:
         workflow_id: Workflow identifier
         job_id: Job identifier
         workflow_name: Workflow name
         job_name: Job name
-        landing_key: S3 key for source data
+        landing_key: S3 key for source data (file-based jobs only)
         primary_keys: Primary keys for deduplication
         column_mappings: Column mappings
         has_header: Whether file has headers
@@ -66,6 +72,10 @@ def medallion_pipeline(
         file_format: File format (csv, json, parquet, excel)
         file_options: File-specific options
         execution_id: FlowForge execution ID (for dependency triggers)
+        source_type: Source type ("file" or "database")
+        source_config: Database connection config (database jobs only)
+        destination_config: Bronze layer config (database jobs only)
+        batch_id: Batch identifier (database jobs only)
     """
     logger = get_run_logger()
 
@@ -75,10 +85,10 @@ def medallion_pipeline(
     run_id = generate_run_id(flow_run_id)
 
     logger.info(
-        "Starting medallion pipeline for workflow=%s job=%s landing=%s (slugs: %s/%s, run: %s, execution: %s)",
+        "Starting medallion pipeline for workflow=%s job=%s source_type=%s (slugs: %s/%s, run: %s, execution: %s)",
         workflow_id,
         job_id,
-        landing_key,
+        source_type,
         workflow_slug,
         job_slug,
         run_id,
@@ -90,18 +100,30 @@ def medallion_pipeline(
     result = None
 
     try:
-        bronze_result = bronze_ingest(
-            workflow_id=workflow_id,
-            job_id=job_id,
-            workflow_slug=workflow_slug,
-            job_slug=job_slug,
-            run_id=run_id,
-            landing_key=landing_key,
-            file_format=file_format,
-            file_options=file_options,
-            column_mappings=column_mappings,
-            has_header=has_header,
-        )
+        # Route to appropriate bronze ingestion task based on source type
+        if source_type == "database":
+            logger.info("Database job detected - using database_bronze task")
+            bronze_result = ingest_from_database(
+                job_id=job_id,
+                source_config=source_config,
+                destination_config=destination_config,
+                batch_id=batch_id or run_id,
+                execution_id=execution_id,
+            )
+        else:
+            logger.info("File job detected - using bronze_ingest task")
+            bronze_result = bronze_ingest(
+                workflow_id=workflow_id,
+                job_id=job_id,
+                workflow_slug=workflow_slug,
+                job_slug=job_slug,
+                run_id=run_id,
+                landing_key=landing_key,
+                file_format=file_format,
+                file_options=file_options,
+                column_mappings=column_mappings,
+                has_header=has_header,
+            )
 
         silver_result = silver_transform(bronze_result, primary_keys=primary_keys)
         gold_result = gold_publish(silver_result)

@@ -33,9 +33,10 @@ export interface Workflow {
   } | null
 }
 
-export type WorkflowStatus = 
+export type WorkflowStatus =
   | 'manual'
-  | 'scheduled' 
+  | 'scheduled'
+  | 'dependency'
   | 'running'
   | 'completed'
   | 'failed'

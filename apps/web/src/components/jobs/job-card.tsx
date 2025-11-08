@@ -14,7 +14,7 @@ interface JobCardProps {
   workflowId: string
   onRunJob: (jobId: string) => void
   onEditJob?: (job: Job) => void
-  onCloneJob?: (jobId: string) => void
+  onCloneJob?: (job: Job) => void
   isRunning: boolean
 }
 
@@ -50,37 +50,10 @@ export function JobCard({ job, workflowId, onRunJob, onEditJob, onCloneJob, isRu
     }
   }
 
-  const handleClone = async () => {
-    try {
-      const response = await fetch(`/api/workflows/${workflowId}/jobs/${job.id}/clone`, {
-        method: 'POST'
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to clone job')
-      }
-
-      const data = await response.json()
-
-      toast({
-        type: 'success',
-        title: 'Job Cloned',
-        description: `Created "${data.job.name}" as a copy of "${job.name}"`
-      })
-
-      // Trigger callback if provided
-      if (onCloneJob) {
-        onCloneJob(data.job.id)
-      }
-
-      // Reload the page to show the cloned job
-      window.location.reload()
-    } catch (error) {
-      toast({
-        type: 'error',
-        title: 'Clone Failed',
-        description: error instanceof Error ? error.message : 'Failed to clone job'
-      })
+  const handleClone = () => {
+    // Trigger callback to open modal with cloned job data
+    if (onCloneJob) {
+      onCloneJob(job)
     }
   }
 

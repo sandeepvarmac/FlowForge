@@ -63,21 +63,21 @@ services:
 
   # Prefect Server (Optional - use if not using Prefect Cloud)
   # Uncomment if you want self-hosted Prefect
-  # prefect-server:
-  #   image: prefecthq/prefect:2-python3.11
-  #   container_name: flowforge-prefect-server
-  #   ports:
-  #     - "4200:4200"
-  #   environment:
-  #     PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://flowforge:flowforge123@postgres:5432/flowforge
-  #     PREFECT_API_URL: http://prefect-server:4200/api
-  #     PREFECT_SERVER_API_HOST: 0.0.0.0
-  #   command: prefect server start --host 0.0.0.0
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   networks:
-  #     - flowforge
+  prefect-server:
+    image: prefecthq/prefect:2-python3.11
+    container_name: flowforge-prefect-server
+    ports:
+      - "4200:4200"
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://flowforge:flowforge123@postgres:5432/flowforge
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+    command: prefect server start --host 0.0.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - flowforge
 
 volumes:
   minio_data:

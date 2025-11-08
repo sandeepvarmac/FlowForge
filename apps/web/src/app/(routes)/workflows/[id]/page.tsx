@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, useToast } from '@/components/ui'
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions, useJobActions } from '@/hooks'
 import { WorkflowService } from '@/lib/services/workflow-service'
@@ -11,7 +11,8 @@ import type { Job } from '@/types/workflow'
 import { MetadataCatalog } from '@/components/metadata'
 import { WorkflowTriggersSection } from '@/components/workflows/workflow-triggers-section'
 import { AddTriggerModal } from '@/components/workflows/add-trigger-modal'
-import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers } from 'lucide-react'
+import { CreateWorkflowModal } from '@/components/workflows/create-workflow-modal'
+import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const getStatusVariant = (status: string) => {
@@ -20,6 +21,7 @@ const getStatusVariant = (status: string) => {
     case 'scheduled': return 'default'
     case 'running': return 'default'
     case 'manual': return 'secondary'
+    case 'dependency': return 'default'
     case 'paused': return 'warning'
     case 'failed': return 'destructive'
     default: return 'secondary'
@@ -88,9 +90,10 @@ const formatRows = (value?: number) => {
 export default function WorkflowDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const { state } = useAppContext()
+  const { state, dispatch } = useAppContext()
+  const { toast } = useToast()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, isLoading } = useWorkflowActions()
-  const { createJob, uploadFile } = useJobActions()
+  const { createJob, updateJob, uploadFile } = useJobActions()
   const [executions, setExecutions] = React.useState<WorkflowExecution[]>([])
   const [loadingExecutions, setLoadingExecutions] = React.useState(false)
   const [createJobModalOpen, setCreateJobModalOpen] = React.useState(false)
@@ -99,10 +102,13 @@ export default function WorkflowDetailPage() {
   const [selectedExecution, setSelectedExecution] = React.useState<{ jobId: string; jobName: string; executionId: string } | null>(null)
   const [metadataCatalogOpen, setMetadataCatalogOpen] = React.useState(false)
   const [editingJob, setEditingJob] = React.useState<Job | null>(null)
+  const [cloningJob, setCloningJob] = React.useState<Job | null>(null)
   const [landingFiles, setLandingFiles] = React.useState<any>(null)
   const [loadingLandingFiles, setLoadingLandingFiles] = React.useState(false)
   const [addTriggerModalOpen, setAddTriggerModalOpen] = React.useState(false)
   const [triggerSectionKey, setTriggerSectionKey] = React.useState(0)
+  const [editWorkflowModalOpen, setEditWorkflowModalOpen] = React.useState(false)
+  const [editWorkflowData, setEditWorkflowData] = React.useState<any>(undefined)
 
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
@@ -251,7 +257,60 @@ export default function WorkflowDetailPage() {
 
   const handleEditJob = (job: Job) => {
     setEditingJob(job)
+    setCloningJob(null)
     setCreateJobModalOpen(true)
+  }
+
+  const handleCloneJob = (job: Job) => {
+    setCloningJob(job)
+    setEditingJob(null)
+    setCreateJobModalOpen(true)
+  }
+
+  const handleEditWorkflow = async () => {
+    try {
+      // Prepare form data from current workflow
+      const formData = {
+        name: workflow.name,
+        description: workflow.description,
+        application: workflow.application,
+        businessUnit: workflow.team || 'Data Engineering', // Use team or default
+        team: workflow.team,
+        workflowType: workflow.type,
+        environment: workflow.environment,
+        dataClassification: workflow.dataClassification || 'internal',
+        priority: workflow.priority || 'medium',
+        notificationEmail: workflow.notificationEmail || '',
+        tags: workflow.tags || [],
+        retentionDays: workflow.retentionDays || 90
+      }
+
+      setEditWorkflowData(formData)
+      setEditWorkflowModalOpen(true)
+    } catch (error) {
+      console.error('Failed to prepare workflow for editing:', error)
+    }
+  }
+
+  const handleEditWorkflowSuccess = async () => {
+    // Refresh workflow data after successful edit
+    try {
+      const workflows = await WorkflowService.getWorkflowsWithLastExecution()
+      dispatch({ type: 'SET_WORKFLOWS', payload: workflows })
+
+      toast({
+        type: 'success',
+        title: 'Workflow Updated',
+        description: 'The workflow details have been updated successfully'
+      })
+    } catch (error) {
+      console.error('Failed to refresh workflow:', error)
+      toast({
+        type: 'error',
+        title: 'Refresh Failed',
+        description: 'The workflow was updated but failed to refresh. Please reload the page.'
+      })
+    }
   }
 
   return (
@@ -309,9 +368,18 @@ export default function WorkflowDetailPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <CardTitle className="text-2xl flex items-center gap-3">
                   {workflow.name}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={handleEditWorkflow}
+                    title="Edit workflow details"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                   <div className="flex items-center gap-2">
                     <Badge variant={getStatusVariant(workflow.status)}>
                       {workflow.status}
@@ -411,6 +479,7 @@ export default function WorkflowDetailPage() {
                           workflowId={workflowId}
                           onRunJob={handleRunJob}
                           onEditJob={handleEditJob}
+                          onCloneJob={handleCloneJob}
                           isRunning={runningJobs.has(job.id)}
                         />
 
@@ -896,17 +965,52 @@ export default function WorkflowDetailPage() {
       {/* Create Job Modal */}
       <CreateJobModal
         open={createJobModalOpen}
-        onOpenChange={setCreateJobModalOpen}
-        workflowId={workflowId}
-        onJobCreate={async (jobData, file) => {
-          const newJob = await createJob(workflowId, jobData)
-          if (file && newJob?.id) {
-            await uploadFile(workflowId, newJob.id, file)
-            // Refresh landing files after upload with a small delay to ensure file is written
-            setTimeout(() => {
-              loadLandingFiles()
-            }, 500)
+        onOpenChange={(open) => {
+          setCreateJobModalOpen(open)
+          if (!open) {
+            setEditingJob(null)
+            setCloningJob(null)
           }
+        }}
+        workflowId={workflowId}
+        mode={editingJob ? 'edit' : 'create'}
+        editingJob={editingJob}
+        cloningJob={cloningJob}
+        onJobCreate={async (jobData, file) => {
+          if (editingJob) {
+            // Update existing job
+            await updateJob(workflowId, editingJob.id, jobData)
+            if (file) {
+              // If a new file is uploaded, replace the existing one
+              await uploadFile(workflowId, editingJob.id, file)
+              setTimeout(() => {
+                loadLandingFiles()
+              }, 500)
+            }
+            toast({
+              type: 'success',
+              title: 'Job Updated',
+              description: `"${jobData.name}" has been successfully updated.`
+            })
+          } else {
+            // Create new job
+            const newJob = await createJob(workflowId, jobData)
+            if (file && newJob?.id) {
+              await uploadFile(workflowId, newJob.id, file)
+              // Refresh landing files after upload with a small delay to ensure file is written
+              setTimeout(() => {
+                loadLandingFiles()
+              }, 500)
+            }
+            toast({
+              type: 'success',
+              title: 'Job Created',
+              description: `"${jobData.name}" has been successfully created.`
+            })
+          }
+          setCreateJobModalOpen(false)
+          setEditingJob(null)
+          setCloningJob(null)
         }}
       />
 
@@ -924,6 +1028,16 @@ export default function WorkflowDetailPage() {
       <MetadataCatalog
         open={metadataCatalogOpen}
         onOpenChange={setMetadataCatalogOpen}
+      />
+
+      {/* Edit Workflow Modal */}
+      <CreateWorkflowModal
+        mode="edit"
+        workflowId={workflowId}
+        initialData={editWorkflowData}
+        open={editWorkflowModalOpen}
+        onOpenChange={setEditWorkflowModalOpen}
+        onSuccess={handleEditWorkflowSuccess}
       />
 
       {/* Add Trigger Modal */}
