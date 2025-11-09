@@ -77,6 +77,7 @@ const links: NavLink[] = [
     href: '/analytics-hub',
     label: 'Analytics Hub',
     icon: LineChart,
+    badge: 'Soon',
     subLinks: [
       { href: '/analytics-hub/reports', label: 'Reports', icon: FolderKanban },
       { href: '/analytics-hub/admin', label: 'Admin', icon: Settings },
@@ -86,6 +87,7 @@ const links: NavLink[] = [
     href: '/observability',
     label: 'Observability',
     icon: Eye,
+    badge: 'Soon',
     subLinks: [
       { href: '/observability/alerts', label: 'Alerts', icon: Bell },
       { href: '/observability/incidents', label: 'Incidents', icon: AlertTriangle },
