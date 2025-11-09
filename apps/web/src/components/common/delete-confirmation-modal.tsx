@@ -13,7 +13,7 @@ interface DeleteConfirmationModalProps {
   title: string
   description: string
   itemName: string
-  itemType: 'workflow' | 'job'
+  itemType: 'workflow' | 'job' | 'connection'
   isDeleting?: boolean
 }
 
@@ -78,7 +78,7 @@ export function DeleteConfirmationModal({
             <div className="flex items-center gap-2 mb-2">
               <Trash2 className="w-4 h-4 text-red-700" />
               <span className="text-sm font-semibold text-red-900">
-                {itemType === 'workflow' ? 'Workflow' : 'Job'} to be deleted:
+                {itemType === 'workflow' ? 'Workflow' : itemType === 'job' ? 'Job' : 'Connection'} to be deleted:
               </span>
             </div>
             <p className="text-sm font-mono text-red-800 bg-red-100 px-3 py-2 rounded border border-red-200">
@@ -94,6 +94,7 @@ export function DeleteConfirmationModal({
                 <strong>Warning:</strong> This action cannot be undone.
                 {itemType === 'workflow' && ' All associated jobs and execution history will also be permanently deleted.'}
                 {itemType === 'job' && ' All execution history for this job will also be permanently deleted.'}
+                {itemType === 'connection' && ' Any workflows using this connection will fail until a new connection is configured.'}
               </span>
             </p>
           </div>
@@ -147,7 +148,7 @@ export function DeleteConfirmationModal({
             ) : (
               <>
                 <Trash2 className="w-4 h-4" />
-                Delete {itemType === 'workflow' ? 'Workflow' : 'Job'}
+                Delete {itemType === 'workflow' ? 'Workflow' : itemType === 'job' ? 'Job' : 'Connection'}
               </>
             )}
           </Button>

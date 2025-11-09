@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { DatabaseConnection } from '@/types/database-connection'
 import { CreateConnectionModal } from '@/components/database'
+import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
 import { cn } from '@/lib/utils'
 
 // Source categories for tabbed navigation
@@ -93,6 +94,8 @@ export default function SourcesPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
   const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [connectionToDelete, setConnectionToDelete] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     fetchConnections()
@@ -133,22 +136,28 @@ export default function SourcesPage() {
     }
   }
 
-  const deleteConnection = async (connectionId: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete the connection "${name}"?`)) {
-      return
-    }
+  const openDeleteModal = (connectionId: string, name: string) => {
+    setConnectionToDelete({ id: connectionId, name })
+    setDeleteModalOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!connectionToDelete) return
 
     try {
-      setDeletingConnectionId(connectionId)
-      const response = await fetch(`/api/database-connections/${connectionId}`, {
+      setDeletingConnectionId(connectionToDelete.id)
+      const response = await fetch(`/api/database-connections/${connectionToDelete.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
         await fetchConnections()
+        setDeleteModalOpen(false)
+        setConnectionToDelete(null)
       }
     } catch (error) {
       console.error('Failed to delete connection:', error)
+      throw error
     } finally {
       setDeletingConnectionId(null)
     }
@@ -367,7 +376,7 @@ export default function SourcesPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteConnection(connection.id, connection.name)}
+                      onClick={() => openDeleteModal(connection.id, connection.name)}
                       disabled={isDeleting}
                     >
                       {isDeleting ? (
@@ -491,6 +500,18 @@ export default function SourcesPage() {
         onConnectionCreated={() => {
           fetchConnections()
         }}
+      />
+
+      {/* Delete Connection Modal */}
+      <DeleteConfirmationModal
+        open={deleteModalOpen}
+        onOpenChange={setDeleteModalOpen}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Database Connection"
+        description="Are you sure you want to delete this database connection? This action cannot be undone."
+        itemName={connectionToDelete?.name || ''}
+        itemType="connection"
+        isDeleting={deletingConnectionId === connectionToDelete?.id}
       />
     </div>
   )
