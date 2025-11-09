@@ -161,17 +161,17 @@ export function Nav({ isCollapsed, onToggleCollapse }: NavProps) {
                 >
                   <Icon className="w-5 h-5 flex-shrink-0" />
                   {!isCollapsed && (
-                    <div className="flex items-center justify-between flex-1">
-                      <span>{link.label}</span>
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="whitespace-nowrap">{link.label}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         {link.badge && (
-                          <span className="text-xs px-2 py-0.5 bg-accent-yellow/10 text-accent-yellow border border-accent-yellow/30 rounded-full font-medium">
+                          <span className="text-xs px-2 py-0.5 bg-accent-yellow/10 text-accent-yellow border border-accent-yellow/30 rounded-full font-medium whitespace-nowrap">
                             {link.badge}
                           </span>
                         )}
                         <ChevronDown
                           className={cn(
-                            'w-4 h-4 transition-transform',
+                            'w-4 h-4 transition-transform flex-shrink-0',
                             isExpanded && 'rotate-180'
                           )}
                         />
