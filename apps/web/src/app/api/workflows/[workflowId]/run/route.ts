@@ -140,6 +140,52 @@ export async function POST(
       const hasHeader = fileConfig.hasHeader !== false  // Default to true
 
       try {
+        // Check if this is a database source
+        const sourceType = sourceConfig?.type || 'file'
+
+        if (sourceType === 'sql-server' || sourceType === 'postgresql' || sourceType === 'mysql') {
+          // Database source: call database_bronze task
+          console.log(`📊 Database source detected: ${sourceType}`)
+
+          const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+          const prefectRun = await triggerPrefectRun(deploymentId, {
+            job_id: job.id,
+            source_config: sourceConfig,
+            destination_config: {
+              bronzeConfig: {
+                tableName: `${workflow.slug}_${job.slug}_bronze`,
+                storageFormat: 'parquet',
+                loadStrategy: 'append',
+                auditColumns: true,
+                compression: 'snappy'
+              }
+            },
+            batch_id: batchId,
+            execution_id: jobExecutionId,
+            task_type: 'database_bronze'  // Signal to use database_bronze task
+          })
+
+          console.log(`✅ Database ingestion flow run created: ${prefectRun.id}`)
+
+          db.prepare(`
+            UPDATE job_executions
+            SET status = ?, logs = ?, updated_at = ?, flow_run_id = ?
+            WHERE id = ?
+          `).run('running', JSON.stringify([`Database ingestion started: ${sourceType}`, `Prefect flow run: ${prefectRun.id}`]), new Date().toISOString(), prefectRun.id, jobExecutionId)
+
+          jobResults.push({
+            jobId: job.id,
+            jobName: job.name,
+            status: 'running',
+            flowRunId: prefectRun.id,
+            sourceType: sourceType
+          })
+
+          continue  // Skip to next job
+        }
+
+        // File-based source processing
         let filesToProcess: string[] = []
 
         // Pattern matching: Scan landing zone for matching files

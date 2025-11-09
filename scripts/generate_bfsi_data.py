@@ -308,12 +308,12 @@ def generate_customers():
     return customers
 
 
-def save_to_excel(data, filename, sheet_name='Sheet1'):
-    """Save data to Excel file"""
+def save_to_csv(data, filename):
+    """Save data to CSV file"""
     import os
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     df = pd.DataFrame(data)
-    df.to_excel(filename, sheet_name=sheet_name, index=False)
+    df.to_csv(filename, index=False)
     print(f"SUCCESS: Saved {len(data)} records to {filename}")
 
 
@@ -330,16 +330,16 @@ def main():
     insert_transactions_to_postgres(transactions)
     print()
 
-    # Generate products and save to Excel
+    # Generate products and save to CSV
     print("[2/3] Generating product pricing data...")
     products = generate_products()
-    save_to_excel(products, 'sample-data/bfsi/bank_product_pricing_2024Q4.xlsx', 'Products')
+    save_to_csv(products, 'sample-data/bfsi/bank_product_pricing_2024Q4.csv')
     print()
 
-    # Generate customers and save to Excel
+    # Generate customers and save to CSV
     print("[3/3] Generating customer master data...")
     customers = generate_customers()
-    save_to_excel(customers, 'sample-data/bfsi/customer_master_data.xlsx', 'Customers')
+    save_to_csv(customers, 'sample-data/bfsi/customer_master_data.csv')
     print()
 
     print("=" * 60)
@@ -348,8 +348,8 @@ def main():
     print()
     print("Files created:")
     print("  - PostgreSQL: bank_transactions table (1,000 records)")
-    print("  - Excel: bank_product_pricing_2024Q4.xlsx (50 records)")
-    print("  - Excel: customer_master_data.xlsx (500 records)")
+    print("  - CSV: bank_product_pricing_2024Q4.csv (50 records)")
+    print("  - CSV: customer_master_data.csv (500 records)")
     print()
     print("Data quality issues intentionally included for AI demo:")
     print("  - Email format issues: 8-10%")

@@ -10,7 +10,7 @@ Comprehensive dataset for demonstrating FlowForge's AI-powered medallion archite
 **Business Context:**
 A regional bank is modernizing its data infrastructure. They need to:
 - Consolidate customer data from legacy systems (PostgreSQL database)
-- Integrate product pricing updates (Excel files from product team)
+- Integrate product pricing updates (CSV files from product team)
 - Ensure data quality before analytics
 - Reconcile data across all layers
 - Generate daily analytics for business reporting
@@ -88,8 +88,8 @@ CREATE TABLE bank_transactions (
 
 ---
 
-### **Job 2: Product Pricing (Excel File - Manual Upload)**
-**File:** `bank_product_pricing_2024Q4.xlsx`
+### **Job 2: Product Pricing (CSV File - Manual Upload)**
+**File:** `bank_product_pricing_2024Q4.csv`
 **Purpose:** Latest product pricing from finance team
 **Row Count:** 50 products
 
@@ -129,8 +129,8 @@ CREATE TABLE bank_transactions (
 
 ---
 
-### **Job 3: Customer Master Data (Excel File - Manual Upload)**
-**File:** `customer_master_data.xlsx`
+### **Job 3: Customer Master Data (CSV File - Manual Upload)**
+**File:** `customer_master_data.csv`
 **Purpose:** Customer demographic data for enrichment
 **Row Count:** 500 customers
 
@@ -350,7 +350,7 @@ When data lands in Bronze, AI analyzes and suggests:
    - Suggests 5 quality rules
    - Suggests primary key: `transaction_id`
 
-2. **Job 2: Excel Products → Bronze**
+2. **Job 2: CSV Products → Bronze**
    - AI detects 3 quality issues
    - Suggests 3 quality rules
    - Suggests primary key: `product_id`
@@ -393,9 +393,9 @@ When data lands in Bronze, AI analyzes and suggests:
    - Creates `bank_transactions` table
    - Inserts 1,000 records with quality issues
 
-2. **Excel Files:**
-   - `sample-data/bfsi/bank_product_pricing_2024Q4.xlsx`
-   - `sample-data/bfsi/customer_master_data.xlsx`
+2. **CSV Files:**
+   - `sample-data/bfsi/bank_product_pricing_2024Q4.csv`
+   - `sample-data/bfsi/customer_master_data.csv`
 
 3. **Data Generation Script:**
    - `scripts/generate_bfsi_data.py`
