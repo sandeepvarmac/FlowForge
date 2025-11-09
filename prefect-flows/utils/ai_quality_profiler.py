@@ -1,6 +1,6 @@
 """
 AI Quality Profiler - Analyzes Bronze layer data and suggests quality rules
-Uses Claude AI to intelligently detect data quality issues and recommend validation rules
+Uses Anthropic Claude to intelligently detect data quality issues and recommend validation rules
 """
 
 import os
@@ -14,11 +14,12 @@ from prefect import get_run_logger
 class AIQualityProfiler:
     """AI-powered data quality profiler that suggests validation rules"""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """Initialize AI profiler with Anthropic API key"""
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
         self.client = anthropic.Anthropic(api_key=self.api_key)
 
     def profile_dataframe(
@@ -133,28 +134,25 @@ class AIQualityProfiler:
         profile: Dict[str, Any],
         sample_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Use Claude AI to analyze profile and suggest quality rules"""
+        """Use Anthropic Claude to analyze profile and suggest quality rules"""
         logger = get_run_logger()
 
-        # Prepare prompt for Claude
+        # Prepare prompt for the model
         prompt = self._build_ai_prompt(table_name, profile, sample_data)
 
         try:
-            logger.info("Calling Claude AI for quality rule suggestions...")
+            logger.info("Calling Anthropic Claude for quality rule suggestions...")
 
             message = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=self.model,
                 max_tokens=4096,
                 messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
+                    {"role": "user", "content": prompt}
                 ]
             )
 
             # Parse AI response
-            response_text = message.content[0].text
+            response_text = message.content[0].text if message.content else ""
             logger.info(f"AI response received ({len(response_text)} chars)")
 
             # Extract JSON from response
@@ -177,7 +175,7 @@ class AIQualityProfiler:
         profile: Dict[str, Any],
         sample_data: List[Dict[str, Any]]
     ) -> str:
-        """Build prompt for Claude AI"""
+        """Build prompt for the model"""
         prompt = f"""You are a data quality expert analyzing a dataset called "{table_name}".
 Based on the statistical profile and sample data provided, suggest data quality validation rules.
 
@@ -282,7 +280,8 @@ Return ONLY the JSON response, no additional text.
 def profile_bronze_dataset(
     df: pl.DataFrame,
     table_name: str,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
+    model: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Convenience function to profile a Bronze layer dataset
@@ -290,10 +289,10 @@ def profile_bronze_dataset(
     Args:
         df: Polars DataFrame
         table_name: Name of the dataset
-        api_key: Optional Anthropic API key
+    api_key: Optional OpenAI API key
 
     Returns:
         Quality profile with AI suggestions
     """
-    profiler = AIQualityProfiler(api_key=api_key)
+    profiler = AIQualityProfiler(api_key=api_key, model=model)
     return profiler.profile_dataframe(df, table_name)

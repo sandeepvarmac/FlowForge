@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { openai } from '@/lib/ai/openai-client'
+import { anthropic } from '@/lib/ai/anthropic-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
 
 interface HeaderDetectionResult {
   success: boolean
@@ -38,12 +39,10 @@ export async function POST(request: NextRequest) {
     console.log('🤖 Step 2/3: AI header detection starting...')
 
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a CSV data analyst expert. Your job is to determine if a CSV file has a header row.
+      const completion = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 1000,
+        system: `You are a CSV data analyst expert. Your job is to determine if a CSV file has a header row.
 
 Analyze the first few rows and determine:
 1. Does the first row contain column headers (descriptive names) or actual data values?
@@ -61,18 +60,13 @@ Return ONLY valid JSON in this exact format:
   "hasHeader": true or false,
   "confidence": 0-100,
   "reasoning": "brief explanation in one sentence"
-}`
-          },
-          {
-            role: 'user',
-            content: `Analyze if this CSV has a header row:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}`
-          }
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' }
+}`,
+        messages: [
+          { role: 'user', content: `Analyze if this CSV has a header row:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}` }
+        ]
       })
 
-      const aiResponse = completion.choices[0].message.content
+      const aiResponse = (completion.content?.find((c: any) => c.type === 'text') as any)?.text
       if (!aiResponse) {
         throw new Error('No response from AI')
       }

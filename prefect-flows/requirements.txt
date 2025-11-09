@@ -27,3 +27,5 @@ pandas>=2.1.0
 croniter>=2.0.0  # Cron expression parsing
 pytz>=2024.1     # Timezone handling
 httpx>=0.25.0    # HTTP client for trigger notifications
+anthropic>=0.34.0  # Anthropic SDK for AI quality profiler
+requests>=2.31.0  # HTTP client for API calls

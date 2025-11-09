@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveUploadedFile, getFileHash, readFile } from '@/lib/storage'
-import { analyzeSchemaWithAI } from '@/lib/ai/openai-client'
+import { analyzeSchemaWithAI } from '@/lib/ai/anthropic-client'
 import { analyzePrimaryKeyCandidates } from '@/lib/ai/primary-key-detector'
 import { getDatabase } from '@/lib/db'
 import Papa from 'papaparse'

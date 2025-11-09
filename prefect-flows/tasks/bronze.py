@@ -12,6 +12,61 @@ from utils.s3 import S3Client
 from utils.slugify import slugify, generate_run_id
 from utils.metadata_catalog import catalog_bronze_asset, update_job_execution_metrics
 from utils.file_handlers import get_file_handler, detect_file_format
+from utils.ai_quality_profiler import AIQualityProfiler
+
+
+import os
+import requests
+
+
+def _save_quality_rules_to_db(job_id: str, suggested_rules: list, logger):
+    """
+    Save AI-suggested quality rules to database via Quality API
+
+    Args:
+        job_id: FlowForge job ID
+        suggested_rules: List of quality rule suggestions from AI profiler
+        logger: Prefect logger
+    """
+    # Get API base URL from environment (default to localhost)
+    api_base_url = os.getenv("FLOWFORGE_API_URL", "http://localhost:3000")
+    api_url = f"{api_base_url}/api/quality/rules"
+
+    saved_count = 0
+    for rule in suggested_rules:
+        try:
+            # Prepare rule payload for API
+            payload = {
+                "job_id": job_id,
+                "rule_id": rule.get("rule_id"),
+                "rule_name": rule.get("rule_id", "").replace("_", " ").title(),
+                "column_name": rule.get("column"),
+                "rule_type": rule.get("rule_type"),
+                "parameters": rule.get("pattern") or rule.get("min") or rule.get("max") or rule.get("allowed_values"),
+                "confidence": rule.get("confidence", 0),
+                "current_compliance": rule.get("current_compliance", ""),
+                "reasoning": rule.get("reasoning", ""),
+                "ai_generated": 1,
+                "severity": rule.get("severity", "error"),
+            }
+
+            # Convert parameters to JSON string if it's a dict/list
+            if isinstance(payload["parameters"], (dict, list)):
+                import json
+                payload["parameters"] = json.dumps(payload["parameters"])
+
+            # Call API to save rule
+            response = requests.post(api_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                saved_count += 1
+                logger.info(f"   ✓ Saved rule: {payload['rule_id']}")
+            else:
+                logger.warning(f"   ✗ Failed to save rule {payload['rule_id']}: {response.status_code}")
+
+        except Exception as e:
+            logger.warning(f"   ✗ Error saving rule: {e}")
+
+    logger.info(f"✅ Saved {saved_count}/{len(suggested_rules)} quality rules to database")
 
 
 def _build_bronze_key(
@@ -160,6 +215,29 @@ def bronze_ingest(
         logger.info(f"✅ Updated job execution metrics: bronze_records={df.height}")
     except Exception as e:
         logger.warning(f"⚠️ Failed to update job execution metrics: {e}")
+
+    # Run AI Quality Profiler to generate quality rule suggestions
+    profiling_result = None
+    try:
+        logger.info("🤖 Running AI Quality Profiler...")
+        profiler = AIQualityProfiler()
+        table_name = f"{workflow_slug}_{job_slug}"
+        profiling_result = profiler.profile_dataframe(df, table_name)
+
+        logger.info(f"✅ AI Profiling complete:")
+        logger.info(f"   - Column count: {profiling_result['column_count']}")
+        logger.info(f"   - Suggested rules: {len(profiling_result['ai_suggestions'].get('quality_rules', []))}")
+
+        # Save suggested rules to database via API
+        suggested_rules = profiling_result['ai_suggestions'].get('quality_rules', [])
+        if suggested_rules:
+            logger.info(f"💾 Saving {len(suggested_rules)} AI-suggested quality rules to database...")
+            _save_quality_rules_to_db(job_id, suggested_rules, logger)
+
+    except Exception as e:
+        logger.warning(f"⚠️ AI Quality Profiler failed (non-blocking): {e}")
+        import traceback
+        logger.warning(traceback.format_exc())
 
     return {
         "workflow_id": workflow_id,

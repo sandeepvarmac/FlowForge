@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { openai } from '@/lib/ai/openai-client'
+import { anthropic } from '@/lib/ai/anthropic-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
 
 interface ColumnSuggestion {
   position: number
@@ -65,12 +66,10 @@ export async function POST(request: NextRequest) {
     console.log('🤖 No headers detected. Asking AI for intelligent column names...')
 
     try {
-      const columnNamingCompletion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert data analyst. Analyze CSV data (without headers) and suggest meaningful column names.
+      const columnNamingCompletion = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 1200,
+        system: `You are an expert data analyst. Analyze CSV data (without headers) and suggest meaningful column names.
 
 For each column, provide:
 1. A descriptive, snake_case column name
@@ -97,18 +96,13 @@ Return ONLY valid JSON in this exact format:
       "confidence": 90
     }
   ]
-}`
-          },
-          {
-            role: 'user',
-            content: `Analyze this CSV data and suggest column names:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}\n\nSuggest intelligent column names for each column.`
-          }
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' }
+}`,
+        messages: [
+          { role: 'user', content: `Analyze this CSV data and suggest column names:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}\n\nSuggest intelligent column names for each column.` }
+        ]
       })
 
-      const columnNamingResponse = columnNamingCompletion.choices[0].message.content
+      const columnNamingResponse = (columnNamingCompletion.content?.find((c: any) => c.type === 'text') as any)?.text
       if (!columnNamingResponse) {
         throw new Error('No response from AI')
       }

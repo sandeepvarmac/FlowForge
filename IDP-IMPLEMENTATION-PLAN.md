@@ -44,7 +44,7 @@ Intelligent Document Processing (IDP) is an **optional add-on module** for FlowF
 |---------|-------------|--------|
 | **10x Faster Setup** | Pre-built templates vs custom code | 3 days → 3 hours |
 | **92% Cost Reduction** | Automated extraction vs manual entry | $174K/year → $12K/year (invoice example) |
-| **Vendor Neutral** | Customer chooses AI provider (OpenAI, Claude, Azure, Google) | No lock-in |
+| **Provider** | OpenAI | Configurable via OPENAI_MODEL |
 | **Seamless Integration** | Documents → Bronze → Silver → Gold (one platform) | No tool sprawl |
 | **AI-Powered** | Smart field detection, confidence scoring | 95%+ accuracy |
 
@@ -114,7 +114,7 @@ Intelligent Document Processing (IDP) is an **optional add-on module** for FlowF
 │  │                                                              │  │
 │  │  2. AI Vision Service (Vendor-Neutral)                      │  │
 │  │     ├─ OpenAI GPT-4 Vision API                              │  │
-│  │     ├─ Anthropic Claude 3 Vision API                        │  │
+│  │     ├─ OpenAI Vision API                                    │  │
 │  │     ├─ Azure Document Intelligence API                      │  │
 │  │     └─ Google Document AI API                               │  │
 │  │                                                              │  │
@@ -198,7 +198,7 @@ Response:
 | Provider | Model | Best For | Cost per Document |
 |----------|-------|----------|-------------------|
 | **OpenAI** | GPT-4 Vision | General documents, invoices | $0.10-0.30 |
-| **Anthropic** | Claude 3 Opus Vision | Complex tables, contracts | $0.15-0.40 |
+| **OpenAI** | Vision | Complex tables, contracts | — |
 | **Azure** | Document Intelligence | Enterprise compliance | $0.05-0.20 |
 | **Google** | Document AI | Forms, receipts | $0.10-0.25 |
 
@@ -207,7 +207,7 @@ Response:
 interface AIVisionService {
   extractDocument(
     documentId: string,
-    provider: 'openai' | 'claude' | 'azure' | 'google',
+    provider: 'openai',
     template: DocumentTemplate,
     options?: ExtractionOptions
   ): Promise<ExtractionResult>
@@ -249,8 +249,7 @@ export class AIVisionService {
     switch (provider) {
       case 'openai':
         return this.extractWithOpenAI(document, template)
-      case 'claude':
-        return this.extractWithClaude(document, template)
+      // Single provider: OpenAI
       case 'azure':
         return this.extractWithAzure(document, template)
       case 'google':
@@ -464,7 +463,7 @@ interface DocumentTemplate {
   fields: TemplateField[]
   tables?: TableDefinition[]
   validationRules: ValidationRule[]
-  aiProvider: 'openai' | 'claude' | 'azure' | 'google' | 'auto'
+  aiProvider: 'openai'
   confidenceThreshold: number  // 0-1, default 0.80
   createdAt: Date
   updatedAt: Date
@@ -684,7 +683,7 @@ PUT    /api/reviews/:reviewId/edit
 - ✅ Complex table extraction (nested, merged cells)
 - ✅ Handwriting recognition
 - ✅ Learning/improvement system (template auto-tuning)
-- ✅ Claude Vision integration (better for complex docs)
+- ✅ Vision integration (OpenAI)
 - ✅ Azure/Google provider options
 - ✅ Batch processing (1000+ docs)
 - ✅ Workflow triggers (new document → auto-process)
@@ -788,7 +787,7 @@ Content-Type: multipart/form-data
 Request:
 - file: File (PDF, PNG, JPG, TIFF)
 - templateId?: string (optional, auto-detect if not provided)
-- aiProvider?: 'openai' | 'claude' | 'azure' | 'google'
+- aiProvider?: 'openai'
 
 Response: 201 Created
 {
@@ -1249,7 +1248,7 @@ CREATE TABLE document_templates (
   validation_rules TEXT, -- JSON array of ValidationRule (optional)
 
   -- AI configuration
-  ai_provider TEXT DEFAULT 'openai' CHECK(ai_provider IN ('openai', 'claude', 'azure', 'google', 'auto')),
+  ai_provider TEXT DEFAULT 'openai' CHECK(ai_provider IN ('openai')),
   confidence_threshold REAL DEFAULT 0.80 CHECK(confidence_threshold >= 0 AND confidence_threshold <= 1),
 
   -- Metadata
@@ -1668,7 +1667,7 @@ export function TemplateBuilderPage() {
                 <label className="block text-sm font-medium mb-1">AI Provider</label>
                 <select className="w-full">
                   <option>OpenAI GPT-4 Vision</option>
-                  <option>Claude 3 Opus Vision</option>
+                  <option>OpenAI Vision</option>
                   <option>Azure Document Intelligence</option>
                   <option>Google Document AI</option>
                   <option>Auto (best for document type)</option>
@@ -1942,7 +1941,7 @@ interface DocumentJobConfig {
     type: 'document'
     landingPath: string  // S3 path where documents are uploaded
     templateId: string   // Which template to use for extraction
-    aiProvider?: 'openai' | 'claude' | 'azure' | 'google'
+    aiProvider?: 'openai'
     autoApprove: boolean  // Auto-approve if confidence > threshold
     confidenceThreshold: number  // Default 0.80
   }
@@ -2329,7 +2328,7 @@ async def document_extraction_flow(
 | Provider | Cost per Document | Cost per 1,000 Docs | Notes |
 |----------|-------------------|---------------------|-------|
 | **OpenAI GPT-4 Vision** | $0.10 - $0.30 | $100 - $300 | Best for general documents |
-| **Claude 3 Opus Vision** | $0.15 - $0.40 | $150 - $400 | Best for complex tables |
+| **OpenAI Vision** | — | — | Best for complex tables |
 | **Azure Document Intelligence** | $0.05 - $0.20 | $50 - $200 | Pre-built models, cheaper |
 | **Google Document AI** | $0.10 - $0.25 | $100 - $250 | Good balance |
 
@@ -2518,7 +2517,7 @@ async def document_extraction_flow(
 - ✅ Silver layer integration
 
 ### Q4 2025: Phase 3 (Advanced Features)
-- ✅ Claude Vision integration
+- ✅ OpenAI Vision integration
 - ✅ Azure/Google provider options
 - ✅ Batch processing
 - ✅ Workflow triggers (document arrival)
@@ -2546,7 +2545,7 @@ async def document_extraction_flow(
 
 ### Technical Documentation
 - OpenAI GPT-4 Vision API Documentation
-- Anthropic Claude 3 Vision Capabilities
+- OpenAI Vision Capabilities
 - Prefect Flow Documentation
 
 ---
@@ -2562,4 +2561,4 @@ async def document_extraction_flow(
 1. Should we prioritize Phase 1 in Q2 2025, or wait until Q3/Q4?
 2. Is the pricing strategy ($299/$999/$2,999) aligned with market expectations?
 3. Should we offer a free tier (100 documents/month) to drive adoption?
-4. Which AI provider should be default: OpenAI or Claude?
+4. Which OpenAI model should be default?

@@ -1,15 +1,14 @@
-import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
-if (!process.env.OPENAI_API_KEY) {
-  console.warn('⚠️  Warning: OPENAI_API_KEY not found in environment variables')
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.warn('⚠️  Warning: ANTHROPIC_API_KEY not found in environment variables')
 }
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'sk-dummy-key-for-build'
+export const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || 'sk-anthropic-dummy'
 })
 
-// Centralize model selection with env override
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
 
 export interface AISchemaAnalysis {
   columns: Array<{
@@ -38,9 +37,6 @@ export interface AISchemaAnalysis {
   insights: string[]
 }
 
-/**
- * Analyze CSV schema using AI
- */
 export async function analyzeSchemaWithAI(
   columns: Array<{ name: string; type: string; sample?: string }>,
   preview: any[]
@@ -96,31 +92,23 @@ Return your analysis as a JSON object matching this structure:
 
 IMPORTANT: Return ONLY valid JSON, no markdown or explanations.`
 
-    const response = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
+    const message = await anthropic.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 2000,
+      system: 'You are an expert data engineer. Always respond with valid JSON only, no markdown formatting.',
       messages: [
-        {
-          role: 'system',
-          content: 'You are an expert data engineer. Always respond with valid JSON only, no markdown formatting.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.3,
-      response_format: { type: 'json_object' }
+        { role: 'user', content: prompt }
+      ]
     })
 
-    const content = response.choices[0].message.content || '{}'
+    const contentBlock = message.content?.find((c: any) => c.type === 'text') as any
+    const content = contentBlock?.text || '{}'
     const analysis = JSON.parse(content)
 
-    console.log('✨ AI Schema Analysis completed')
+    console.log('🤖 AI Schema Analysis completed (Anthropic)')
     return analysis as AISchemaAnalysis
-
   } catch (error) {
-    console.error('❌ AI Schema Analysis failed:', error)
-    // Return fallback analysis
+    console.error('❌ AI Schema Analysis failed (Anthropic):', error)
     return {
       columns: columns.map(col => ({
         name: col.name,
@@ -137,9 +125,6 @@ IMPORTANT: Return ONLY valid JSON, no markdown or explanations.`
   }
 }
 
-/**
- * Generate transformation SQL from natural language
- */
 export async function generateTransformationSQL(
   description: string,
   columns: string[]
@@ -152,19 +137,20 @@ Available columns: ${columns.join(', ')}
 
 Return ONLY the SQL expression, no explanations.`
 
-    const response = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
+    const message = await anthropic.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 500,
+      system: 'You are a SQL expert. Return only SQL code.',
       messages: [
-        { role: 'system', content: 'You are a SQL expert. Return only SQL code.' },
         { role: 'user', content: prompt }
-      ],
-      temperature: 0.2,
-      max_tokens: 500
+      ]
     })
 
-    return response.choices[0].message.content?.trim() || ''
+    const contentBlock = message.content?.find((c: any) => c.type === 'text') as any
+    return (contentBlock?.text || '').trim()
   } catch (error) {
-    console.error('❌ SQL Generation failed:', error)
+    console.error('❌ SQL Generation failed (Anthropic):', error)
     return ''
   }
 }
+

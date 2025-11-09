@@ -14,6 +14,9 @@ import tempfile
 
 from utils.database_connectors import SQLServerConnector, PostgreSQLConnector, MySQLConnector
 from utils.s3 import S3Client
+from utils.ai_quality_profiler import AIQualityProfiler
+import polars as pl
+import requests
 
 
 @task(name="ingest-from-database", retries=2, retry_delay_seconds=30)
@@ -205,6 +208,32 @@ def ingest_from_database(
         if watermark_value:
             result["watermark_value"] = watermark_value
 
+        # Run AI Quality Profiler to generate quality rule suggestions
+        try:
+            print(f"\n7. Running AI Quality Profiler...")
+            profiler = AIQualityProfiler()
+
+            # Convert PyArrow table to Polars DataFrame for profiling
+            df_polars = pl.from_arrow(arrow_table)
+
+            # Use bronze table name for profiling
+            profiling_result = profiler.profile_dataframe(df_polars, bronze_table_name)
+
+            print(f"   AI Profiling complete:")
+            print(f"   - Column count: {profiling_result['column_count']}")
+            print(f"   - Suggested rules: {len(profiling_result['ai_suggestions'].get('quality_rules', []))}")
+
+            # Save suggested rules to database via API
+            suggested_rules = profiling_result['ai_suggestions'].get('quality_rules', [])
+            if suggested_rules:
+                print(f"   Saving {len(suggested_rules)} AI-suggested quality rules...")
+                _save_quality_rules_to_db(job_id, suggested_rules)
+
+        except Exception as e:
+            print(f"   WARNING: AI Quality Profiler failed (non-blocking): {e}")
+            import traceback
+            traceback.print_exc()
+
         print(f"\n{'='*60}")
         print(f"Database Bronze Ingestion Complete")
         print(f"Status: SUCCESS")
@@ -324,6 +353,56 @@ def _get_max_watermark(arrow_table: pa.Table, column_name: str) -> Any:
     except Exception as e:
         print(f"Warning: Could not compute watermark: {e}")
         return None
+
+
+def _save_quality_rules_to_db(job_id: str, suggested_rules: list):
+    """
+    Save AI-suggested quality rules to database via Quality API
+
+    Args:
+        job_id: FlowForge job ID
+        suggested_rules: List of quality rule suggestions from AI profiler
+    """
+    import json
+
+    # Get API base URL from environment (default to localhost)
+    api_base_url = os.getenv("FLOWFORGE_API_URL", "http://localhost:3000")
+    api_url = f"{api_base_url}/api/quality/rules"
+
+    saved_count = 0
+    for rule in suggested_rules:
+        try:
+            # Prepare rule payload for API
+            payload = {
+                "job_id": job_id,
+                "rule_id": rule.get("rule_id"),
+                "rule_name": rule.get("rule_id", "").replace("_", " ").title(),
+                "column_name": rule.get("column"),
+                "rule_type": rule.get("rule_type"),
+                "parameters": rule.get("pattern") or rule.get("min") or rule.get("max") or rule.get("allowed_values"),
+                "confidence": rule.get("confidence", 0),
+                "current_compliance": rule.get("current_compliance", ""),
+                "reasoning": rule.get("reasoning", ""),
+                "ai_generated": 1,
+                "severity": rule.get("severity", "error"),
+            }
+
+            # Convert parameters to JSON string if it's a dict/list
+            if isinstance(payload["parameters"], (dict, list)):
+                payload["parameters"] = json.dumps(payload["parameters"])
+
+            # Call API to save rule
+            response = requests.post(api_url, json=payload, timeout=10)
+            if response.status_code == 200:
+                saved_count += 1
+                print(f"     ✓ Saved rule: {payload['rule_id']}")
+            else:
+                print(f"     ✗ Failed to save rule {payload['rule_id']}: {response.status_code}")
+
+        except Exception as e:
+            print(f"     ✗ Error saving rule: {e}")
+
+    print(f"   Saved {saved_count}/{len(suggested_rules)} quality rules to database")
 
 
 @task(name="test-database-connection")

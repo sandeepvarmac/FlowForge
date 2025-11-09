@@ -50,7 +50,7 @@ Created realistic banking dataset with intentional quality issues for AI detecti
 
 ### ✅ **Phase 2: AI Quality Profiler Service (100% Complete)**
 
-Created intelligent data profiling service using Claude AI:
+Created intelligent data profiling service using OpenAI:
 
 #### File: `prefect-flows/utils/ai_quality_profiler.py`
 
@@ -61,8 +61,8 @@ Created intelligent data profiling service using Claude AI:
   * Length statistics for string columns
   * Sample unique values for enum detection
 
-- **Claude AI Integration:**
-  * Model: claude-3-5-sonnet-20241022
+- **OpenAI Integration:**
+  * Model: ${OPENAI_MODEL} (configurable via env)
   * Analyzes statistical profile + sample data
   * Suggests quality rules with confidence scores
   * Provides reasoning for each suggestion
@@ -243,7 +243,7 @@ CREATE TABLE reconciliation_executions (
    ↓
 2. AI Profiler analyzes DataFrame
    - Statistical profiling
-   - Claude AI suggestions
+   - OpenAI suggestions
    ↓
 3. Quality Rules stored in dq_rules table
    - User reviews/approves AI suggestions

@@ -255,7 +255,7 @@ Process invoices, purchase orders, contracts, and forms automatically without ma
 **How it works:**
 - Upload PDF or image file
 - AI extracts text, tables, and key fields
-- Choose AI provider (OpenAI, Claude, Azure, Google)
+- Choose AI provider (OpenAI)
 - Review extracted data (confidence scoring)
 - Approve or correct before loading
 - Batch process hundreds of documents

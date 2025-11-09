@@ -405,7 +405,7 @@ FlowForge MVP is an **Enterprise Data Platform (EDP)** focused on implementing t
   - `gold/` - Analytics-ready data
 
 ### AI Integration
-- **Provider:** Anthropic Claude (via API)
+- **Provider:** OpenAI (via API)
 - **Use Cases:**
   - CSV header detection
   - Column naming for headerless files

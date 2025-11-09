@@ -25,7 +25,7 @@ The FlowForge MVP is now **100% complete** with all planned features fully imple
 #### AI-Powered Features
 - ✅ Automatic file format detection from extension
 - ✅ Header detection (intelligent headerless CSV handling)
-- ✅ Column naming with Claude AI (semantic, business-friendly names)
+- ✅ Column naming with OpenAI (semantic, business-friendly names)
 - ✅ Primary key detection using AI analysis
 - ✅ Data type inference (string, number, date, email, phone, etc.)
 - ✅ Schema validation and preview before processing
@@ -304,7 +304,7 @@ if (uploadMode === 'pattern' && fileConfig.filePattern) {
 - **Backend**: Next.js API Routes, SQLite (metadata), MinIO/S3 (data lake)
 - **Orchestration**: Prefect 2.x
 - **Data Processing**: Python 3.11, Polars (DataFrames), Pyarrow (Parquet)
-- **AI Integration**: Anthropic Claude API (schema analysis, column naming)
+- **AI Integration**: OpenAI API (schema analysis, column naming)
 
 ### File Storage Structure
 ```
@@ -518,4 +518,4 @@ The platform is ready for:
 
 **Document Version**: 1.0
 **Last Updated**: January 2025
-**Prepared By**: Claude (Anthropic AI)
+**Prepared By**: AI Code Agent (OpenAI)

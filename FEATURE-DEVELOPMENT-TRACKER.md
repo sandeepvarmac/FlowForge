@@ -500,7 +500,7 @@ After:  Job = (File OR Database OR API) source + transformations
 
 **Architecture Integration:**
 - New job type: "Document Extraction Job"
-- AI Vision Service (multi-provider: OpenAI, Claude, Azure, Google)
+- AI Vision Service (OpenAI)
 - Document → Bronze → Silver → Gold (seamless integration)
 - Template management system (pre-built + custom templates)
 - Human-in-the-loop review queue
@@ -526,7 +526,7 @@ After:  Job = (File OR Database OR API) source + transformations
 - Silver layer integration (validated data)
 
 **Phase 3: Advanced Features (8 weeks)**
-- Claude Vision integration (better for complex documents)
+- Vision integration (OpenAI)
 - Azure Document Intelligence + Google Document AI providers
 - Multi-page document assembly
 - Complex table extraction (nested, merged cells)
@@ -545,7 +545,7 @@ After:  Job = (File OR Database OR API) source + transformations
 | Feature | Snowflake Document AI | FlowForge IDP |
 |---------|----------------------|---------------|
 | Vendor Lock-in | Snowflake only | None (any cloud/on-prem) |
-| AI Provider | Locked | Customer choice (OpenAI/Claude/Azure/Google) |
+| AI Provider | Locked | OpenAI |
 | Integration | Snowflake tables | Any database, S3, DuckDB |
 | Orchestration | Separate tool needed | Built into workflow engine |
 | Pricing | $$$$ (Snowflake markup) | Transparent usage-based |
@@ -667,7 +667,7 @@ GET    /api/batches/:batchId
 - [ ] Update documentation
 
 **Phase 3 (Q4 2025 - 8 weeks):**
-- [ ] Integrate Claude 3 Vision API
+- [ ] Integrate OpenAI Vision API
 - [ ] Integrate Azure Document Intelligence API
 - [ ] Integrate Google Document AI API
 - [ ] Implement multi-page document assembly
@@ -1806,7 +1806,7 @@ function evaluateCondition(condition: string, status: string): boolean {
 | Feature | Snowflake Document AI | FlowForge IDP |
 |---------|----------------------|---------------|
 | Vendor Lock-in | Snowflake only | None (any cloud/on-prem) |
-| AI Provider | Locked | Customer choice (OpenAI/Claude/Azure/Google) |
+| AI Provider | Locked | OpenAI |
 | Integration | Snowflake tables | Any database, S3, DuckDB |
 | Orchestration | Separate tool | Built-in workflow engine |
 
@@ -1855,7 +1855,7 @@ function evaluateCondition(condition: string, status: string): boolean {
 - Silver layer integration
 
 **Phase 3: Advanced Features (8 weeks)**
-- Multi-provider support (Claude, Azure, Google)
+- Multi-provider support (future consideration)
 - Batch processing (1000+ docs)
 - Document arrival triggers
 - Complex table extraction
@@ -2156,4 +2156,3 @@ PREFECT_DEPLOYMENT_ID=2667a424-53c6-4476-b0fb-e2cbeef374ab
 **Status:** ✅ Complete and ready for sales team use
 
 ---
-
