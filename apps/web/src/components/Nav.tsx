@@ -62,8 +62,8 @@ const links: NavLink[] = [
       { href: '/data-assets/lineage', label: 'Lineage', icon: GitBranch },
     ]
   },
-  { href: '/quality', label: 'Quality', icon: Shield, badge: 'Soon' },
-  { href: '/reconciliation', label: 'Reconciliation', icon: Repeat, badge: 'Soon' },
+  { href: '/quality', label: 'Quality', icon: Shield },
+  { href: '/reconciliation', label: 'Reconciliation', icon: Repeat },
   {
     href: '/integrations',
     label: 'Integrations',
