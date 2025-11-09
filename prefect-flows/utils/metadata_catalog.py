@@ -381,18 +381,20 @@ def update_job_execution_metrics(
     bronze_records: Optional[int] = None,
     silver_records: Optional[int] = None,
     gold_records: Optional[int] = None,
+    quarantined_records: Optional[int] = None,
 ) -> None:
     """
     Update record counts for a job execution in the database.
 
     This function finds the most recent job_execution for the given job_id
-    and updates the bronze_records, silver_records, and/or gold_records columns.
+    and updates the bronze_records, silver_records, gold_records, and/or quarantined_records columns.
 
     Args:
         job_id: Job ID
         bronze_records: Number of bronze records (optional)
         silver_records: Number of silver records (optional)
         gold_records: Number of gold records (optional)
+        quarantined_records: Number of quarantined records (optional)
     """
     logger = get_run_logger()
     conn = get_database_connection()
@@ -432,6 +434,10 @@ def update_job_execution_metrics(
         if gold_records is not None:
             updates.append("gold_records = ?")
             params.append(gold_records)
+
+        if quarantined_records is not None:
+            updates.append("quarantined_records = ?")
+            params.append(quarantined_records)
 
         if not updates:
             logger.warning("No metrics provided to update")
