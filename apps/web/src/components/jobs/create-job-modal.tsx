@@ -6,12 +6,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FormField, FormLabel, FormError, Select, Textarea } from '@/components/ui/form'
 import { Input } from '@/components/ui'
 import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, TransformationConfig, ValidationConfig } from '@/types/workflow'
-import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity } from 'lucide-react'
+import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
 import { DatabaseSourceConfig } from './database-source-config'
 import { CreateConnectionModal } from '@/components/database'
 import { DatabaseConnection } from '@/types/database-connection'
+import { AISuggestionCard, AISuggestion } from '@/components/ai/ai-suggestion-card'
+import { useToast } from '@/hooks/use-toast'
+import { ToastContainer } from '@/components/ui/toast-container'
 
 interface CreateJobModalProps {
   open: boolean
@@ -36,6 +39,21 @@ interface JobFormData {
   _uploadedFile?: File
   _detectedSchema?: Array<{ name: string; type: string; sample?: string }>
   _previewData?: any[]
+  _detectedMetadata?: {
+    temporal_columns?: string[]
+    pk_candidates?: string[]
+  }
+  // AI-suggested quality rules storage
+  _bronzeQualityRulesSuggestions?: any[]
+  _silverQualityRulesApplied?: boolean
+  _silverQualityRulesSuggestions?: any[]
+  // AI-suggested Gold layer configurations
+  _goldAggregationMetrics?: any[]
+  _goldIndexingSuggestions?: {
+    enabled: boolean
+    strategy: string
+    columns: string[]
+  }
 }
 
 const initialFormData: JobFormData = {
@@ -162,6 +180,26 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [availableConnections, setAvailableConnections] = React.useState<DatabaseConnection[]>([])
   const [isCreatingConnection, setIsCreatingConnection] = React.useState(false)
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null)
+  const toast = useToast()
+
+  // AI Suggestions state - Bronze Layer
+  const [aiSuggestions, setAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
+  const [isLoadingAiSuggestions, setIsLoadingAiSuggestions] = React.useState(false)
+  const [aiSuggestionsError, setAiSuggestionsError] = React.useState<string | null>(null)
+  const [aiSuggestionsExpanded, setAiSuggestionsExpanded] = React.useState(false)
+
+  // AI Suggestions state - Silver Layer
+  const [silverAiSuggestions, setSilverAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
+  const [isLoadingSilverAiSuggestions, setIsLoadingSilverAiSuggestions] = React.useState(false)
+  const [silverAiSuggestionsError, setSilverAiSuggestionsError] = React.useState<string | null>(null)
+  const [silverAiSuggestionsExpanded, setSilverAiSuggestionsExpanded] = React.useState(false)
+
+  // AI Suggestions state - Gold Layer
+  const [goldAiSuggestions, setGoldAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
+  const [isLoadingGoldAiSuggestions, setIsLoadingGoldAiSuggestions] = React.useState(false)
+  const [goldAiSuggestionsError, setGoldAiSuggestionsError] = React.useState<string | null>(null)
+  const [goldAiSuggestionsExpanded, setGoldAiSuggestionsExpanded] = React.useState(false)
+  const [businessContext, setBusinessContext] = React.useState<string>('')
 
   const resetForm = React.useCallback(() => {
     setFormData(initialFormData)
@@ -257,15 +295,512 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     }))
   }
 
+  // Fetch AI suggestions for Bronze layer configuration
+  const fetchAiSuggestions = React.useCallback(async (tableName?: string, connectionId?: string, dbType?: string) => {
+    console.log('[AI] ===== fetchAiSuggestions CALLED =====')
+
+    // Use provided parameters or fall back to formData
+    const useTableName = tableName || formData.sourceConfig.databaseConfig?.tableName
+    const useConnectionId = connectionId || selectedConnectionId
+    const useDbType = dbType || formData.sourceConfig.type
+
+    console.log('[AI] Parameters:', {
+      providedTableName: tableName,
+      providedConnectionId: connectionId,
+      providedDbType: dbType,
+      finalTableName: useTableName,
+      finalConnectionId: useConnectionId,
+      finalDbType: useDbType
+    })
+
+    if (!useConnectionId || !useTableName || !useDbType) {
+      console.log('[AI] Skipping AI suggestions - missing required data:', {
+        hasConnectionId: !!useConnectionId,
+        hasTableName: !!useTableName,
+        hasType: !!useDbType
+      })
+      return
+    }
+
+    console.log('[AI] Fetching AI suggestions with:', {
+      dbType: useDbType,
+      connectionId: useConnectionId,
+      tableName: useTableName
+    })
+
+    setIsLoadingAiSuggestions(true)
+    setAiSuggestionsError(null)
+
+    try {
+      const response = await fetch('/api/ai/config/bronze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dbType: useDbType,
+          connectionId: useConnectionId,
+          tableName: useTableName
+        })
+      })
+
+      console.log('[AI] Response status:', response.status)
+      const result = await response.json()
+      console.log('[AI] Response data:', result)
+
+      if (result.success && result.suggestions) {
+        console.log('[AI] Suggestions received:', Object.keys(result.suggestions))
+        setAiSuggestions(result.suggestions)
+        setAiSuggestionsError(null)
+      } else {
+        console.error('[AI] Failed to get suggestions:', result.message)
+
+        // Check if it's an API credit issue
+        let errorMessage = result.message || 'Failed to generate AI suggestions'
+        if (result.error && (
+          result.error.includes('credit balance is too low') ||
+          result.error.includes('insufficient credits') ||
+          result.error.includes('BadRequestError')
+        )) {
+          errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
+        }
+
+        setAiSuggestionsError(errorMessage)
+      }
+    } catch (error) {
+      console.error('[AI] Error fetching AI suggestions:', error)
+      setAiSuggestionsError('Failed to generate AI suggestions. Please try again.')
+    } finally {
+      setIsLoadingAiSuggestions(false)
+    }
+  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type])
+
+  // Fetch AI suggestions for Silver layer configuration
+  const fetchSilverAiSuggestions = React.useCallback(async () => {
+    console.log('[Silver AI] ===== fetchSilverAiSuggestions CALLED =====')
+
+    const useTableName = formData.sourceConfig.databaseConfig?.tableName
+    const useConnectionId = selectedConnectionId
+    const useDbType = formData.sourceConfig.type
+
+    if (!useTableName || !useConnectionId || !useDbType) {
+      console.log('[Silver AI] Missing required data:', { useTableName, useConnectionId, useDbType })
+      return
+    }
+
+    console.log('[Silver AI] Fetching suggestions for:', { useTableName, useConnectionId, useDbType })
+
+    setIsLoadingSilverAiSuggestions(true)
+    setSilverAiSuggestionsError(null)
+
+    try {
+      const response = await fetch('/api/ai/config/silver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dbType: useDbType,
+          connectionId: useConnectionId,
+          tableName: useTableName,
+          bronzeMetadata: formData._detectedMetadata || null
+        })
+      })
+
+      const result = await response.json()
+      console.log('[Silver AI] API response:', result)
+
+      if (result.success && result.suggestions) {
+        console.log('[Silver AI] Setting suggestions:', result.suggestions)
+        setSilverAiSuggestions(result.suggestions)
+        setSilverAiSuggestionsError(null)
+      } else {
+        console.error('[Silver AI] API returned error:', result.message)
+        let errorMessage = result.message || 'Failed to generate Silver layer suggestions'
+
+        // Provide user-friendly error messages for common issues
+        if (result.error && (
+          result.error.includes('credit balance is too low') ||
+          result.error.includes('insufficient credits') ||
+          result.error.includes('BadRequestError')
+        )) {
+          errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
+        }
+
+        setSilverAiSuggestionsError(errorMessage)
+      }
+    } catch (error) {
+      console.error('[Silver AI] Error fetching AI suggestions:', error)
+      setSilverAiSuggestionsError('Failed to generate Silver AI suggestions. Please try again.')
+    } finally {
+      setIsLoadingSilverAiSuggestions(false)
+    }
+  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type, formData._detectedMetadata])
+
+  // Fetch Gold AI Suggestions
+  const fetchGoldAiSuggestions = React.useCallback(async () => {
+    console.log('[Gold AI] ===== fetchGoldAiSuggestions CALLED =====')
+
+    const useTableName = formData.sourceConfig.databaseConfig?.tableName
+    const useConnectionId = selectedConnectionId
+    const useDbType = formData.sourceConfig.type
+
+    if (!useTableName || !useConnectionId || !useDbType) {
+      console.log('[Gold AI] Missing required data:', { useTableName, useConnectionId, useDbType })
+      return
+    }
+
+    console.log('[Gold AI] Fetching suggestions for:', { useTableName, useConnectionId, useDbType, businessContext: businessContext || 'not provided' })
+
+    setIsLoadingGoldAiSuggestions(true)
+    setGoldAiSuggestionsError(null)
+
+    try {
+      const response = await fetch('/api/ai/config/gold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dbType: useDbType,
+          connectionId: useConnectionId,
+          tableName: useTableName,
+          businessContext: businessContext || null
+        })
+      })
+
+      const result = await response.json()
+      console.log('[Gold AI] API response:', result)
+
+      if (result.success && result.suggestions) {
+        console.log('[Gold AI] Setting suggestions:', result.suggestions)
+        setGoldAiSuggestions(result.suggestions)
+        setGoldAiSuggestionsError(null)
+      } else {
+        console.error('[Gold AI] API returned error:', result.message)
+        let errorMessage = result.message || 'Failed to generate Gold layer suggestions'
+
+        // Provide user-friendly error messages for common issues
+        if (result.error && (
+          result.error.includes('credit balance is too low') ||
+          result.error.includes('insufficient credits') ||
+          result.error.includes('BadRequestError')
+        )) {
+          errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
+        }
+
+        setGoldAiSuggestionsError(errorMessage)
+      }
+    } catch (error) {
+      console.error('[Gold AI] Error fetching AI suggestions:', error)
+      setGoldAiSuggestionsError('Failed to generate Gold AI suggestions. Please try again.')
+    } finally {
+      setIsLoadingGoldAiSuggestions(false)
+    }
+  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type, businessContext])
+
+  // Apply AI suggestions to Bronze config
+  const applyAiSuggestions = React.useCallback(() => {
+    console.log('[AI] applyAiSuggestions called with:', aiSuggestions)
+    if (!aiSuggestions) {
+      console.log('[AI] No suggestions to apply')
+      return
+    }
+
+    const bronzeUpdates: any = {}
+    let appliedCount = 0
+
+    // Apply storage format suggestion
+    if (aiSuggestions.storage_format?.format) {
+      bronzeUpdates.storageFormat = aiSuggestions.storage_format.format
+      appliedCount++
+    }
+
+    // Apply compression suggestion
+    if (aiSuggestions.compression?.algorithm) {
+      bronzeUpdates.compression = aiSuggestions.compression.algorithm
+      appliedCount++
+    }
+
+    // Apply incremental load suggestion
+    if (aiSuggestions.incremental_load?.enabled) {
+      bronzeUpdates.loadStrategy = 'incremental'
+      // Store watermark column in database config
+      if (aiSuggestions.incremental_load.watermark_column) {
+        updateSourceConfig({
+          databaseConfig: {
+            ...formData.sourceConfig.databaseConfig!,
+            deltaColumn: aiSuggestions.incremental_load.watermark_column,
+            isIncremental: true
+          }
+        })
+      }
+      appliedCount++
+    } else if (aiSuggestions.incremental_load?.enabled === false) {
+      // If AI explicitly recommends full refresh, apply that
+      bronzeUpdates.loadStrategy = 'full_refresh'
+      appliedCount++
+    }
+
+    // Apply schema evolution suggestion
+    if (aiSuggestions.schema_evolution?.enabled !== undefined) {
+      bronzeUpdates.schemaEvolution = aiSuggestions.schema_evolution.enabled ? 'add_new_columns' : 'strict'
+      appliedCount++
+    }
+
+    // Apply partitioning suggestion
+    if (aiSuggestions.partitioning?.enabled && aiSuggestions.partitioning.partition_column) {
+      // Store partition info - you may want to add UI fields for this in the future
+      bronzeUpdates._partitionStrategy = aiSuggestions.partitioning.strategy
+      bronzeUpdates._partitionColumn = aiSuggestions.partitioning.partition_column
+      appliedCount++
+    }
+
+    // Update Bronze config with all AI suggestions
+    updateDestinationConfig({
+      bronzeConfig: {
+        ...formData.destinationConfig.bronzeConfig!,
+        ...bronzeUpdates
+      }
+    })
+
+    // Show success toast notification
+    toast.success(`Applied ${appliedCount} AI suggestions to Bronze layer configuration`, 4000)
+    console.log('[AI] Applied', appliedCount, 'AI suggestions to Bronze layer:', bronzeUpdates)
+
+    // Collapse the AI suggestions card after applying
+    setAiSuggestionsExpanded(false)
+  }, [aiSuggestions, formData, updateSourceConfig, updateDestinationConfig, setAiSuggestionsExpanded, toast])
+
+  // Reset Bronze config to manual defaults
+  const resetToManualDefaults = React.useCallback(() => {
+    const defaultBronzeConfig = {
+      enabled: true,
+      tableName: formData.destinationConfig.bronzeConfig?.tableName || '', // Keep table name
+      storageFormat: 'parquet' as const,
+      compression: 'snappy' as const,
+      loadStrategy: 'append' as const,
+      schemaEvolution: 'add_new_columns' as const,
+      auditColumns: true,
+      auditColumnsBatchId: true,
+      auditColumnsSourceSystem: true,
+      auditColumnsFileModified: false
+    }
+
+    updateDestinationConfig({
+      bronzeConfig: defaultBronzeConfig
+    })
+
+    // Reset database config incremental settings
+    if (formData.sourceConfig.databaseConfig) {
+      updateSourceConfig({
+        databaseConfig: {
+          ...formData.sourceConfig.databaseConfig,
+          isIncremental: false,
+          deltaColumn: undefined
+        }
+      })
+    }
+
+    toast.info('Reset Bronze layer configuration to manual defaults', 3000)
+    console.log('[AI] Reset to manual defaults')
+  }, [formData, updateSourceConfig, updateDestinationConfig, toast])
+
+  // Apply Silver AI suggestions to Silver config
+  const applySilverAiSuggestions = React.useCallback(() => {
+    console.log('[Silver AI] applySilverAiSuggestions called with:', silverAiSuggestions)
+    if (!silverAiSuggestions) {
+      console.log('[Silver AI] No suggestions to apply')
+      return
+    }
+
+    const silverUpdates: any = {}
+    let appliedCount = 0
+
+    // Apply primary key suggestion
+    if (silverAiSuggestions.primary_key?.columns && silverAiSuggestions.primary_key.columns.length > 0) {
+      const columns = silverAiSuggestions.primary_key.columns
+      silverUpdates.primaryKey = columns.length === 1 ? columns[0] : columns
+      appliedCount++
+    }
+
+    // Apply merge strategy suggestion
+    if (silverAiSuggestions.merge_strategy?.strategy) {
+      silverUpdates.mergeStrategy = silverAiSuggestions.merge_strategy.strategy
+      if (silverAiSuggestions.merge_strategy.update_strategy) {
+        silverUpdates.updateStrategy = silverAiSuggestions.merge_strategy.update_strategy
+      }
+      if (silverAiSuggestions.merge_strategy.conflict_resolution) {
+        silverUpdates.conflictResolution = silverAiSuggestions.merge_strategy.conflict_resolution
+      }
+      appliedCount++
+    }
+
+    // Apply deduplication suggestion
+    if (silverAiSuggestions.deduplication?.enabled !== undefined) {
+      // Store dedup info in a custom field for now (UI may not have direct toggle yet)
+      silverUpdates._dedupEnabled = silverAiSuggestions.deduplication.enabled
+      silverUpdates._dedupStrategy = silverAiSuggestions.deduplication.strategy
+      silverUpdates._dedupSortColumn = silverAiSuggestions.deduplication.sort_column
+      appliedCount++
+    }
+
+    // Quality rules are stored separately - we'll show them in a list for user to add manually
+    // Store them in form data for reference
+    if (silverAiSuggestions.quality_rules?.suggested_rules && silverAiSuggestions.quality_rules.suggested_rules.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        _silverQualityRulesSuggestions: silverAiSuggestions.quality_rules.suggested_rules
+      }))
+      appliedCount++
+    }
+
+    // Update Silver config with all AI suggestions
+    updateDestinationConfig({
+      silverConfig: {
+        ...formData.destinationConfig.silverConfig!,
+        ...silverUpdates
+      }
+    })
+
+    // Show success toast notification
+    toast.success(`Applied ${appliedCount} AI suggestions to Silver layer configuration`, 4000)
+    console.log('[Silver AI] Applied', appliedCount, 'AI suggestions to Silver layer:', silverUpdates)
+
+    // Collapse the AI suggestions card after applying
+    setSilverAiSuggestionsExpanded(false)
+  }, [silverAiSuggestions, formData, updateDestinationConfig, setSilverAiSuggestionsExpanded, toast])
+
+  // Apply Gold AI Suggestions
+  const applyGoldAiSuggestions = React.useCallback(() => {
+    console.log('[Gold AI] applyGoldAiSuggestions called with:', goldAiSuggestions)
+    if (!goldAiSuggestions) {
+      console.log('[Gold AI] No suggestions to apply')
+      return
+    }
+
+    const goldUpdates: any = {}
+    let appliedCount = 0
+
+    // Apply aggregation suggestions
+    if (goldAiSuggestions.aggregation?.enabled !== undefined) {
+      goldUpdates.aggregationEnabled = goldAiSuggestions.aggregation.enabled
+
+      if (goldAiSuggestions.aggregation.level) {
+        // Map AI aggregation level to time grain
+        const levelToGrain: Record<string, 'daily' | 'weekly' | 'monthly' | 'yearly'> = {
+          'DAILY': 'daily',
+          'MONTHLY': 'monthly',
+          'YEARLY': 'yearly'
+        }
+        goldUpdates.aggregationTimeGrain = levelToGrain[goldAiSuggestions.aggregation.level] || 'daily'
+      }
+
+      // Store metrics for display/reference (may need custom UI to show suggested metrics)
+      if (goldAiSuggestions.aggregation.metrics && goldAiSuggestions.aggregation.metrics.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          _goldAggregationMetrics: goldAiSuggestions.aggregation.metrics
+        }))
+      }
+
+      appliedCount++
+    }
+
+    // Apply materialization suggestions
+    if (goldAiSuggestions.materialization?.enabled !== undefined) {
+      goldUpdates.materializationType = goldAiSuggestions.materialization.enabled ? 'materialized_view' : 'view'
+
+      if (goldAiSuggestions.materialization.refresh_strategy) {
+        // Map AI refresh strategy to build strategy
+        const refreshToBuild: Record<string, 'full_rebuild' | 'incremental'> = {
+          'INCREMENTAL': 'incremental',
+          'FULL': 'full_rebuild'
+        }
+        goldUpdates.buildStrategy = refreshToBuild[goldAiSuggestions.materialization.refresh_strategy] || 'full_rebuild'
+      }
+
+      appliedCount++
+    }
+
+    // Apply indexing suggestions (store for reference)
+    if (goldAiSuggestions.indexing?.enabled !== undefined && goldAiSuggestions.indexing.columns && goldAiSuggestions.indexing.columns.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        _goldIndexingSuggestions: {
+          enabled: goldAiSuggestions.indexing.enabled,
+          strategy: goldAiSuggestions.indexing.strategy,
+          columns: goldAiSuggestions.indexing.columns
+        }
+      }))
+      appliedCount++
+    }
+
+    // Update Gold config with all AI suggestions
+    updateDestinationConfig({
+      goldConfig: {
+        ...formData.destinationConfig.goldConfig!,
+        ...goldUpdates
+      }
+    })
+
+    // Show success toast notification
+    toast.success(`Applied ${appliedCount} AI suggestions to Gold layer configuration`, 4000)
+    console.log('[Gold AI] Applied', appliedCount, 'AI suggestions to Gold layer:', goldUpdates)
+
+    // Collapse the AI suggestions card after applying
+    setGoldAiSuggestionsExpanded(false)
+  }, [goldAiSuggestions, formData, updateDestinationConfig, setGoldAiSuggestionsExpanded, toast])
+
+  const isStepValid = (step: number): boolean => {
+    switch (step) {
+      case 1:
+        if (!formData.name.trim()) return false
+
+        // For file-based jobs, require file upload in create mode
+        if (formData.type === 'file-based' && mode === 'create' && !formData._uploadedFile) {
+          return false
+        }
+
+        // For database jobs, require connection, table selection, AND schema detection
+        if (formData.type === 'database') {
+          if (!selectedConnectionId) return false
+          if (!formData.sourceConfig.databaseConfig?.tableName) return false
+          if (!formData._detectedSchema || formData._detectedSchema.length === 0) return false
+        }
+        return true
+      case 2:
+        if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) return false
+        return true
+      case 3:
+        if (formData.destinationConfig.silverConfig?.enabled !== false) {
+          if (!formData.destinationConfig.silverConfig?.tableName?.trim()) return false
+        }
+        return true
+      case 4:
+        if (formData.destinationConfig.goldConfig?.enabled !== false) {
+          if (!formData.destinationConfig.goldConfig?.tableName?.trim()) return false
+        }
+        return true
+      default:
+        return true
+    }
+  }
+
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
 
     switch (step) {
       case 1:
         if (!formData.name.trim()) newErrors.name = 'Job name is required'
-        // In edit mode, file upload is optional (can keep existing file)
-        if (mode === 'create' && !formData._uploadedFile) {
+
+        // For file-based jobs, require file upload in create mode
+        if (formData.type === 'file-based' && mode === 'create' && !formData._uploadedFile) {
           newErrors.file = 'File upload is required'
+        }
+
+        // For database jobs, require connection and table selection
+        if (formData.type === 'database') {
+          if (!selectedConnectionId) {
+            newErrors.connection = 'Please select a database connection'
+          }
+          if (!formData.sourceConfig.databaseConfig?.tableName) {
+            newErrors.table = 'Please select a table from the database'
+          }
         }
         break
       case 2:
@@ -295,7 +830,25 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
+      const nextStepNumber = currentStep + 1
       setCurrentStep(prev => Math.min(prev + 1, 5))
+
+      // Trigger Silver AI suggestions when moving to Step 3
+      if (nextStepNumber === 3 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName) {
+        console.log('[Step Navigation] Moving to Step 3 - triggering Silver AI suggestions')
+        setTimeout(() => {
+          fetchSilverAiSuggestions()
+        }, 500)
+      }
+
+      // Trigger Gold AI suggestions when moving to Step 4
+      if (nextStepNumber === 4 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName) {
+        console.log('[Step Navigation] Moving to Step 4 - triggering Gold AI suggestions')
+        setTimeout(() => {
+          fetchGoldAiSuggestions()
+        }, 500)
+      }
+
       // Scroll to top of modal content
       setTimeout(() => {
         scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
@@ -620,36 +1173,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   {(mode === 'create' || !editingJob || formData._uploadedFile) && (
                     <CSVFileUpload
                       ref={csvUploadRef}
-                      onFileUpload={(file, schema, preview, columnMappings) => {
+                      onFileUpload={(file, schema, preview, columnMappings, metadata) => {
+                      console.log('[CSV Upload] Received metadata:', metadata)
+
                       // Auto-generate table names from filename
-                      const cleanName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, '_')
-
-                      updateSourceConfig({
-                        name: file.name.replace(/\.[^/.]+$/, ""),
-                        fileConfig: {
-                          ...formData.sourceConfig.fileConfig!,
-                          filePath: file.name,
-                          filePattern: file.name,
-                          // Store hasHeader flag - false if column mappings exist (headerless CSV)
-                          hasHeader: !columnMappings || columnMappings.length === 0
-                        }
-                      })
-
-                      // Auto-populate table names with AI suggestions
-                      updateDestinationConfig({
-                        bronzeConfig: {
-                          ...formData.destinationConfig.bronzeConfig!,
-                          tableName: `bronze_${cleanName}`
-                        },
-                        silverConfig: {
-                          ...formData.destinationConfig.silverConfig!,
-                          tableName: `silver_${cleanName}`
-                        },
-                        goldConfig: {
-                          ...formData.destinationConfig.goldConfig!,
-                          tableName: `gold_${cleanName}`
-                        }
-                      })
+                      const cleanName = file.name
+                        .replace(/\.[^/.]+$/, '') // Remove extension
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]/g, '_') // Replace special chars with underscore
 
                       // Store column mappings in transformationConfig if provided (headerless CSV)
                       const transformationConfig = columnMappings && columnMappings.length > 0
@@ -659,13 +1190,49 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                           }
                         : undefined
 
+                      // Check if we have temporal columns for auto-configuration
+                      const hasTemporalColumn = metadata?.temporal_columns && metadata.temporal_columns.length > 0
+
+                      console.log('[CSV Upload] Has temporal columns:', hasTemporalColumn, metadata?.temporal_columns)
+
                       setFormData(prev => ({
                         ...prev,
                         name: prev.name || file.name.replace(/\.[^/.]+$/, ""),
                         _uploadedFile: file,
                         _detectedSchema: schema,
                         _previewData: preview,
-                        transformationConfig: transformationConfig
+                        _detectedMetadata: metadata, // Store metadata for UI display
+                        transformationConfig: transformationConfig,
+                        // Update source config with hasHeader flag
+                        sourceConfig: {
+                          ...prev.sourceConfig,
+                          fileConfig: {
+                            ...prev.sourceConfig.fileConfig!,
+                            filePath: file.name,
+                            filePattern: file.name,
+                            hasHeader: !columnMappings || columnMappings.length === 0,
+                            // Auto-configure incremental loading if temporal column detected
+                            isIncremental: hasTemporalColumn,
+                            deltaColumn: hasTemporalColumn ? metadata!.temporal_columns![0] : undefined,
+                            lastWatermark: hasTemporalColumn ? '' : undefined
+                          }
+                        },
+                        // Auto-populate destination table names
+                        destinationConfig: {
+                          ...prev.destinationConfig,
+                          bronzeConfig: {
+                            ...prev.destinationConfig.bronzeConfig!,
+                            tableName: `${cleanName}_bronze`
+                          },
+                          silverConfig: {
+                            ...prev.destinationConfig.silverConfig!,
+                            tableName: `${cleanName}_silver`
+                          },
+                          goldConfig: {
+                            ...prev.destinationConfig.goldConfig!,
+                            tableName: `${cleanName}_gold`
+                          }
+                        }
                       } as any))
                     }}
                     onReset={() => {
@@ -713,11 +1280,93 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                         </div>
                         <div className="bg-white rounded-lg p-3 border border-blue-200">
                           <div className="text-xl font-bold text-purple-700">
-                            {formData._detectedSchema.filter(c => ['email', 'phone', 'date'].includes(c.type)).length}
+                            {formData._detectedSchema.filter(c => ['email', 'phone', 'date', 'url', 'timestamp'].includes(c.type)).length}
                           </div>
                           <div className="text-xs text-purple-600 font-medium">Special Types</div>
                         </div>
                       </div>
+
+                      {/* Metadata Detection Display */}
+                      {formData._detectedMetadata && (
+                        <div className="mt-4 space-y-3">
+                          {/* Temporal Columns */}
+                          {formData._detectedMetadata.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0 && (
+                            <div className="bg-white rounded-lg p-3 border border-green-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Clock className="w-4 h-4 text-green-600" />
+                                <span className="text-xs font-semibold text-green-900">
+                                  Temporal Columns Detected ({formData._detectedMetadata.temporal_columns.length})
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {formData._detectedMetadata.temporal_columns.map((col: string, idx: number) => (
+                                  <Badge key={idx} variant="success" className="text-xs font-mono">
+                                    {col}
+                                  </Badge>
+                                ))}
+                              </div>
+                              {formData.sourceConfig.fileConfig?.isIncremental && (
+                                <p className="text-xs text-green-700 mt-2 flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" />
+                                  Auto-configured for incremental loading using: <code className="font-mono bg-green-100 px-1 rounded">{formData.sourceConfig.fileConfig.deltaColumn}</code>
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Primary Key Candidates */}
+                          {formData._detectedMetadata.pk_candidates && formData._detectedMetadata.pk_candidates.length > 0 && (
+                            <div className="bg-white rounded-lg p-3 border border-blue-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Key className="w-4 h-4 text-blue-600" />
+                                <span className="text-xs font-semibold text-blue-900">
+                                  Primary Key Candidates ({formData._detectedMetadata.pk_candidates.length})
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {formData._detectedMetadata.pk_candidates.map((col: string, idx: number) => (
+                                  <Badge key={idx} variant="default" className="text-xs font-mono bg-blue-100 text-blue-800 border-blue-300">
+                                    {col}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Data Type Intelligence */}
+                          {formData._detectedSchema.filter(c => ['email', 'phone', 'url'].includes(c.type)).length > 0 && (
+                            <div className="bg-white rounded-lg p-3 border border-purple-200">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Sparkles className="w-4 h-4 text-purple-600" />
+                                <span className="text-xs font-semibold text-purple-900">
+                                  Intelligent Data Types Detected
+                                </span>
+                              </div>
+                              <div className="space-y-1">
+                                {formData._detectedSchema.filter(c => c.type === 'email').length > 0 && (
+                                  <div className="text-xs text-purple-700 flex items-center gap-2">
+                                    <Mail className="w-3 h-3" />
+                                    <span>{formData._detectedSchema.filter(c => c.type === 'email').length} Email column(s)</span>
+                                  </div>
+                                )}
+                                {formData._detectedSchema.filter(c => c.type === 'phone').length > 0 && (
+                                  <div className="text-xs text-purple-700 flex items-center gap-2">
+                                    <Phone className="w-3 h-3" />
+                                    <span>{formData._detectedSchema.filter(c => c.type === 'phone').length} Phone column(s)</span>
+                                  </div>
+                                )}
+                                {formData._detectedSchema.filter(c => c.type === 'url').length > 0 && (
+                                  <div className="text-xs text-purple-700 flex items-center gap-2">
+                                    <Globe className="w-3 h-3" />
+                                    <span>{formData._detectedSchema.filter(c => c.type === 'url').length} URL column(s)</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
                         Table names have been auto-generated based on your file. You can customize them in the next step.
@@ -730,13 +1379,18 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
             {/* Database Source Configuration - Only shown for database jobs */}
             {formData.type === 'database' && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground border-b pb-2 flex items-center gap-2">
-                  <Database className="w-4 h-4" />
-                  Database Connection
-                </h3>
+              <div className="space-y-6">
+                {/* Section Header */}
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground border-b pb-2">
+                    Database Connection
+                  </h3>
+                  <p className="text-xs text-foreground-muted mt-2">
+                    Select an existing database connection to access your data
+                  </p>
+                </div>
 
-                {/* Connection Picker */}
+                {/* Connection Selection */}
                 <FormField>
                   <FormLabel required>Select Connection</FormLabel>
                   <div className="flex gap-2">
@@ -762,56 +1416,140 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     </Button>
                   </div>
                   {errors.connection && <FormError>{errors.connection}</FormError>}
-                  <p className="text-xs text-foreground-muted mt-2">
-                    Select an existing connection or create a new one to connect to your database
-                  </p>
                 </FormField>
 
-                {/* Database Connection Configuration Component */}
-                {formData.sourceConfig.type && formData.sourceConfig.type !== 'csv' && (
-                  <DatabaseSourceConfig
-                    dbType={formData.sourceConfig.type}
-                    connection={formData.sourceConfig.connection || {}}
-                    databaseConfig={formData.sourceConfig.databaseConfig || {
-                      tableName: '',
-                      isIncremental: false,
-                      deltaColumn: '',
-                      lastWatermark: ''
-                    }}
-                    onConnectionChange={(connection) => {
-                      updateSourceConfig({ connection })
-                    }}
-                    onDatabaseConfigChange={(databaseConfig) => {
-                      updateSourceConfig({ databaseConfig })
-                    }}
-                    onSchemaDetected={(schema) => {
-                      // Store detected schema
-                      setFormData(prev => ({
-                        ...prev,
-                        _detectedSchema: schema
-                      }))
+                {/* Connection Details Card - Shown when connection is selected */}
+                {selectedConnectionId && (() => {
+                  const selectedConn = availableConnections.find(c => c.id === selectedConnectionId)
+                  return selectedConn && (
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Database className="w-4 h-4 text-blue-600" />
+                              <span className="text-sm font-semibold text-blue-900">{selectedConn.name}</span>
+                              <Badge variant="success" className="text-xs">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Connected
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-blue-700 space-y-1 ml-6">
+                              <div><span className="font-medium">Type:</span> {selectedConn.type === 'postgresql' ? 'PostgreSQL' : selectedConn.type === 'sql-server' ? 'SQL Server' : selectedConn.type}</div>
+                              <div><span className="font-medium">Host:</span> {selectedConn.host}:{selectedConn.port}</div>
+                              <div><span className="font-medium">Database:</span> {selectedConn.database}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
 
-                      // Auto-generate table name from source table
-                      const tableName = formData.sourceConfig.databaseConfig?.tableName
-                      if (tableName) {
-                        const cleanName = tableName.toLowerCase().replace(/[^a-z0-9]/g, '_')
-                        updateDestinationConfig({
-                          bronzeConfig: {
-                            ...formData.destinationConfig.bronzeConfig!,
-                            tableName: `bronze_${cleanName}`
-                          },
-                          silverConfig: {
-                            ...formData.destinationConfig.silverConfig!,
-                            tableName: `silver_${cleanName}`
-                          },
-                          goldConfig: {
-                            ...formData.destinationConfig.goldConfig!,
-                            tableName: `gold_${cleanName}`
+                {/* Table Selection Section - Only shown when connection is selected */}
+                {selectedConnectionId && formData.sourceConfig.type && formData.sourceConfig.type !== 'csv' && (
+                  <>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground border-b pb-2">
+                        Table Selection
+                      </h3>
+                      <p className="text-xs text-foreground-muted mt-2">
+                        Choose a table from your database to ingest
+                      </p>
+                    </div>
+
+                    <DatabaseSourceConfig
+                      dbType={formData.sourceConfig.type}
+                      connection={formData.sourceConfig.connection || {}}
+                      databaseConfig={formData.sourceConfig.databaseConfig || {
+                        tableName: '',
+                        isIncremental: false,
+                        deltaColumn: '',
+                        lastWatermark: ''
+                      }}
+                      useSavedConnection={true}
+                      connectionId={selectedConnectionId}
+                      onConnectionChange={(connection) => {
+                        updateSourceConfig({ connection })
+                      }}
+                      onDatabaseConfigChange={(databaseConfig) => {
+                        updateSourceConfig({ databaseConfig })
+                      }}
+                      onSchemaDetected={(schema, tableName, metadata) => {
+                        console.log('[Step1] onSchemaDetected called with schema:', schema?.length, 'columns, tableName:', tableName)
+                        console.log('[Step1] Metadata:', metadata)
+
+                        // Store detected schema and preview
+                        setFormData(prev => ({
+                          ...prev,
+                          _detectedSchema: schema,
+                          _previewData: metadata?.preview
+                        }))
+
+                        // Auto-generate table name from source table
+                        console.log('[Step1] Using tableName from callback:', tableName)
+
+                        if (tableName) {
+                          const cleanName = tableName.toLowerCase().replace(/[^a-z0-9]/g, '_')
+
+                          // Auto-configure incremental loading if temporal column detected
+                          const hasTemporalColumn = metadata?.temporal_columns && metadata.temporal_columns.length > 0
+                          console.log('[Step1] Temporal columns detected:', metadata?.temporal_columns)
+                          console.log('[Step1] Auto-configuring incremental:', hasTemporalColumn)
+
+                          updateDestinationConfig({
+                            bronzeConfig: {
+                              ...formData.destinationConfig.bronzeConfig!,
+                              tableName: `${cleanName}_bronze`
+                            },
+                            silverConfig: {
+                              ...formData.destinationConfig.silverConfig!,
+                              tableName: `${cleanName}_silver`
+                            },
+                            goldConfig: {
+                              ...formData.destinationConfig.goldConfig!,
+                              tableName: `${cleanName}_gold`
+                            }
+                          })
+
+                          // Auto-configure incremental settings
+                          if (hasTemporalColumn) {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig,
+                                tableName,
+                                isIncremental: true,
+                                deltaColumn: metadata!.temporal_columns![0], // Use first temporal column
+                                lastWatermark: ''
+                              }
+                            })
+                          } else {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig,
+                                tableName,
+                                isIncremental: false
+                              }
+                            })
                           }
-                        })
-                      }
-                    }}
-                  />
+
+                          // Fetch AI suggestions for Bronze layer
+                          console.log('[Step1] Scheduling AI suggestions fetch in 500ms...')
+                          console.log('[Step1] Will fetch with:', {
+                            tableName,
+                            connectionId: selectedConnectionId,
+                            dbType: formData.sourceConfig.type
+                          })
+                          setTimeout(() => {
+                            console.log('[Step1] Calling fetchAiSuggestions now with direct parameters...')
+                            fetchAiSuggestions(tableName, selectedConnectionId, formData.sourceConfig.type)
+                          }, 500)
+                        } else {
+                          console.log('[Step1] No table name provided - skipping AI suggestions')
+                        }
+                      }}
+                    />
+                  </>
                 )}
               </div>
             )}
@@ -833,6 +1571,32 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               </div>
             </div>
 
+            {/* AI Suggestions Card - Only show for database jobs */}
+            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+              const hasSuggestions = !!(aiSuggestions && Object.keys(aiSuggestions).length > 0)
+              console.log('[Step2] Rendering AI card - hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions, 'suggestions:', aiSuggestions)
+
+              return (
+                <AISuggestionCard
+                  title="AI Data Architect Suggestions"
+                  description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}`}
+                  suggestions={aiSuggestions || {}}
+                  loading={isLoadingAiSuggestions}
+                  error={aiSuggestionsError}
+                  onAccept={hasSuggestions ? applyAiSuggestions : undefined}
+                  onAdjust={hasSuggestions ? () => {
+                    console.log('[AI] Toggle expanded from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
+                    setAiSuggestionsExpanded(!aiSuggestionsExpanded)
+                  } : undefined}
+                  isExpanded={hasSuggestions && aiSuggestionsExpanded}
+                  onToggleExpand={hasSuggestions ? () => {
+                    console.log('[AI] onToggleExpand from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
+                    setAiSuggestionsExpanded(!aiSuggestionsExpanded)
+                  } : undefined}
+                />
+              )
+            })()}
+
             {/* Bronze Layer - Enhanced */}
             <Card className="border-amber-300 bg-amber-50/30">
               <CardHeader className="pb-3 bg-amber-50">
@@ -841,7 +1605,18 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
                     Bronze Layer (Raw Data Ingestion)
                   </CardTitle>
-                  <Badge variant="success" className="text-xs">Active</Badge>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={resetToManualDefaults}
+                      className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-100"
+                    >
+                      Reset to Defaults
+                    </Button>
+                    <Badge variant="success" className="text-xs">Active</Badge>
+                  </div>
                 </div>
                 <p className="text-xs text-foreground-muted mt-1">
                   Stores raw data exactly as received from source with minimal transformation
@@ -1041,23 +1816,66 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 </div>
 
-                {/* Data Quality Checks - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Data Quality Checks</span>
+                {/* Data Quality Checks - AI Suggested */}
+                {aiSuggestions?.validation_hints?.suggested_rules && aiSuggestions.validation_hints.suggested_rules.length > 0 ? (
+                  <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-semibold text-purple-900">AI-Suggested Quality Rules</span>
+                        <Badge variant="default" className="bg-purple-100 text-purple-700 border-purple-200 text-xs">
+                          {aiSuggestions.validation_hints.suggested_rules.length} Rules
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-purple-700 mb-3">
+                      {aiSuggestions.validation_hints.reasoning || 'AI has analyzed your data and suggests these quality validation rules'}
+                    </p>
+                    <div className="space-y-2 mb-3">
+                      {aiSuggestions.validation_hints.suggested_rules.slice(0, 3).map((rule: any, idx: number) => (
+                        <div key={idx} className="flex items-start gap-2 text-xs text-purple-800 bg-white/50 rounded p-2">
+                          <CheckCircle className="w-3 h-3 text-green-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <span className="font-medium">{rule.column}</span> - {rule.type}
+                            {rule.reasoning && <span className="text-purple-600 ml-1">({rule.reasoning})</span>}
+                          </div>
+                        </div>
+                      ))}
+                      {aiSuggestions.validation_hints.suggested_rules.length > 3 && (
+                        <div className="text-xs text-purple-600 ml-5">
+                          + {aiSuggestions.validation_hints.suggested_rules.length - 3} more rules
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Store validation hints for later use in Quality Module
+                        setFormData(prev => ({
+                          ...prev,
+                          _bronzeQualityRulesSuggestions: aiSuggestions.validation_hints.suggested_rules
+                        }))
+                        toast.info(`${aiSuggestions.validation_hints.suggested_rules.length} quality rules saved for Quality Module`, 3000)
+                      }}
+                      className="w-full text-xs h-8 border-purple-300 text-purple-700 hover:bg-purple-100"
+                    >
+                      <Sparkles className="w-3 h-3 mr-1" />
+                      Save Rules for Quality Module
+                    </Button>
                   </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Validate data quality at ingestion time
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Reject duplicate rows (based on all columns)</div>
-                    <div>• Reject rows with all nulls</div>
-                    <div>• Maximum null percentage threshold</div>
-                    <div>• Minimum row count validation</div>
-                    <div>• File size validation and warnings</div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">AI Available</Badge>
+                      <span className="text-sm font-medium text-gray-900">Data Quality Checks</span>
+                    </div>
+                    <p className="text-xs text-gray-700 mb-2">
+                      Apply AI suggestions above to see recommended quality validation rules
+                    </p>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1077,6 +1895,32 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
+
+            {/* Silver AI Suggestions Card - Only show for database jobs */}
+            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+              const hasSilverSuggestions = !!(silverAiSuggestions && Object.keys(silverAiSuggestions).length > 0)
+              console.log('[Step3] Rendering Silver AI card - hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions, 'suggestions:', silverAiSuggestions)
+
+              return (
+                <AISuggestionCard
+                  title="AI Data Quality Architect Suggestions"
+                  description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}`}
+                  suggestions={silverAiSuggestions || {}}
+                  loading={isLoadingSilverAiSuggestions}
+                  error={silverAiSuggestionsError}
+                  onAccept={hasSilverSuggestions ? applySilverAiSuggestions : undefined}
+                  onAdjust={hasSilverSuggestions ? () => {
+                    console.log('[Silver AI] Toggle expanded from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
+                    setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
+                  } : undefined}
+                  isExpanded={hasSilverSuggestions && silverAiSuggestionsExpanded}
+                  onToggleExpand={hasSilverSuggestions ? () => {
+                    console.log('[Silver AI] onToggleExpand from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
+                    setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
+                  } : undefined}
+                />
+              )
+            })()}
 
             {/* Silver Layer - Enhanced */}
             <Card className="border-gray-300 bg-gray-50/30">
@@ -1232,6 +2076,94 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 )}
 
+                {/* Deduplication Configuration - AI-Powered */}
+                {formData.destinationConfig.silverConfig?.mergeStrategy !== 'append' && (
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs font-medium text-foreground">Advanced Deduplication</div>
+                        {formData.destinationConfig.silverConfig?._dedupEnabled && (
+                          <Badge variant="default" className="bg-green-100 text-green-700 border-green-200 text-[10px]">
+                            AI Applied
+                          </Badge>
+                        )}
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?._dedupEnabled || false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: {
+                              ...formData.destinationConfig.silverConfig!,
+                              _dedupEnabled: e.target.checked,
+                              _dedupStrategy: e.target.checked ? (formData.destinationConfig.silverConfig?._dedupStrategy || 'last') : undefined,
+                              _dedupSortColumn: e.target.checked ? formData.destinationConfig.silverConfig?._dedupSortColumn : undefined
+                            }
+                          })}
+                          className="w-3 h-3 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                        <span className="text-[11px] font-medium text-foreground">Enable</span>
+                      </label>
+                    </div>
+
+                    {formData.destinationConfig.silverConfig?._dedupEnabled && (
+                      <>
+                        <FormField>
+                          <FormLabel className="text-xs">Deduplication Strategy</FormLabel>
+                          <Select
+                            value={formData.destinationConfig.silverConfig?._dedupStrategy || 'last'}
+                            onChange={(e) => updateDestinationConfig({
+                              silverConfig: { ...formData.destinationConfig.silverConfig!, _dedupStrategy: e.target.value as any }
+                            })}
+                            className="text-xs h-8"
+                          >
+                            <option value="first">Keep First Occurrence</option>
+                            <option value="last">Keep Last Occurrence (Latest)</option>
+                            <option value="none">Mark Duplicates (Keep All)</option>
+                          </Select>
+                          <p className="text-[11px] text-foreground-muted mt-1">
+                            {formData.destinationConfig.silverConfig?._dedupStrategy === 'first' && 'Keep the first record encountered, discard later duplicates'}
+                            {formData.destinationConfig.silverConfig?._dedupStrategy === 'last' && 'Keep the most recent record, discard earlier duplicates'}
+                            {formData.destinationConfig.silverConfig?._dedupStrategy === 'none' && 'Flag duplicates but keep all records for manual review'}
+                          </p>
+                        </FormField>
+
+                        {(formData.destinationConfig.silverConfig?._dedupStrategy === 'first' || formData.destinationConfig.silverConfig?._dedupStrategy === 'last') && (
+                          <FormField>
+                            <FormLabel className="text-xs">Sort Column (for ordering)</FormLabel>
+                            <Select
+                              value={formData.destinationConfig.silverConfig?._dedupSortColumn || ''}
+                              onChange={(e) => updateDestinationConfig({
+                                silverConfig: { ...formData.destinationConfig.silverConfig!, _dedupSortColumn: e.target.value }
+                              })}
+                              className="text-xs h-8"
+                            >
+                              <option value="">-- Select Column --</option>
+                              {formData._detectedMetadata?.temporal_columns?.map((col: string) => (
+                                <option key={col} value={col}>{col} (timestamp)</option>
+                              ))}
+                              {formData._detectedSchema?.filter((col: any) =>
+                                !formData._detectedMetadata?.temporal_columns?.includes(col.name)
+                              ).map((col: any) => (
+                                <option key={col.name} value={col.name}>{col.name}</option>
+                              ))}
+                            </Select>
+                            <p className="text-[11px] text-foreground-muted mt-1">
+                              Column used to determine which record is {formData.destinationConfig.silverConfig?._dedupStrategy === 'first' ? 'first' : 'latest'}
+                            </p>
+                          </FormField>
+                        )}
+                      </>
+                    )}
+
+                    {!formData.destinationConfig.silverConfig?._dedupEnabled && (
+                      <p className="text-xs text-blue-700">
+                        💡 AI can suggest optimal deduplication strategy based on your data patterns. Apply Silver AI suggestions above.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Surrogate Key Configuration */}
                 <FormField>
                   <FormLabel>Surrogate Key Strategy</FormLabel>
@@ -1302,23 +2234,109 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 </div>
 
-                {/* Data Quality Rules - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Data Quality Rules</span>
+                {/* Data Quality Rules - AI-Powered Quick-Add */}
+                {silverAiSuggestions?.quality_rules?.suggested_rules && silverAiSuggestions.quality_rules.suggested_rules.length > 0 ? (
+                  <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-semibold text-green-900">AI-Suggested Quality Rules</span>
+                        <Badge variant="default" className="bg-green-100 text-green-700 border-green-200 text-xs">
+                          {silverAiSuggestions.quality_rules.suggested_rules.length} Rules
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-xs text-green-700 mb-3">
+                      {silverAiSuggestions.quality_rules.reasoning || 'AI has analyzed your data and suggests these quality validation rules'}
+                    </p>
+                    <div className="space-y-2 mb-3 max-h-64 overflow-y-auto">
+                      {silverAiSuggestions.quality_rules.suggested_rules.map((rule: any, idx: number) => (
+                        <div key={idx} className="flex items-start gap-2 text-xs bg-white rounded p-2 border border-green-100">
+                          <CheckCircle className="w-3 h-3 text-green-600 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-green-900">
+                              <code className="bg-green-50 px-1.5 py-0.5 rounded text-[11px]">{rule.column}</code>
+                              <span className="ml-2 text-green-700">{rule.type}</span>
+                              {rule.severity && (
+                                <Badge variant="secondary" className={`ml-2 text-[10px] ${
+                                  rule.severity === 'error' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                }`}>
+                                  {rule.severity}
+                                </Badge>
+                              )}
+                            </div>
+                            {rule.parameters && Object.keys(rule.parameters).length > 0 && (
+                              <div className="text-[11px] text-green-600 mt-1">
+                                Parameters: {JSON.stringify(rule.parameters)}
+                              </div>
+                            )}
+                            {rule.reasoning && (
+                              <div className="text-[11px] text-green-700 mt-1 italic">
+                                💡 {rule.reasoning}
+                              </div>
+                            )}
+                            {rule.confidence && (
+                              <div className="text-[10px] text-green-600 mt-1">
+                                Confidence: {rule.confidence}%
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          // Store all quality rules for later use in Quality Module
+                          setFormData(prev => ({
+                            ...prev,
+                            _silverQualityRulesApplied: true,
+                            _silverQualityRulesSuggestions: silverAiSuggestions.quality_rules.suggested_rules
+                          }))
+                          toast.success(`All ${silverAiSuggestions.quality_rules.suggested_rules.length} quality rules saved for Quality Module`, 4000)
+                        }}
+                        className="flex-1 text-xs h-8 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
+                      >
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Quick Add All Rules
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            _silverQualityRulesSuggestions: silverAiSuggestions.quality_rules.suggested_rules
+                          }))
+                          toast.info('Quality rules saved for manual review', 3000)
+                        }}
+                        className="flex-1 text-xs h-8 border-green-300 text-green-700 hover:bg-green-50"
+                      >
+                        Save for Manual Review
+                      </Button>
+                    </div>
+                    {formData._silverQualityRulesApplied && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded p-2">
+                        <CheckCircle className="w-3 h-3" />
+                        <span>Quality rules will be available in the Quality Module after job creation</span>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Validate data quality at the Silver layer
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>Column-level rules:</strong> Not null, unique, regex patterns, min/max values</div>
-                    <div>• <strong>Row-level rules:</strong> Cross-column validation (e.g., start_date &lt; end_date)</div>
-                    <div>• <strong>SQL expressions:</strong> Custom validation logic</div>
-                    <div>• <strong>Quality thresholds:</strong> Fail job, quarantine bad rows, or log warnings</div>
-                    <div>• <strong>Quarantine table:</strong> Isolate invalid records for review</div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">AI Available</Badge>
+                      <span className="text-sm font-medium text-gray-900">Data Quality Rules</span>
+                    </div>
+                    <p className="text-xs text-gray-700 mb-2">
+                      Apply Silver AI suggestions above to see recommended quality validation rules
+                    </p>
                   </div>
-                </div>
+                )}
 
                 {/* Column Transformations - Coming Soon */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -1396,6 +2414,65 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
+
+            {/* Gold AI Suggestions Card - Only show for database jobs */}
+            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+              const hasGoldSuggestions = !!(goldAiSuggestions && Object.keys(goldAiSuggestions).length > 0)
+              console.log('[Step4] Rendering Gold AI card - hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions, 'suggestions:', goldAiSuggestions)
+
+              return (
+                <div className="mb-4 space-y-3">
+                  {/* Business Context Input */}
+                  <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      <span className="text-sm font-semibold text-amber-900">Business Context (Optional)</span>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">
+                      Provide business context to help AI suggest better metrics and aggregations (e.g., "Customer transaction analytics for monthly revenue reporting")
+                    </p>
+                    <textarea
+                      value={businessContext}
+                      onChange={(e) => setBusinessContext(e.target.value)}
+                      placeholder="Describe the business use case for this Gold layer..."
+                      className="w-full text-xs p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                      rows={2}
+                    />
+                    {businessContext && businessContext.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBusinessContext('')
+                          fetchGoldAiSuggestions()
+                        }}
+                        className="mt-2 text-xs text-amber-700 hover:text-amber-900 underline"
+                      >
+                        Clear & Refresh AI Suggestions
+                      </button>
+                    )}
+                  </div>
+
+                  {/* AI Suggestions Card */}
+                  <AISuggestionCard
+                    title="AI Analytics Architect Suggestions"
+                    description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}${businessContext ? ' with business context' : ''}`}
+                    suggestions={goldAiSuggestions || {}}
+                    loading={isLoadingGoldAiSuggestions}
+                    error={goldAiSuggestionsError}
+                    onAccept={hasGoldSuggestions ? applyGoldAiSuggestions : undefined}
+                    onAdjust={hasGoldSuggestions ? () => {
+                      console.log('[Gold AI] Toggle expanded from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
+                      setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
+                    } : undefined}
+                    isExpanded={hasGoldSuggestions && goldAiSuggestionsExpanded}
+                    onToggleExpand={hasGoldSuggestions ? () => {
+                      console.log('[Gold AI] onToggleExpand from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
+                      setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
+                    } : undefined}
+                  />
+                </div>
+              )
+            })()}
 
             {/* Gold Layer - Enhanced */}
             <Card className="border-yellow-400 bg-yellow-50/30">
@@ -1827,12 +2904,12 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 Cancel
               </Button>
               {currentStep < 5 ? (
-                <Button onClick={nextStep}>
+                <Button onClick={nextStep} disabled={!isStepValid(currentStep)}>
                   Next
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               ) : (
-                <Button onClick={handleSubmit}>
+                <Button onClick={handleSubmit} disabled={!isStepValid(currentStep)}>
                   {mode === 'edit' ? 'Save Changes' : 'Create Job'}
                 </Button>
               )}
@@ -1850,6 +2927,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         handleConnectionSelect(connection.id)
       }}
     />
+
+    <ToastContainer toasts={toast.toasts} onDismiss={toast.dismissToast} />
   </>
   )
 }

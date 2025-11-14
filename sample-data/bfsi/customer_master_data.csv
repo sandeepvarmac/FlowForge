@@ -1,0 +1,501 @@
+customer_id,first_name,last_name,email,phone,date_of_birth,customer_segment,account_since,credit_score,city,state,zip_code
+CUST0001,Christopher,Beck,christopher.beck@email.com,(709) 241-3999,2003-11-15,Basic,2019-11-11,699,North Randy,ME,95657
+CUST0002,Holly,Young,holly.young@email.com,(926) 311-4023,1941-11-30,Basic,2020-11-10,518,Lake Codyborough,NJ,10716
+CUST0003,David,Perez,david.perez@email.com,(602) 958-4425,1937-12-01,Standard,2016-11-11,648,Smithmouth,GU,16307
+CUST0004,Vanessa,Henderson,vanessa.henderson@email.com,(942) 368-4813,2005-11-14,Premium,2016-11-11,564,South Chad,MS,12209
+CUST0005,Jessica,Garcia,jessica.garcia@email.com,(678) 609-9302,1953-11-27,Basic,2023-11-10,361,Michaelport,DC,50665
+CUST0006,Kiara,Mullins,kiara.mullins@email.com,(985) 725-7547,1974-11-22,Basic,2016-11-11,662,Lake Victoria,FL,09467
+CUST0007,Alyssa,Smith,alyssa.smith@email.com,(618) 180-0824,1992-11-17,Standard,2020-11-10,305,South Michael,IL,82824
+CUST0008,Kaitlin,Gillespie,kaitlin.gillespie@email.com,(787) 668-7145,1977-11-21,Basic,2015-11-12,846,Heathland,MH,13669
+CUST0009,Donald,Martinez,donald.martinez@email.com,(987) 492-3148,1963-11-25,Standard,2020-11-10,443,Bellchester,MD,18828
+CUST0010,John,Newman,john.newman@email.com,(920) 733-6179,1941-11-30,Basic,2021-11-10,407,New Carolyn,VA,80139
+CUST0011,Justin,Pugh,justin.pugh@email.com,(722) 966-4623,1983-11-20,Standard,2017-11-11,400,Port Melanieport,IL,68363
+CUST0012,Catherine,Lopez,catherine.lopez@email.com,(630) 814-1928,1955-11-27,Premium,2023-11-10,363,Phillipston,WY,31871
+CUST0013,Troy,Rodriguez,troy.rodriguez@email.com,(772) 318-2100,1947-11-29,Premium,2017-11-11,379,Littleland,NC,02082
+CUST0014,Valerie,Peck,valerie.peck@email.com,(744) 982-9103,1956-11-26,Basic,2016-11-11,831,South Michelle,OK,55664
+CUST0015,Michael,Vega,michael.vega@email.com,(953) 762-3350,1974-11-22,Basic,2017-11-11,733,Bestland,AK,77487
+CUST0016,Carlos,Baker,carlos.baker@email.com,(780) 921-3136,1954-11-27,Premium,2022-11-10,817,North Stacyfurt,NY,38051
+CUST0017,Courtney,Mason,courtney.mason@email.com,(620) 913-2997,1949-11-28,Premium,2016-11-11,841,Hendersonfurt,CO,84457
+CUST0018,Amanda,Jensen,amanda.jensen@email.com,(615) 456-7549,1949-11-28,Standard,2024-11-09,460,Christopherland,NY,27134
+CUST0019,Terri,Moore,terri.moore@email.com,(841) 719-6363,1992-11-17,Basic,2018-11-11,412,Peterland,ME,92077
+CUST0020,Samuel,Ashley,samuel.ashley@email.com,(616) 720-0623,1970-11-23,Premium,2016-11-11,456,North John,NE,15703
+CUST0021,Shawn,Lynch,shawn.lynch@email.com,(615) 723-2188,1968-11-23,Standard,2020-11-10,601,Elizabethburgh,DE,02161
+CUST0022,Jean,Miles,jean.miles@email.com,(803) 146-9389,1989-11-18,Premium,2015-11-12,731,South Stephanie,NC,68294
+CUST0023,Krista,Le,krista.le@email.com,(579) 611-9801,1971-11-23,Premium,2022-11-10,800,West David,WI,35728
+CUST0024,Jessica,Wilson,jessica.wilson@email.com,(556) 305-2321,1937-12-01,Standard,2023-11-10,345,West Lindsayview,NC,08872
+CUST0025,Jose,Proctor,jose.proctor@email.com,(768) 907-2800,1968-11-23,Basic,2017-11-11,645,South Spencerstad,AR,65985
+CUST0026,Michele,Jackson,michele.jackson@email.com,(955) 733-0138,1947-11-29,Basic,2015-11-12,435,West Kerri,MH,75724
+CUST0027,Emily,Wilson,emily.wilson@email.com,(945) 332-4018,1943-11-30,Basic,2017-11-11,760,North Micheletown,IA,06527
+CUST0028,Thomas,Reyes,thomas.reyes@email.com,(896) 853-4223,1988-11-18,Basic,2019-11-11,391,East Sarah,PR,05136
+CUST0029,Angela,Sloan,angela.sloan@email.com,(964) 787-2422,1958-11-26,Premium,2018-11-11,647,Walkerbury,MT,94910
+CUST0030,Luis,Mckenzie,luis.mckenzie@email.com,(831) 176-8727,1951-11-28,Basic,2020-11-10,390,Davidton,HI,29754
+CUST0031,Linda,Jarvis,linda.jarvis@email.com,(998) 377-8554,2004-11-14,Basic,2020-11-10,426,Jonesmouth,VI,37503
+CUST0032,Kiara,Collins,kiara.collins@email.com,(884) 242-8614,1983-11-20,Basic,2016-11-11,354,New Stephenstad,ID,38720
+CUST0033,Anne,Torres,anne.torres@email.com,(846) 975-3576,1983-11-20,Standard,2016-11-11,319,South Micheal,NM,26115
+CUST0034,Jessica,Payne,jessica.payne@email.com,(616) 992-3120,1984-11-19,Premium,2020-11-10,510,East Adam,MT,03634
+CUST0035,Jesse,Reed,jesse.reed@email.com,(680) 845-2933,1997-11-16,Basic,2015-11-12,628,West Aaronfurt,PR,97242
+CUST0036,Jessica,Garcia,jessica.garcia@email.com,(760) 175-4700,1945-11-29,Premium,2019-11-11,747,South Travis,AR,19162
+CUST0037,Jennifer,Davis,jennifer.davis@email.com,(647) 796-1478,2004-11-14,Basic,2019-11-11,691,Port April,UT,49324
+CUST0038,Stephen,Adkins,stephen.adkins@email.com,(686) 252-7147,1993-11-17,Premium,2016-11-11,472,New Dennisfurt,CA,78081
+CUST0039,Ashley,Graham,ashley.graham@email.com,(701) 341-6493,1984-11-19,Standard,2023-11-10,457,East Kelly,PR,41789
+CUST0040,Sara,Long,sara.long@email.com,(712) 783-2964,1986-11-19,Premium,2015-11-12,633,Louisview,IN,10290
+CUST0041,Sherry,Taylor,sherry.taylor@email.com,(647) 145-5856,2000-11-15,Standard,2018-11-11,401,East Danielmouth,NH,41661
+CUST0042,Richard,Herrera,richard.herrera@email.com,(718) 339-0091,1955-11-27,Standard,2020-11-10,684,South Kyle,KS,16218
+CUST0043,Christopher,Aguirre,christopher.aguirre@email.com,(978) 302-9477,2001-11-15,Premium,2021-11-10,542,Margaretton,IL,43465
+CUST0044,Eddie,Dawson,eddie.dawson@email.com,(807) 953-3248,1943-11-30,Standard,2023-11-10,575,Randyton,TX,39670
+CUST0045,Jorge,Ewing,jorge.ewing@email.com,(586) 634-0799,1948-11-28,Basic,2018-11-11,367,South Melissaside,WA,72606
+CUST0046,John,Murray,john.murray@email.com,(802) 148-4969,1955-11-27,Basic,2021-11-10,319,North Alexander,MP,29636
+CUST0047,David,Colon,david.colon@email.com,(692) 270-3045,1976-11-21,Basic,2022-11-10,611,Ginaland,OR,77324
+CUST0048,Jonathan,Hess,jonathan.hess@email.com,(845) 782-4064,1950-11-28,Premium,2016-11-11,508,North Jamesmouth,AS,17381
+CUST0049,Christopher,Boone,christopher.boone@email.com,(955) 338-8522,1960-11-25,Basic,2022-11-10,551,Davidmouth,AR,22519
+CUST0050,Sandra,Hamilton,sandra.hamilton@email.com,(830) 810-9386,1936-12-01,Standard,2024-11-09,301,Crawfordfurt,TX,56424
+CUST0051,Gerald,Lewis,gerald.lewis@email.com,(971) 879-5567,1970-11-23,Basic,2022-11-10,300,West Joshua,FM,19982
+CUST0052,Austin,Harvey,austin.harvey@email.com,(585) 908-9743,1973-11-22,Basic,2020-11-10,689,Lake Kenneth,MT,72680
+CUST0053,Timothy,Miller,timothy.miller@email.com,(734) 456-9422,1942-11-30,Standard,2024-11-09,465,Taylorborough,SD,69420
+CUST0054,John,Mcknight,john.mcknight@email.com,(933) 996-0531,1935-12-02,Premium,2020-11-10,391,South Kimberlystad,NJ,71872
+CUST0055,Kimberly,Cooper,kimberly.cooper@email.com,(757) 306-3211,1990-11-18,Basic,2016-11-11,586,Paulburgh,AK,42296
+CUST0056,Carla,Johnson,carla.johnson@email.com,(776) 453-7478,1943-11-30,Standard,2019-11-11,567,Brianfort,NC,47350
+CUST0057,Katie,Key,katie.key@email.com,(940) 859-5349,1973-11-22,Premium,2019-11-11,649,North John,IA,35435
+CUST0058,Amanda,Moody,amanda.moody@email.com,(662) 871-4152,1965-11-24,Premium,2022-11-10,302,Port Wendybury,OK,51412
+CUST0059,Michael,Combs,michael.combs@email.com,(866) 899-4829,2007-11-14,Premium,2022-11-10,723,East Joel,MD,97245
+CUST0060,Heidi,Sloan,heidi.sloan@email.com,(839) 920-3667,1957-11-26,Basic,2023-11-10,379,Lake Jackieshire,OK,19126
+CUST0061,Anna,Lopez,anna.lopez@email.com,(830) 151-9213,1951-11-28,Basic,2023-11-10,661,Weaverburgh,NM,05476
+CUST0062,Christopher,Hall,christopher.hall@email.com,(971) 731-4548,1962-11-25,Standard,2022-11-10,308,North Alisha,AL,43982
+CUST0063,Samantha,Harris,samantha.harris@email.com,(618) 876-2692,1960-11-25,Premium,2017-11-11,309,West Jennifer,PW,42914
+CUST0064,Brian,Hernandez,brian.hernandez@email.com,(668) 133-1881,1972-11-22,Basic,2019-11-11,496,Port Daniel,NC,48327
+CUST0065,Susan,Brooks,susan.brooks@email.com,(601) 608-6491,1979-11-21,Premium,2017-11-11,671,Willismouth,ME,42785
+CUST0066,Derek,Moore,derek.moore@email.com,(573) 571-0310,1944-11-29,Basic,2015-11-12,514,Connerfort,SD,42087
+CUST0067,Grant,Novak,grant.novak@email.com,(558) 428-9790,1957-11-26,Premium,2020-11-10,812,Jeffreyshire,GU,23484
+CUST0068,Nicholas,Gross,nicholas.gross@email.com,(807) 386-0131,1937-12-01,Premium,2015-11-12,479,Davidtown,UT,75583
+CUST0069,Peter,Gamble,peter.gamble@email.com,(588) 315-1617,1999-11-16,Premium,2020-11-10,533,East Carriebury,SC,74628
+CUST0070,Dalton,Crawford,dalton.crawford@email.com,(822) 560-2459,1983-11-20,Basic,2024-11-09,845,Juliebury,MI,42380
+CUST0071,Gary,Mcclure,gary.mcclure@email.com,(869) 524-3311,1936-12-01,Standard,2024-11-09,737,Port Jennamouth,NV,01994
+CUST0072,Joseph,Wright,joseph.wright@email.com,(883) 187-0113,1966-11-24,Standard,2018-11-11,580,West Jonathanville,VA,00668
+CUST0073,Brandon,Kim,brandon.kim@email.com,(617) 969-5551,1948-11-28,Standard,2019-11-11,829,Costachester,NM,50139
+CUST0074,Michael,Bennett,michael.bennett@email.com,(943) 172-9216,1979-11-21,Premium,2020-11-10,730,Kramershire,SD,99885
+CUST0075,Gloria,Martin,gloria.martin@email.com,(827) 853-0646,1967-11-24,Premium,2018-11-11,499,Port Meganport,AK,42275
+CUST0076,Jose,Garcia,jose.garcia@email.com,(726) 237-2525,2004-11-14,Basic,2021-11-10,733,Georgefurt,GA,96443
+CUST0077,Charles,Mcmahon,charles.mcmahon@email.com,(593) 519-4038,1982-11-20,Premium,2019-11-11,618,West Brookefort,VT,04563
+CUST0078,Ryan,Valdez,ryan.valdez@email.com,(587) 262-2794,2004-11-14,Standard,2018-11-11,324,Mooreville,MA,27442
+CUST0079,Terri,Ortiz,terri.ortiz@email.com,(858) 660-8665,1975-11-22,Premium,2023-11-10,784,Donnaport,IA,13072
+CUST0080,Brandon,Armstrong,brandon.armstrong@email.com,(677) 671-7708,2001-11-15,Standard,2016-11-11,542,Hernandezstad,AL,56548
+CUST0081,Christopher,Colon,christopher.colon@email.com,(592) 835-7303,1995-11-17,Basic,2017-11-11,427,Gonzaleztown,IL,22892
+CUST0082,Danielle,Rowland,danielle.rowland@email.com,(598) 201-8157,2003-11-15,Standard,2019-11-11,366,Anthonyport,WY,52597
+CUST0083,Thomas,Jacobson,thomas.jacobson@email.com,(955) 313-9695,2000-11-15,Standard,2024-11-09,608,Christopherside,MS,24733
+CUST0084,Nathan,James,nathan.james@email.com,(867) 824-5056,1999-11-16,Premium,2024-11-09,353,South Bradley,NV,61457
+CUST0085,Jose,Hood,jose.hood@email.com,(705) 739-9761,1956-11-26,Premium,2015-11-12,720,East Karenville,CO,88075
+CUST0086,Maurice,Weaver,maurice.weaver@email.com,(674) 117-7948,1949-11-28,Standard,2017-11-11,738,New Bruce,MS,68996
+CUST0087,Robert,Nichols,robert.nichols@email.com,(872) 269-9161,1964-11-24,Basic,2024-11-09,764,Armstrongbury,NJ,39672
+CUST0088,Christian,Orr,christian.orr@email.com,(819) 650-6176,1983-11-20,Premium,2023-11-10,312,New Ashleyhaven,AS,75406
+CUST0089,Erica,Oliver,erica.oliver@email.com,(859) 213-3208,1983-11-20,Basic,2022-11-10,821,Port Shaneburgh,IL,25761
+CUST0090,David,Henderson,david.henderson@email.com,(686) 696-2475,1954-11-27,Standard,2015-11-12,755,Harrisberg,MP,78495
+CUST0091,Jonathan,Bartlett,jonathan.bartlett@email.com,(650) 507-9421,1990-11-18,Premium,2024-11-09,430,North Paulfurt,OH,43247
+CUST0092,Melissa,Stone,melissa.stone@email.com,(714) 831-2318,1942-11-30,Basic,2019-11-11,618,Port Isabellashire,NC,55498
+CUST0093,Daniel,Hernandez,daniel.hernandez@email.com,(853) 344-3176,1989-11-18,Standard,2020-11-10,651,North Annaville,WY,37999
+CUST0094,Mikayla,Beard,mikayla.beard@email.com,(704) 718-7940,2006-11-14,Basic,2015-11-12,448,Bakerfort,OK,80318
+CUST0095,Thomas,Jackson,thomas.jackson@email.com,(584) 498-2698,1943-11-30,Basic,2024-11-09,732,Thomasfurt,AZ,52378
+CUST0096,Pamela,Rivera,pamela.rivera@email.com,(731) 427-8387,1982-11-20,Basic,2021-11-10,370,North Julie,PW,35704
+CUST0097,Penny,Smith,penny.smith@email.com,(729) 417-6859,1947-11-29,Basic,2017-11-11,639,Larryfort,PR,91751
+CUST0098,Gail,Compton,gail.compton@email.com,(991) 663-1448,1969-11-23,Standard,2019-11-11,466,East Kevin,WA,58580
+CUST0099,Kim,Flores,kim.flores@email.com,(608) 862-1924,2002-11-15,Standard,2021-11-10,303,Jacobsland,ID,58397
+CUST0100,Jason,Holloway,jason.holloway@email.com,(882) 474-1740,1978-11-21,Standard,2015-11-12,518,Malonestad,GU,07868
+CUST0101,Zachary,Moore,zachary.moore@email.com,(677) 906-5582,1965-11-24,Basic,2018-11-11,510,Jennafurt,DC,69220
+CUST0102,Natasha,Johnson,natasha.johnson@email.com,(759) 409-1109,2007-11-14,Standard,2024-11-09,375,Port James,AR,33202
+CUST0103,Antonio,Williams,antonio.williams@email.com,(738) 150-3611,1936-12-01,Premium,2022-11-10,597,Janetview,MN,61347
+CUST0104,William,Reid,william.reid@email.com,(780) 426-1548,1961-11-25,Premium,2024-11-09,503,Lake Anthonystad,NM,78363
+CUST0105,Sean,Horne,sean.horne@email.com,(656) 576-6421,1985-11-19,Premium,2020-11-10,478,Matthewsstad,MI,21933
+CUST0106,Mary,Green,mary.green@email.com,(728) 512-6595,1985-11-19,Premium,2024-11-09,480,West Anthonyton,GA,75508
+CUST0107,Kimberly,Lewis,kimberly.lewis@email.com,(986) 539-2083,1995-11-17,Premium,2022-11-10,688,Lake Jeffrey,IL,35770
+CUST0108,Denise,Palmer,denise.palmer@email.com,(890) 286-1751,1964-11-24,Premium,2020-11-10,767,South Rhondaburgh,PA,01610
+CUST0109,Jeffrey,Franklin,jeffrey.franklin@email.com,(677) 720-1541,1960-11-25,Basic,2022-11-10,839,Jenniferview,NE,49846
+CUST0110,Melissa,Stevens,melissa.stevens@email.com,(964) 827-6581,1999-11-16,Premium,2022-11-10,433,South Kevin,NC,82238
+CUST0111,Randy,Garcia,randy.garcia@email.com,(961) 418-1650,1983-11-20,Basic,2018-11-11,683,Annaport,ME,90208
+CUST0112,Daniel,Brown,daniel.brown@email.com,(717) 820-6488,1976-11-21,Premium,2015-11-12,493,Danielleview,KS,86499
+CUST0113,Jennifer,Stafford,jennifer.stafford@email.com,(992) 998-3668,1970-11-23,Premium,2019-11-11,553,Jacobhaven,WV,31997
+CUST0114,Rachel,Trujillo,rachel.trujillo@email.com,(582) 569-8850,1991-11-18,Basic,2015-11-12,800,Guerreroberg,VA,03837
+CUST0115,Diana,Bright,diana.bright@email.com,(662) 236-5794,1947-11-29,Basic,2015-11-12,366,Rebeccafurt,MS,97065
+CUST0116,Austin,Erickson,austin.erickson@email.com,(640) 953-3123,1958-11-26,Basic,2016-11-11,683,West Jessica,IN,90458
+CUST0117,Amanda,Glover,amanda.glover@email.com,(810) 970-5569,1948-11-28,Premium,2019-11-11,682,Williamburgh,MP,86695
+CUST0118,Nancy,White,nancy.white@email.com,(824) 910-8379,1944-11-29,Standard,2020-11-10,710,South Davidview,VA,73774
+CUST0119,Kathryn,White,kathryn.white@email.com,(881) 161-4121,1981-11-20,Premium,2021-11-10,762,Destinybury,MI,29773
+CUST0120,Julie,Parker,julie.parker@email.com,(996) 493-2320,1957-11-26,Premium,2020-11-10,735,Nathanshire,LA,61287
+CUST0121,Melissa,Ruiz,melissa.ruiz@email.com,(748) 363-7534,1960-11-25,Standard,2016-11-11,386,South Pamelahaven,DE,89721
+CUST0122,Patrick,Evans,patrick.evans@email.com,(623) 240-9758,1970-11-23,Standard,2016-11-11,660,Port Melissaberg,ID,45415
+CUST0123,Robert,Hudson,robert.hudson@email.com,(672) 169-0263,1948-11-28,Basic,2015-11-12,644,Thomasburgh,WI,11093
+CUST0124,Tony,Welch,tony.welch@email.com,(773) 856-9061,1948-11-28,Standard,2018-11-11,676,West Cynthia,AL,59752
+CUST0125,Joshua,Juarez,joshua.juarez@email.com,(966) 934-7387,1967-11-24,Standard,2018-11-11,325,New Kathy,NM,12040
+CUST0126,David,Hamilton,david.hamilton@email.com,(646) 841-0303,1978-11-21,Standard,2023-11-10,667,Powellfort,MS,01112
+CUST0127,Benjamin,Gonzalez,benjamin.gonzalez@email.com,(597) 594-1189,1943-11-30,Basic,2016-11-11,380,Stephaniemouth,WV,70104
+CUST0128,James,Rhodes,james.rhodes@email.com,(957) 563-7641,1978-11-21,Premium,2023-11-10,373,East Heather,MI,41407
+CUST0129,David,Reyes,david.reyes@email.com,(739) 164-2255,1938-12-01,Premium,2019-11-11,501,Garyton,ME,38620
+CUST0130,Stephen,Meyer,stephen.meyer@email.com,(900) 652-3752,1975-11-22,Standard,2020-11-10,495,Ryanberg,MA,64749
+CUST0131,Michael,Lopez,michael.lopez@email.com,(916) 331-2992,1938-12-01,Standard,2024-11-09,606,Smithbury,VA,17698
+CUST0132,Jason,Johnson,jason.johnson@email.com,(699) 681-5525,1956-11-26,Standard,2015-11-12,312,North Michael,SD,05398
+CUST0133,Nicholas,Bowman,nicholas.bowman@email.com,(796) 960-0788,1988-11-18,Standard,2021-11-10,532,New Virginiaville,SD,03088
+CUST0134,Brandon,Wilson,brandon.wilson@email.com,(925) 452-1118,1947-11-29,Premium,2016-11-11,779,Jamesside,KS,62681
+CUST0135,Jacqueline,Harris,jacqueline.harris@email.com,(924) 874-1026,1964-11-24,Premium,2019-11-11,492,West Robertville,TN,68698
+CUST0136,Joseph,Obrien,joseph.obrien@email.com,(774) 800-7639,1981-11-20,Standard,2017-11-11,330,South Maria,CT,67555
+CUST0137,Jennifer,Wilson,jennifer.wilson@email.com,(746) 333-1197,1991-11-18,Standard,2024-11-09,811,Port Danielborough,PA,26682
+CUST0138,Kimberly,Decker,kimberly.decker@email.com,(969) 695-0248,1964-11-24,Premium,2018-11-11,735,West Jade,LA,21521
+CUST0139,Benjamin,Crawford,benjamin.crawford@email.com,(906) 776-7404,1939-12-01,Standard,2019-11-11,323,Lake Sarah,MA,31238
+CUST0140,Aaron,Powers,aaron.powers@email.com,(845) 154-0377,1990-11-18,Premium,2019-11-11,700,Port Audreyfort,FL,12308
+CUST0141,Kimberly,Jones,kimberly.jones@email.com,(750) 442-5984,1957-11-26,Premium,2016-11-11,695,West Dawnmouth,LA,35120
+CUST0142,Steven,Garcia,steven.garcia@email.com,(651) 896-5447,1994-11-17,Standard,2015-11-12,762,Port Benjamin,LA,47715
+CUST0143,Laurie,Edwards,laurie.edwards@email.com,(882) 611-1102,1996-11-16,Premium,2023-11-10,481,North Melissaton,AL,18640
+CUST0144,Elizabeth,Jackson,elizabeth.jackson@email.com,(571) 919-7571,2004-11-14,Premium,2021-11-10,371,Patriciaview,FM,96585
+CUST0145,Christopher,Briggs,christopher.briggs@email.com,(752) 576-1669,1981-11-20,Premium,2020-11-10,836,North Richard,NH,36130
+CUST0146,Mary,Vaughn,mary.vaughn@email.com,(590) 862-7990,2000-11-15,Standard,2016-11-11,311,Marshburgh,DE,17869
+CUST0147,Heather,Brown,heather.brown@email.com,(642) 648-2325,1955-11-27,Standard,2022-11-10,413,North Robert,OR,63766
+CUST0148,Leah,Gregory,leah.gregory@email.com,(621) 801-9808,1946-11-29,Basic,2023-11-10,698,New Noah,MI,80632
+CUST0149,Anthony,Cohen,anthony.cohen@email.com,(998) 446-4154,1991-11-18,Premium,2020-11-10,742,South Samantha,DE,54408
+CUST0150,Scott,Brown,scott.brown@email.com,(973) 896-5487,1987-11-19,Basic,2015-11-12,617,Alexanderhaven,WI,97969
+CUST0151,Barbara,Cunningham,barbara.cunningham@email.com,(855) 440-5319,1943-11-30,Basic,2017-11-11,582,Aprilville,NE,87233
+CUST0152,Jessica,Olson,jessica.olson@email.com,(658) 112-4877,1989-11-18,Standard,2023-11-10,708,Hernandezside,MH,80836
+CUST0153,Brian,Schneider,brian.schneider@email.com,(864) 514-1290,1940-11-30,Standard,2015-11-12,802,New Melinda,PR,65491
+CUST0154,Molly,Jones,molly.jones@email.com,(790) 876-2741,2002-11-15,Basic,2023-11-10,594,Floresmouth,KY,07100
+CUST0155,William,Pierce,william.pierce@email.com,(885) 865-5554,1963-11-25,Basic,2020-11-10,700,Powellbury,CO,60675
+CUST0156,Sean,Berry,sean.berry@email.com,(868) 393-8131,1954-11-27,Premium,2022-11-10,742,Port Vernonmouth,DE,65692
+CUST0157,Julie,Smith,julie.smith@email.com,(789) 745-3607,1984-11-19,Basic,2015-11-12,397,Gutierrezside,OH,00523
+CUST0158,Margaret,Conner,margaret.conner@email.com,(756) 173-2568,1977-11-21,Premium,2020-11-10,850,Pamelaside,IL,86300
+CUST0159,Emily,Clements,emily.clements@email.com,(704) 211-9776,1980-11-20,Standard,2018-11-11,424,Marciabury,PR,60067
+CUST0160,Martin,Saunders,martin.saunders@email.com,(743) 228-4021,1994-11-17,Basic,2019-11-11,719,Moranstad,VT,59815
+CUST0161,Daniel,Malone,daniel.malone@email.com,(785) 376-5541,1975-11-22,Premium,2016-11-11,345,North Matthew,MP,83556
+CUST0162,Tamara,Carter,tamara.carter@email.com,(791) 144-8251,1998-11-16,Basic,2017-11-11,690,Jacquelineton,MH,22017
+CUST0163,Travis,Underwood,travis.underwood@email.com,(730) 769-9844,1983-11-20,Standard,2024-11-09,310,Rodriguezborough,ID,16327
+CUST0164,Sarah,Long,sarah.long@email.com,(683) 292-4056,1990-11-18,Standard,2017-11-11,796,Summersborough,VT,44794
+CUST0165,Daniel,Perry,daniel.perry@email.com,(791) 214-4829,1997-11-16,Basic,2021-11-10,748,Port Patriciamouth,TN,77743
+CUST0166,Stephanie,Taylor,stephanie.taylor@email.com,(626) 889-8507,1972-11-22,Premium,2022-11-10,318,Smithton,OH,57230
+CUST0167,Mary,Webb,mary.webb@email.com,(865) 268-6363,1985-11-19,Standard,2023-11-10,847,Lake Beth,VA,17328
+CUST0168,Dale,Sandoval,dale.sandoval@email.com,(934) 755-7366,1986-11-19,Premium,2024-11-09,579,Williamfurt,MT,80323
+CUST0169,Ruth,Farmer,ruth.farmer@email.com,(633) 839-3014,1962-11-25,Premium,2021-11-10,335,Raymondmouth,LA,59856
+CUST0170,Linda,Taylor,linda.taylor@email.com,(900) 993-0492,1980-11-20,Standard,2024-11-09,835,Meganside,VI,41645
+CUST0171,Jennifer,Walls,jennifer.walls@email.com,(883) 272-4585,1958-11-26,Basic,2020-11-10,754,East Jason,VT,38587
+CUST0172,Glenda,Morse,glenda.morse@email.com,(581) 107-8278,2001-11-15,Standard,2021-11-10,555,Lake Debra,HI,66547
+CUST0173,Amy,Walsh,amy.walsh@email.com,(746) 500-2042,1982-11-20,Premium,2024-11-09,731,Port Michaelfort,OR,75295
+CUST0174,Sherri,Mckinney,sherri.mckinney@email.com,(569) 124-4275,1964-11-24,Premium,2023-11-10,525,Nataliechester,AS,02174
+CUST0175,Alexandra,Johnson,alexandra.johnson@email.com,(604) 381-6607,1986-11-19,Premium,2018-11-11,824,North Ellen,ID,35494
+CUST0176,Karen,Martin,karen.martin@email.com,(610) 648-8523,1966-11-24,Basic,2021-11-10,512,Francesberg,MP,08631
+CUST0177,Hannah,Phillips,hannah.phillips@email.com,(832) 762-8072,1953-11-27,Premium,2021-11-10,518,West Lisaville,RI,89043
+CUST0178,Jodi,Hancock,jodi.hancock@email.com,(609) 698-2358,1966-11-24,Premium,2024-11-09,711,Youngport,UT,87597
+CUST0179,Brandon,James,brandon.james@email.com,(889) 630-5630,2006-11-14,Standard,2021-11-10,769,Fryemouth,OH,07552
+CUST0180,Alexander,King,alexander.king@email.com,(667) 210-7569,1972-11-22,Basic,2015-11-12,677,Greerstad,WV,77621
+CUST0181,Amy,Morrison,amy.morrison@email.com,(577) 212-9631,1980-11-20,Standard,2020-11-10,811,West Shane,TX,10261
+CUST0182,Jacob,Thompson,jacob.thompson@email.com,(607) 999-5633,1935-12-02,Premium,2020-11-10,397,South Billyview,OH,35135
+CUST0183,David,Silva,david.silva@email.com,(862) 644-1761,1958-11-26,Basic,2022-11-10,640,Adammouth,VT,20791
+CUST0184,Bill,Mcfarland,bill.mcfarland@email.com,(644) 633-4600,1946-11-29,Premium,2019-11-11,318,Port Sarahport,NM,75562
+CUST0185,Andrea,Jones,andrea.jones@email.com,(866) 853-1486,1959-11-26,Basic,2021-11-10,815,Aliciaburgh,NC,09437
+CUST0186,Kristie,Moore,kristie.moore@email.com,(855) 122-2997,1978-11-21,Premium,2015-11-12,427,Davisbury,FM,28465
+CUST0187,Elizabeth,Rivera,elizabeth.rivera@email.com,(713) 496-6072,1953-11-27,Premium,2015-11-12,381,Jefferyhaven,NJ,74076
+CUST0188,Madison,Zavala,madison.zavala@email.com,(585) 330-7798,1960-11-25,Standard,2020-11-10,506,North Elizabethmouth,IA,84683
+CUST0189,Christina,Oliver,christina.oliver@email.com,(632) 730-4004,1981-11-20,Basic,2024-11-09,543,Lake Nicolefurt,PW,15361
+CUST0190,Paul,Fernandez,paul.fernandez@email.com,(926) 844-4490,1965-11-24,Premium,2020-11-10,625,Angelhaven,GU,49647
+CUST0191,Willie,Hicks,willie.hicks@email.com,(884) 166-4503,1941-11-30,Standard,2020-11-10,324,Williamsborough,MD,67858
+CUST0192,Christopher,Davis,christopher.davis@email.com,(672) 655-7792,1964-11-24,Premium,2021-11-10,355,Lake Cameronborough,VI,90338
+CUST0193,Roger,Garcia,roger.garcia@email.com,(895) 516-6421,1979-11-21,Basic,2018-11-11,833,Lucasland,WA,90422
+CUST0194,Eric,Stevens,eric.stevens@email.com,(719) 407-9382,1951-11-28,Basic,2024-11-09,366,Benjaminland,AR,23830
+CUST0195,Laura,Grant,laura.grant@email.com,(806) 217-4152,1983-11-20,Premium,2022-11-10,509,West Rickey,NV,83104
+CUST0196,Richard,Stewart,richard.stewart@email.com,(619) 253-9467,1985-11-19,Basic,2016-11-11,509,Nunezside,AL,84573
+CUST0197,Jennifer,Brown,jennifer.brown@email.com,(675) 951-3171,1997-11-16,Standard,2017-11-11,618,Lake Melaniestad,NY,14412
+CUST0198,Keith,Jennings,keith.jennings@email.com,(639) 431-4108,1976-11-21,Standard,2022-11-10,554,West Kathymouth,MS,52289
+CUST0199,Lynn,Johnson,lynn.johnson@email.com,(710) 578-7427,1950-11-28,Basic,2021-11-10,578,New Jeffrey,WA,51749
+CUST0200,Laura,Atkinson,laura.atkinson@email.com,(996) 907-2704,1997-11-16,Standard,2018-11-11,686,Susanberg,ME,89274
+CUST0201,Olivia,Sanford,olivia.sanford@email.com,(640) 889-7261,1951-11-28,Standard,2016-11-11,743,Susantown,OH,73255
+CUST0202,Donald,Williams,donald.williams@email.com,(944) 361-5206,1946-11-29,Premium,2018-11-11,737,Medinaland,ME,28033
+CUST0203,Kaitlin,Berger,kaitlin.berger@email.com,(992) 239-6415,1969-11-23,Basic,2016-11-11,456,Jasonhaven,FL,21597
+CUST0204,Jack,Jensen,jack.jensen@email.com,(838) 394-7745,1975-11-22,Standard,2017-11-11,613,Jamesburgh,TN,74857
+CUST0205,Melissa,York,melissa.york@email.com,(787) 575-1739,1959-11-26,Basic,2015-11-12,792,Newmanland,LA,88540
+CUST0206,Carlos,Garcia,carlos.garcia@email.com,(591) 659-0741,1990-11-18,Basic,2017-11-11,500,Lynnstad,DC,88489
+CUST0207,Diana,Garcia,diana.garcia@email.com,(634) 418-1393,2007-11-14,Premium,2016-11-11,683,East Louismouth,MA,81286
+CUST0208,Donna,Steele,donna.steele@email.com,(806) 778-7310,1954-11-27,Standard,2019-11-11,693,New Ashley,AS,41963
+CUST0209,Susan,Jackson,susan.jackson@email.com,(805) 616-4208,1998-11-16,Standard,2024-11-09,427,Johnbury,VT,97470
+CUST0210,Danielle,Hill,danielle.hill@email.com,(752) 372-3988,1983-11-20,Standard,2020-11-10,656,Dennismouth,FM,63409
+CUST0211,Steven,Howard,steven.howard@email.com,(815) 919-7714,1960-11-25,Basic,2024-11-09,694,Tonyville,HI,85114
+CUST0212,Catherine,Wilkinson,catherine.wilkinson@email.com,(772) 514-0479,1976-11-21,Standard,2024-11-09,670,New James,VA,82633
+CUST0213,Charles,Jones,charles.jones@email.com,(878) 147-4058,1989-11-18,Standard,2015-11-12,766,Port Williamtown,GU,76770
+CUST0214,Beth,Hammond,beth.hammond@email.com,(903) 347-2414,1975-11-22,Premium,2015-11-12,465,North Andrea,ND,71237
+CUST0215,Thomas,Rowe,thomas.rowe@email.com,(561) 295-8415,1996-11-16,Basic,2018-11-11,707,Philipshire,VA,38642
+CUST0216,Dennis,Mason,dennis.mason@email.com,(916) 234-8021,1941-11-30,Premium,2018-11-11,469,South Michaeltown,TN,31811
+CUST0217,Melanie,Drake,melanie.drake@email.com,(979) 816-1714,1975-11-22,Basic,2020-11-10,812,Port Willie,NV,21370
+CUST0218,Harold,Fry,harold.fry@email.com,(827) 742-2127,1968-11-23,Basic,2018-11-11,391,Lake Jessica,MI,05798
+CUST0219,Jeffery,Freeman,jeffery.freeman@email.com,(610) 677-7952,1989-11-18,Standard,2021-11-10,707,West Miketon,TN,27603
+CUST0220,April,Moody,april.moody@email.com,(912) 616-9066,2007-11-14,Premium,2017-11-11,301,Harrisonmouth,FM,06587
+CUST0221,Bill,Wong,bill.wong@email.com,(604) 217-1745,1954-11-27,Basic,2018-11-11,595,Lake Tanyaview,MP,97744
+CUST0222,Jose,Stephens,jose.stephens@email.com,(930) 823-0134,1986-11-19,Premium,2019-11-11,490,South Desiree,MN,77529
+CUST0223,Denise,Houston,denise.houston@email.com,(915) 325-3718,1982-11-20,Standard,2022-11-10,814,Nicholasbury,NC,53695
+CUST0224,Michael,Parrish,michael.parrish@email.com,(611) 856-0833,1935-12-02,Premium,2022-11-10,505,Sparkstown,NY,18715
+CUST0225,Scott,Hall,scott.hall@email.com,(585) 406-5690,1983-11-20,Standard,2018-11-11,751,Jasonburgh,GA,47978
+CUST0226,Carolyn,Montoya,carolyn.montoya@email.com,(875) 283-1995,1986-11-19,Premium,2020-11-10,387,South Lisa,VA,15356
+CUST0227,Timothy,Mendoza,timothy.mendoza@email.com,(748) 309-1809,1972-11-22,Premium,2019-11-11,330,New Evan,MP,54358
+CUST0228,Andrew,Williams,andrew.williams@email.com,(854) 493-8956,1946-11-29,Standard,2023-11-10,309,East Crystal,AZ,75509
+CUST0229,Dylan,Jackson,dylan.jackson@email.com,(586) 546-4094,2007-11-14,Basic,2015-11-12,342,New Susan,PA,74373
+CUST0230,Dana,Johns,dana.johns@email.com,(604) 454-1139,1941-11-30,Premium,2018-11-11,832,Staceyborough,NV,79999
+CUST0231,Victoria,Dillon,victoria.dillon@email.com,(944) 545-9984,1945-11-29,Standard,2019-11-11,739,East Maria,PA,19206
+CUST0232,Laura,Hoover,laura.hoover@email.com,(727) 722-0742,1964-11-24,Standard,2021-11-10,669,New Donna,KS,22484
+CUST0233,Jennifer,Cooper,jennifer.cooper@email.com,(895) 768-5239,1959-11-26,Basic,2024-11-09,664,Carlsonland,IN,50073
+CUST0234,Paul,Rodriguez,paul.rodriguez@email.com,(724) 268-0697,2007-11-14,Standard,2018-11-11,442,New Michele,NY,90202
+CUST0235,Robert,Hernandez,robert.hernandez@email.com,(568) 306-1828,1940-11-30,Standard,2021-11-10,677,East Thomaston,FM,70156
+CUST0236,Wesley,Wilson,wesley.wilson@email.com,(786) 897-2523,1942-11-30,Standard,2021-11-10,303,Hopkinsside,GU,00658
+CUST0237,Penny,Hampton,penny.hampton@email.com,(881) 640-5343,2005-11-14,Basic,2019-11-11,346,Boydstad,VI,06194
+CUST0238,Heidi,Patterson,heidi.patterson@email.com,(968) 646-1406,1951-11-28,Premium,2015-11-12,796,Clarkefurt,MI,77708
+CUST0239,Linda,Velez,linda.velez@email.com,(759) 236-5149,1963-11-25,Standard,2017-11-11,402,South Dennisfort,WI,30976
+CUST0240,Renee,Miller,renee.miller@email.com,(930) 745-6854,1970-11-23,Basic,2021-11-10,446,Scotttown,VT,97972
+CUST0241,Kristine,Lane,kristine.lane@email.com,(821) 946-6397,2003-11-15,Premium,2017-11-11,389,New Adrianborough,UT,41906
+CUST0242,Robert,Rodriguez,robert.rodriguez@email.com,(709) 883-1655,1986-11-19,Standard,2023-11-10,793,Pearsonview,KS,70769
+CUST0243,Rodney,Diaz,rodney.diaz@email.com,(894) 504-1658,1976-11-21,Premium,2022-11-10,391,Victoriafurt,WV,27199
+CUST0244,Robert,Bowers,robert.bowers@email.com,(609) 829-6300,2004-11-14,Premium,2019-11-11,692,Whiteside,OH,63908
+CUST0245,Jon,Parker,jon.parker@email.com,(947) 570-3624,1979-11-21,Basic,2020-11-10,787,Kimfurt,WA,18597
+CUST0246,Melissa,Hopkins,melissa.hopkins@email.com,(898) 306-5243,1990-11-18,Basic,2017-11-11,392,South Krista,GA,13644
+CUST0247,Jason,Morales,jason.morales@email.com,(962) 658-3476,1979-11-21,Basic,2015-11-12,366,Laurenton,GA,51501
+CUST0248,Tamara,Smith,tamara.smith@email.com,(884) 675-8373,1959-11-26,Basic,2018-11-11,747,Port Dustinchester,CO,08900
+CUST0249,Jose,Wood,jose.wood@email.com,(968) 491-5256,1979-11-21,Standard,2023-11-10,597,Lake Patrickfurt,RI,86507
+CUST0250,Abigail,Dawson,abigail.dawson@email.com,(599) 286-8688,1996-11-16,Standard,2015-11-12,492,Port Lorifort,NV,01904
+CUST0251,James,Sandoval,james.sandoval@email.com,(936) 294-7939,1960-11-25,Premium,2019-11-11,689,Jameshaven,NC,92048
+CUST0252,Jesse,Jackson,jesse.jackson@email.com,(850) 102-8160,1968-11-23,Premium,2015-11-12,848,West Johntown,GA,11883
+CUST0253,Wendy,Chan,wendy.chan@email.com,(652) 751-2001,1953-11-27,Standard,2019-11-11,429,Elizabethfurt,OR,26756
+CUST0254,April,Mclaughlin,april.mclaughlin@email.com,(821) 472-6916,1994-11-17,Standard,2024-11-09,771,North Andreaside,PW,76907
+CUST0255,Michael,Richmond,michael.richmond@email.com,(716) 342-7676,1970-11-23,Premium,2017-11-11,766,Jeremyborough,NH,53448
+CUST0256,Bailey,Green,bailey.green@email.com,(630) 575-4542,1989-11-18,Basic,2024-11-09,627,Hunterside,CA,66452
+CUST0257,Kelly,Arroyo,kelly.arroyo@email.com,(713) 942-8504,1992-11-17,Standard,2015-11-12,789,Nancyshire,KS,91490
+CUST0258,Scott,Bennett,scott.bennett@email.com,(878) 461-8930,1944-11-29,Standard,2018-11-11,360,Carrillomouth,WI,60643
+CUST0259,Erin,Mosley,erin.mosley@email.com,(969) 658-9238,1988-11-18,Basic,2021-11-10,530,South Darrenland,MS,83556
+CUST0260,Kristina,Robinson,kristina.robinson@email.com,(913) 188-1916,1985-11-19,Standard,2018-11-11,606,Port Leslie,MI,68200
+CUST0261,Amanda,Haynes,amanda.haynes@email.com,(972) 367-0819,2005-11-14,Basic,2018-11-11,645,Johnland,MO,88803
+CUST0262,Kaitlyn,Peterson,kaitlyn.peterson@email.com,(771) 894-2696,1963-11-25,Standard,2018-11-11,373,South Lee,IL,75698
+CUST0263,Joseph,Valentine,joseph.valentine@email.com,(825) 574-8621,1971-11-23,Basic,2021-11-10,703,South Jillian,IA,96895
+CUST0264,John,Baker,john.baker@email.com,(604) 319-6149,1966-11-24,Basic,2024-11-09,611,East Mary,MP,81581
+CUST0265,Michael,Maxwell,michael.maxwell@email.com,(789) 374-6337,1990-11-18,Standard,2017-11-11,598,North Emmafort,RI,01369
+CUST0266,Kathryn,Weaver,kathryn.weaver@email.com,(629) 451-9295,1980-11-20,Basic,2021-11-10,309,Port Timothymouth,NM,75804
+CUST0267,Misty,Henry,misty.henry@email.com,(740) 271-0400,1989-11-18,Standard,2018-11-11,472,Raymondshire,DC,07598
+CUST0268,Alicia,Henderson,alicia.henderson@email.com,(583) 261-1413,1962-11-25,Standard,2022-11-10,353,New Michaelburgh,NH,16277
+CUST0269,Helen,Stevens,helen.stevens@email.com,(615) 964-7567,1964-11-24,Basic,2018-11-11,452,North Emilyfurt,OR,13706
+CUST0270,Mark,Salazar,mark.salazar@email.com,(876) 777-7894,1976-11-21,Premium,2023-11-10,546,Jacobview,IA,35812
+CUST0271,Thomas,Austin,thomas.austin@email.com,(758) 919-7782,1969-11-23,Basic,2015-11-12,476,Ivanchester,IL,55432
+CUST0272,Jaclyn,Watson,jaclyn.watson@email.com,(889) 729-7691,1996-11-16,Standard,2018-11-11,581,Ramirezburgh,OK,17689
+CUST0273,Tiffany,Parks,tiffany.parks@email.com,(878) 846-7845,1960-11-25,Premium,2023-11-10,419,Lake Josephbury,OH,57152
+CUST0274,Melissa,Gonzalez,melissa.gonzalez@email.com,(597) 304-7685,1945-11-29,Basic,2016-11-11,530,South Linda,HI,55750
+CUST0275,Victor,Cowan,victor.cowan@email.com,(566) 904-4647,1972-11-22,Basic,2023-11-10,485,Kristenport,KS,74181
+CUST0276,Michele,Williams,michele.williams@email.com,(751) 912-3384,1952-11-27,Standard,2015-11-12,428,Lake Frankborough,GU,33831
+CUST0277,Thomas,Soto,thomas.soto@email.com,(605) 645-6436,1999-11-16,Basic,2016-11-11,489,Garnerview,MN,47727
+CUST0278,Ann,Frederick,ann.frederick@email.com,(762) 133-1289,1957-11-26,Basic,2016-11-11,842,Mauricechester,DE,46519
+CUST0279,Michelle,Mccarty,michelle.mccarty@email.com,(805) 207-2595,1941-11-30,Basic,2016-11-11,427,New Barbara,SD,71075
+CUST0280,Greg,Deleon,greg.deleon@email.com,(940) 448-0664,1992-11-17,Premium,2015-11-12,484,Markhaven,NM,97038
+CUST0281,Sergio,Miller,sergio.miller@email.com,(557) 850-3322,1967-11-24,Premium,2024-11-09,431,Stevenberg,VI,22465
+CUST0282,Danielle,Mcfarland,danielle.mcfarland@email.com,(849) 445-9963,1987-11-19,Premium,2016-11-11,562,Welchshire,MO,09852
+CUST0283,Christian,Cooper,christian.cooper@email.com,(990) 158-7291,1997-11-16,Premium,2016-11-11,605,Loganport,VT,35559
+CUST0284,Catherine,Foster,catherine.foster@email.com,(741) 387-9023,1953-11-27,Basic,2024-11-09,554,Normanstad,WA,77429
+CUST0285,Abigail,Cole,abigail.cole@email.com,(708) 177-4541,1941-11-30,Standard,2016-11-11,755,East Melissa,DC,95891
+CUST0286,Jimmy,King,jimmy.king@email.com,(626) 922-8265,1967-11-24,Basic,2019-11-11,822,East Garrettville,CT,08862
+CUST0287,Sharon,Kennedy,sharon.kennedy@email.com,(662) 266-1097,2002-11-15,Premium,2024-11-09,492,North Kellihaven,WV,11412
+CUST0288,Dalton,Montgomery,dalton.montgomery@email.com,(627) 602-8286,1980-11-20,Premium,2015-11-12,521,Lake Sarahfurt,ME,30563
+CUST0289,John,Mitchell,john.mitchell@email.com,(857) 702-4113,1972-11-22,Premium,2015-11-12,732,East Alison,GA,04245
+CUST0290,Austin,Kelly,austin.kelly@email.com,(593) 527-7642,1974-11-22,Standard,2022-11-10,709,Michellemouth,VI,71356
+CUST0291,Sarah,Dunn,sarah.dunn@email.com,(788) 239-6771,1975-11-22,Basic,2018-11-11,446,Lake Amber,OR,78827
+CUST0292,Stephen,Curry,stephen.curry@email.com,(829) 441-8574,1998-11-16,Basic,2020-11-10,497,Millsside,ME,46005
+CUST0293,Timothy,Perez,timothy.perez@email.com,(920) 724-3511,1935-12-02,Basic,2016-11-11,467,South Kylechester,KS,20911
+CUST0294,Kevin,Smith,kevin.smith@email.com,(769) 357-5158,1967-11-24,Standard,2018-11-11,326,West Justin,ND,01591
+CUST0295,Gwendolyn,Vasquez,gwendolyn.vasquez@email.com,(864) 515-2322,1998-11-16,Standard,2023-11-10,844,Evanschester,AS,38894
+CUST0296,Carla,Robles,carla.robles@email.com,(611) 782-4657,1999-11-16,Standard,2023-11-10,671,Jacobside,NE,52241
+CUST0297,John,Espinoza,john.espinoza@email.com,(725) 558-4424,1989-11-18,Premium,2020-11-10,310,Claytonbury,KS,10883
+CUST0298,Robert,Allen,robert.allen@email.com,(605) 732-7627,1979-11-21,Standard,2023-11-10,426,Justinside,AS,35736
+CUST0299,Robert,Castaneda,robert.castaneda@email.com,(644) 983-2796,1968-11-23,Basic,2017-11-11,397,East Keith,SC,60183
+CUST0300,Christine,Nelson,christine.nelson@email.com,(825) 685-3574,1971-11-23,Basic,2020-11-10,401,Lopeztown,FL,07006
+CUST0301,Tara,Johnson,tara.johnson@email.com,(579) 386-4666,1967-11-24,Standard,2022-11-10,653,West Josephmouth,VA,01576
+CUST0302,Jesse,Hernandez,jesse.hernandez@email.com,(967) 992-0146,1937-12-01,Basic,2018-11-11,788,Robinsonchester,ME,65826
+CUST0303,Whitney,Ford,whitney.ford@email.com,(858) 314-0306,1974-11-22,Premium,2016-11-11,459,West Christopherberg,AR,35432
+CUST0304,Kimberly,Jones,kimberly.jones@email.com,(891) 312-0109,1989-11-18,Standard,2015-11-12,573,Whiteview,GU,50515
+CUST0305,Maria,Martinez,maria.martinez@email.com,(582) 721-0098,1976-11-21,Basic,2015-11-12,728,South Kelsey,NV,32897
+CUST0306,Joan,Johnson,joan.johnson@email.com,(916) 868-0384,1984-11-19,Standard,2019-11-11,779,Mossville,NC,87795
+CUST0307,Tina,Kennedy,tina.kennedy@email.com,(812) 581-2035,1972-11-22,Standard,2016-11-11,534,Sharonburgh,SC,95952
+CUST0308,Bobby,Pineda,bobby.pineda@email.com,(711) 245-8649,1968-11-23,Standard,2019-11-11,392,West Timothyport,ID,47742
+CUST0309,Paige,Boyer,paige.boyer@email.com,(879) 233-3367,1998-11-16,Basic,2021-11-10,395,North Joel,NE,43035
+CUST0310,Alexis,Bauer,alexis.bauer@email.com,(639) 196-3205,1997-11-16,Basic,2020-11-10,804,South Kristinatown,AZ,76663
+CUST0311,Kristen,Alvarez,kristen.alvarez@email.com,(968) 117-9426,1953-11-27,Basic,2016-11-11,439,West Kelli,IA,21170
+CUST0312,Vincent,Parks,vincent.parks@email.com,(800) 935-1785,1942-11-30,Basic,2016-11-11,427,Sarahton,AR,47099
+CUST0313,Deanna,Miles,deanna.miles@email.com,(762) 123-3207,1983-11-20,Basic,2024-11-09,735,East Tonymouth,OH,84996
+CUST0314,Katherine,Trujillo,katherine.trujillo@email.com,(914) 996-4482,1963-11-25,Premium,2016-11-11,343,Quinntown,UT,50015
+CUST0315,Michael,Taylor,michael.taylor@email.com,(865) 852-7132,1986-11-19,Basic,2016-11-11,530,South Jasmineside,LA,71638
+CUST0316,Heidi,Lopez,heidi.lopez@email.com,(644) 226-0344,1961-11-25,Premium,2016-11-11,661,New Michael,VA,61894
+CUST0317,Joshua,Guerra,joshua.guerra@email.com,(581) 809-2102,1944-11-29,Standard,2022-11-10,682,North Amanda,NV,39255
+CUST0318,Lori,Weaver,lori.weaver@email.com,(612) 667-0004,1976-11-21,Basic,2023-11-10,597,Smithhaven,MS,96662
+CUST0319,Jacob,Smith,jacob.smith@email.com,(708) 910-5487,1970-11-23,Standard,2021-11-10,302,Kimberlybury,MD,95004
+CUST0320,Bryan,Coffey,bryan.coffey@email.com,(932) 760-3872,1980-11-20,Standard,2016-11-11,336,Leefort,WI,72782
+CUST0321,Eric,Campbell,eric.campbell@email.com,(792) 919-1751,2000-11-15,Standard,2024-11-09,771,Davidsonville,CT,69077
+CUST0322,Donna,Williams,donna.williams@email.com,(723) 600-5493,1962-11-25,Premium,2024-11-09,658,East Morgan,ID,14532
+CUST0323,Todd,Garcia,todd.garcia@email.com,(924) 412-3208,1956-11-26,Standard,2024-11-09,403,Barretthaven,RI,92423
+CUST0324,Brittany,Williams,brittany.williams@email.com,(775) 925-5164,1982-11-20,Premium,2016-11-11,826,New Jennifer,AL,27860
+CUST0325,Diana,Hebert,diana.hebert@email.com,(633) 789-0722,1992-11-17,Standard,2024-11-09,459,South Laurieton,MN,73641
+CUST0326,Julia,Zamora,julia.zamora@email.com,(948) 519-6564,1979-11-21,Standard,2018-11-11,683,Lauraton,GU,81363
+CUST0327,Joseph,Williams,joseph.williams@email.com,(708) 711-5223,1953-11-27,Premium,2016-11-11,575,Port Kevinborough,NC,13230
+CUST0328,Craig,Hall,craig.hall@email.com,(610) 835-8018,1951-11-28,Premium,2022-11-10,662,Lopezhaven,TN,33106
+CUST0329,Ashley,Meza,ashley.meza@email.com,(937) 828-0643,2007-11-14,Standard,2021-11-10,413,Reeseshire,MI,88908
+CUST0330,Stephen,Ortega,stephen.ortega@email.com,(652) 577-9824,2002-11-15,Premium,2018-11-11,731,East Lauraside,MO,66652
+CUST0331,Matthew,Moore,matthew.moore@email.com,(935) 655-6840,2003-11-15,Premium,2021-11-10,790,Mahoneymouth,OH,43054
+CUST0332,Megan,Gutierrez,megan.gutierrez@email.com,(895) 545-9377,1992-11-17,Standard,2017-11-11,807,Mckenziemouth,PA,32052
+CUST0333,Anna,Lewis,anna.lewis@email.com,(964) 313-7987,1966-11-24,Standard,2016-11-11,698,Michaelmouth,NV,52548
+CUST0334,Aaron,Johnson,aaron.johnson@email.com,(622) 284-1010,1994-11-17,Premium,2022-11-10,459,Caitlinhaven,DC,40063
+CUST0335,Adam,Joyce,adam.joyce@email.com,(731) 938-8623,2006-11-14,Basic,2021-11-10,353,Port Leslie,WI,90903
+CUST0336,Lynn,Ellison,lynn.ellison@email.com,(902) 674-0173,1953-11-27,Basic,2024-11-09,744,North Benjamin,MI,20962
+CUST0337,Devon,Richardson,devon.richardson@email.com,(800) 585-6444,1971-11-23,Standard,2023-11-10,739,East Jonathan,ME,12547
+CUST0338,Ashley,Carroll,ashley.carroll@email.com,(681) 355-8453,1942-11-30,Premium,2021-11-10,587,Lake Chris,MD,63747
+CUST0339,Gerald,Petersen,gerald.petersen@email.com,(947) 292-9715,1974-11-22,Basic,2021-11-10,739,New Dawnton,VA,76035
+CUST0340,Patrick,Deleon,patrick.deleon@email.com,(656) 895-0602,1994-11-17,Basic,2016-11-11,485,Michaelchester,MT,16300
+CUST0341,Molly,Perez,molly.perez@email.com,(651) 349-5209,1978-11-21,Premium,2022-11-10,710,Lake Kimberlyfurt,AR,40449
+CUST0342,Alice,Flores,alice.flores@email.com,(574) 559-4635,1983-11-20,Premium,2018-11-11,318,West Wayne,IN,20580
+CUST0343,Brent,Dennis,brent.dennis@email.com,(870) 434-9462,1996-11-16,Premium,2018-11-11,717,Maddoxshire,NY,12308
+CUST0344,Jeffrey,Roberts,jeffrey.roberts@email.com,(823) 614-1309,1978-11-21,Premium,2019-11-11,736,Hernandezmouth,CO,62872
+CUST0345,Ashley,Williams,ashley.williams@email.com,(800) 202-9277,1942-11-30,Standard,2024-11-09,611,Bakerfurt,NY,57450
+CUST0346,Kim,Anderson,kim.anderson@email.com,(611) 551-7199,1961-11-25,Standard,2019-11-11,728,South Anita,NM,52316
+CUST0347,Denise,Gonzalez,denise.gonzalez@email.com,(681) 636-6039,2001-11-15,Premium,2024-11-09,300,East Charles,WI,56870
+CUST0348,Marcus,Glass,marcus.glass@email.com,(581) 639-6217,1980-11-20,Standard,2017-11-11,586,North Emilychester,MN,46154
+CUST0349,James,Cooper,james.cooper@email.com,(865) 269-0500,1952-11-27,Premium,2020-11-10,803,Port Kevinstad,RI,58462
+CUST0350,Cindy,Alexander,cindy.alexander@email.com,(741) 660-8323,1969-11-23,Premium,2023-11-10,313,East Gina,FL,99818
+CUST0351,Jessica,Miller,jessica.miller@email.com,(904) 318-6206,1965-11-24,Standard,2019-11-11,841,East Stacyberg,VI,38208
+CUST0352,Alexander,Benson,alexander.benson@email.com,(864) 723-4284,1977-11-21,Basic,2020-11-10,515,West Shannontown,MA,27896
+CUST0353,Jody,Lewis,jody.lewis@email.com,(854) 744-3279,1996-11-16,Premium,2022-11-10,423,Anaberg,UT,92088
+CUST0354,Elizabeth,Bennett,elizabeth.bennett@email.com,(576) 419-4945,1983-11-20,Basic,2017-11-11,401,West Georgeport,ID,91796
+CUST0355,Christine,Brown,christine.brown@email.com,(593) 675-2873,1969-11-23,Basic,2017-11-11,506,North Paulview,TN,87021
+CUST0356,Michael,Rodriguez,michael.rodriguez@email.com,(828) 357-8194,2002-11-15,Premium,2021-11-10,728,Michellefurt,IN,50400
+CUST0357,William,Mckinney,william.mckinney@email.com,(836) 523-6674,1936-12-01,Standard,2019-11-11,759,Toddside,CO,24935
+CUST0358,James,Rasmussen,james.rasmussen@email.com,(877) 297-0130,1952-11-27,Premium,2017-11-11,729,North Johnhaven,ME,44222
+CUST0359,Tracy,Garner,tracy.garner@email.com,(823) 945-3526,2005-11-14,Premium,2015-11-12,580,West Gabriellestad,SC,40127
+CUST0360,Joel,Good,joel.good@email.com,(911) 316-3157,1970-11-23,Premium,2015-11-12,362,Lisaview,FM,51248
+CUST0361,Pamela,Briggs,pamela.briggs@email.com,(961) 419-0874,1957-11-26,Standard,2016-11-11,825,New Stacybury,FL,45299
+CUST0362,Penny,Sandoval,penny.sandoval@email.com,(593) 377-6934,1951-11-28,Basic,2018-11-11,699,Lake Patrickbury,MT,32005
+CUST0363,Ashley,Simmons,ashley.simmons@email.com,(760) 555-4916,1981-11-20,Premium,2024-11-09,463,Reneemouth,NV,71572
+CUST0364,David,Delgado,david.delgado@email.com,(847) 465-4207,2006-11-14,Basic,2017-11-11,815,Port Devin,UT,92924
+CUST0365,Rachel,Browning,rachel.browning@email.com,(917) 980-9266,1974-11-22,Standard,2021-11-10,603,Forbesberg,SD,74536
+CUST0366,Sally,Stewart,sally.stewart@email.com,(917) 550-4928,1937-12-01,Premium,2022-11-10,529,East Lonnieberg,VA,04365
+CUST0367,Kathy,Beard,kathy.beard@email.com,(578) 995-1748,1977-11-21,Standard,2024-11-09,451,Aliport,NV,98229
+CUST0368,Sarah,Shannon,sarah.shannon@email.com,(697) 323-0889,1973-11-22,Premium,2021-11-10,515,Edwinborough,CT,17742
+CUST0369,Jack,Farmer,jack.farmer@email.com,(828) 294-9258,2007-11-14,Basic,2019-11-11,677,Catherinebury,PA,30933
+CUST0370,Jerry,Johnson,jerry.johnson@email.com,(721) 239-6638,1937-12-01,Standard,2022-11-10,718,Lake Kimberlyberg,NY,79761
+CUST0371,Taylor,Banks,taylor.banks@email.com,(868) 594-7522,1966-11-24,Premium,2024-11-09,664,Port Paul,NJ,18525
+CUST0372,Frank,Perez,frank.perez@email.com,(667) 569-2416,1985-11-19,Standard,2024-11-09,850,Durantown,KY,54639
+CUST0373,Jeffrey,Powers,jeffrey.powers@email.com,(891) 278-5812,1959-11-26,Basic,2020-11-10,511,Port James,HI,58078
+CUST0374,Michelle,Burns,michelle.burns@email.com,(973) 841-8631,1979-11-21,Standard,2020-11-10,508,Michellebury,NE,53567
+CUST0375,Kimberly,Franklin,kimberly.franklin@email.com,(852) 763-4775,1988-11-18,Standard,2021-11-10,744,Cortezfurt,RI,97817
+CUST0376,Ashley,Herrera,ashley.herrera@email.com,(743) 348-8634,1946-11-29,Premium,2017-11-11,485,New Danielmouth,GU,06060
+CUST0377,Natalie,Sanchez,natalie.sanchez@email.com,(790) 410-4255,1985-11-19,Premium,2015-11-12,802,Terrellton,OH,51278
+CUST0378,Zachary,Mccoy,zachary.mccoy@email.com,(928) 402-6721,1971-11-23,Premium,2020-11-10,466,East Kellyfurt,FM,40419
+CUST0379,Kim,Mitchell,kim.mitchell@email.com,(645) 761-3533,1983-11-20,Premium,2022-11-10,373,South Kelly,PW,07650
+CUST0380,Hannah,Mckee,hannah.mckee@email.com,(773) 511-4676,1949-11-28,Basic,2018-11-11,402,Gallegosmouth,CO,95219
+CUST0381,Vincent,White,vincent.white@email.com,(925) 983-7877,1990-11-18,Basic,2024-11-09,402,South Robert,NV,03766
+CUST0382,Harold,Garza,harold.garza@email.com,(748) 744-2292,2005-11-14,Premium,2024-11-09,344,South Christopher,MD,91165
+CUST0383,Deborah,Dawson,deborah.dawson@email.com,(622) 516-6503,1997-11-16,Standard,2022-11-10,313,Lake Jessica,CO,15464
+CUST0384,Jasmin,Walters,jasmin.walters@email.com,(960) 115-7641,1994-11-17,Basic,2019-11-11,387,New Jasminehaven,RI,21459
+CUST0385,Nicholas,James,nicholas.james@email.com,(658) 333-5893,1946-11-29,Basic,2017-11-11,467,West Ariana,TN,20173
+CUST0386,Fernando,Thomas,fernando.thomas@email.com,(712) 656-5947,1946-11-29,Premium,2021-11-10,357,South Kylemouth,LA,82611
+CUST0387,Henry,Roach,henry.roach@email.com,(833) 548-7177,1938-12-01,Premium,2024-11-09,345,North Cindy,KS,02101
+CUST0388,Stephen,Foley,stephen.foley@email.com,(607) 597-8445,1994-11-17,Basic,2018-11-11,445,New Nicolebury,IL,77684
+CUST0389,Donna,Chavez,donna.chavez@email.com,(555) 476-3343,2004-11-14,Premium,2018-11-11,694,Millertown,IA,72242
+CUST0390,Joshua,Fuller,joshua.fuller@email.com,(630) 692-7556,1971-11-23,Premium,2018-11-11,415,North Jack,AR,86127
+CUST0391,Michael,Thomas,michael.thomas@email.com,(806) 384-4728,1993-11-17,Premium,2023-11-10,588,Lake Belindaport,MA,11996
+CUST0392,Brandon,Butler,brandon.butler@email.com,(737) 227-9932,1965-11-24,Premium,2019-11-11,386,East Emily,RI,87129
+CUST0393,Heather,Larson,heather.larson@email.com,(577) 353-5087,1985-11-19,Standard,2016-11-11,642,South Kara,MN,05198
+CUST0394,Christopher,Evans,christopher.evans@email.com,(862) 404-2807,1953-11-27,Premium,2020-11-10,593,Priscillaland,WV,56511
+CUST0395,Megan,Brown,megan.brown@email.com,(733) 274-3531,1973-11-22,Standard,2019-11-11,571,Taylorview,MA,69582
+CUST0396,Robert,Clark,robert.clark@email.com,(970) 228-1267,2007-11-14,Premium,2022-11-10,627,New Brian,OK,96147
+CUST0397,Tiffany,Rice,tiffany.rice@email.com,(630) 755-3173,1950-11-28,Basic,2017-11-11,368,South Jenniferport,NE,80303
+CUST0398,Melanie,Green,melanie.green@email.com,(612) 817-1473,1972-11-22,Premium,2023-11-10,630,Sarashire,NM,68619
+CUST0399,Jessica,Jimenez,jessica.jimenez@email.com,(620) 405-1311,1958-11-26,Standard,2019-11-11,806,New Jesse,LA,25870
+CUST0400,Aaron,Johnson,aaron.johnson@email.com,(772) 907-4681,1955-11-27,Basic,2019-11-11,441,Lake Melaniechester,MT,06463
+CUST0401,Matthew,Castro,matthew.castro@email.com,965-512-5653,1954-11-27,Basic,2017-11-11,846,North Danielle,UT,37414
+CUST0402,Jonathan,Jones,jonathan.jones@email.com,807.993.3438,1978-11-21,Standard,2023-11-10,731,Williammouth,WI,01304
+CUST0403,Daniel,Cook,daniel.cook@email.com,824.467.9813,1996-11-16,Premium,2019-11-11,302,Ramseytown,MP,23521
+CUST0404,James,Bass,james.bass@email.com,659-128-7807,1936-12-01,Standard,2022-11-10,412,Hendrickston,SD,18294
+CUST0405,Timothy,Burton,timothy.burton@email.com,585-686-1079,1990-11-18,Standard,2017-11-11,447,Stevenchester,WA,07843
+CUST0406,Mary,Evans,mary.evans@email.com,9828064499,1981-11-20,Premium,2024-11-09,441,Angelatown,IL,76181
+CUST0407,Gina,Marsh,gina.marsh@email.com,615-340-0426,2004-11-14,Basic,2018-11-11,680,Carlberg,KY,04586
+CUST0408,Matthew,Brooks,matthew.brooks@email.com,582.277.8549,1998-11-16,Standard,2015-11-12,461,New Catherine,HI,78513
+CUST0409,Darryl,Patton,darryl.patton@email.com,570-346-4349,1989-11-18,Premium,2021-11-10,378,Janetmouth,VT,04646
+CUST0410,Joseph,Miller,joseph.miller@email.com,5617987624,1984-11-19,Standard,2022-11-10,840,West Shannon,ME,28830
+CUST0411,Alicia,Thompson,alicia.thompson@email.com,912-602-4905,1955-11-27,Basic,2019-11-11,754,Kristenborough,PW,12638
+CUST0412,Scott,Johnson,scott.johnson@email.com,955-122-1617,1993-11-17,Premium,2024-11-09,332,Steinberg,ID,45080
+CUST0413,Sandra,Oconnor,sandra.oconnor@email.com,864.391.2192,1987-11-19,Premium,2018-11-11,733,Kimberlyberg,WI,13379
+CUST0414,Lynn,Hurley,lynn.hurley@email.com,903.862.1830,1974-11-22,Basic,2016-11-11,613,East Jenny,NH,51302
+CUST0415,Jennifer,Boyd,jennifer.boyd@email.com,918-481-3710,1987-11-19,Standard,2023-11-10,834,West Sarahland,MA,61695
+CUST0416,Pamela,Garcia,pamela.garcia@email.com,748.309.9389,1980-11-20,Standard,2015-11-12,357,Andrewport,SC,28005
+CUST0417,Manuel,Lee,manuel.lee@email.com,6677581550,1936-12-01,Basic,2023-11-10,779,Amandamouth,TN,15921
+CUST0418,Joseph,Moore,joseph.moore@email.com,799.625.4450,1956-11-26,Standard,2022-11-10,355,North Susanside,NY,13919
+CUST0419,Jamie,Bell,jamie.bell@email.com,966.723.2368,1953-11-27,Premium,2020-11-10,411,Josephport,OK,32590
+CUST0420,George,Collins,george.collins@email.com,608-230-5411,1965-11-24,Premium,2021-11-10,588,Amberton,DC,04301
+CUST0421,Thomas,Lowe,thomas.lowe@email.com,6382786178,1980-11-20,Basic,2024-11-09,616,South Brianchester,MO,23960
+CUST0422,Janet,Vance,janet.vance@email.com,651.438.4399,2003-11-15,Premium,2020-11-10,387,Jensenport,MA,26472
+CUST0423,Jennifer,Lambert,jennifer.lambert@email.com,846.175.2869,1946-11-29,Premium,2024-11-09,622,Port Kathyshire,DC,12679
+CUST0424,Lisa,Gillespie,lisa.gillespie@email.com,6026177530,1962-11-25,Standard,2018-11-11,812,Davisport,TX,84966
+CUST0425,Jennifer,Marshall,jennifer.marshall@email.com,654-627-5972,1962-11-25,Premium,2023-11-10,639,East Douglas,MH,81364
+CUST0426,Jonathan,Cox,jonathan.cox@email.com,7639448643,1943-11-30,Premium,2024-11-09,691,Lake Samantha,MA,43068
+CUST0427,Shawn,Johnson,shawn.johnson@email.com,799-162-7606,1987-11-19,Premium,2017-11-11,380,Rodriguezfort,NH,22888
+CUST0428,Justin,Bailey,justin.bailey@email.com,875.256.5160,1978-11-21,Premium,2022-11-10,464,New Dakota,GU,94122
+CUST0429,Laura,Nguyen,laura.nguyen@email.com,811.966.2089,1941-11-30,Standard,2017-11-11,434,Port Kevinmouth,MO,77903
+CUST0430,Robert,Oliver,robert.oliver@email.com,728-587-9512,1952-11-27,Premium,2018-11-11,544,South Patrick,MA,27795
+CUST0431,Lisa,Garza,lisa.garza@email.com,6612258262,1935-12-02,Basic,2017-11-11,399,Bradleymouth,ND,91482
+CUST0432,Joel,Bates,joel.bates@email.com,9671250681,1968-11-23,Basic,2023-11-10,810,Lake Sarahshire,MP,64284
+CUST0433,Danny,Carlson,danny.carlson@email.com,603-863-0409,1986-11-19,Standard,2022-11-10,369,Angelamouth,HI,40875
+CUST0434,Stephanie,Jones,stephanie.jones@email.com,698-709-5636,1996-11-16,Premium,2022-11-10,771,Lake Lisafurt,MD,65289
+CUST0435,Deanna,Brown,deanna.brown@email.com,687-894-0001,1951-11-28,Basic,2022-11-10,426,Port Dominic,OR,99458
+CUST0436,Daisy,Smith,daisy.smith@email.com,8469191626,1961-11-25,Standard,2018-11-11,718,Lake Edward,ND,38708
+CUST0437,Peter,Lane,peter.lane@email.com,993-316-3996,1961-11-25,Basic,2015-11-12,621,East Erin,MD,39787
+CUST0438,Ashley,Gentry,ashley.gentry@email.com,746.240.0738,1955-11-27,Basic,2017-11-11,569,Samanthachester,VT,45624
+CUST0439,Veronica,Aguilar,veronica.aguilar@email.com,904.171.5977,2000-11-15,Basic,2021-11-10,308,Abbottport,AR,48895
+CUST0440,Rachel,Faulkner,rachel.faulkner@email.com,634-276-6607,1959-11-26,Premium,2015-11-12,708,Lake Annstad,DE,37490
+CUST0441,Michelle,Young,michelle.young@email.com,9922224379,1958-11-26,Standard,2023-11-10,657,Garrettfurt,MO,50513
+CUST0442,Ryan,Clark,ryan.clark@email.com,793.885.9936,1939-12-01,Standard,2023-11-10,387,South Don,OH,50910
+CUST0443,Megan,Ward,megan.ward@email.com,647-281-7783,1952-11-27,Premium,2018-11-11,636,Mooreberg,DC,02021
+CUST0444,Charles,Smith,charles.smith@email.com,588-632-3156,1945-11-29,Premium,2017-11-11,417,Barrettberg,CO,18486
+CUST0445,Dawn,Perry,dawn.perry@email.com,6978626564,1938-12-01,Premium,2017-11-11,449,Englishchester,RI,24067
+CUST0446,Shawn,Coleman,shawn.coleman@email.com,882-458-1434,1935-12-02,Premium,2015-11-12,689,Cruzbury,HI,56176
+CUST0447,Cassandra,Lane,cassandra.lane@email.com,586-706-4842,1947-11-29,Premium,2024-11-09,516,Lake Walter,MT,72088
+CUST0448,Barbara,Johnson,barbara.johnson@email.com,999.138.4915,1953-11-27,Standard,2020-11-10,480,New Timothystad,DE,76557
+CUST0449,Timothy,Vaughn,timothy.vaughn@email.com,5973377967,1972-11-22,Standard,2023-11-10,605,Lake Jessica,PR,98881
+CUST0450,Kimberly,Marshall,kimberly.marshall@email.com,919-857-3586,1940-11-30,Premium,2020-11-10,488,New Pamelaland,IA,62426
+CUST0451,Crystal,Alvarado,crystal@invalid,602-818-9612,1969-11-23,Premium,2021-11-10,657,Lake Cynthiashire,ME,80853
+CUST0452,Brian,Cooper,brian @email.com,801.897.7556,1987-11-19,Basic,2018-11-11,663,South Shawnfort,OK,96683
+CUST0453,Martin,Gomez,martin@,754.116.6623,1982-11-20,Premium,2015-11-12,448,Keithton,UT,78834
+CUST0454,Kara,Acosta,karamissing,8956310245,1988-11-18,Standard,2022-11-10,811,Bryanfort,OR,22662
+CUST0455,Ashley,Douglas,ashleymissing,613-781-8036,1941-11-30,Basic,2024-11-09,761,Lisatown,LA,64039
+CUST0456,Christopher,Wagner,badformat455,879.853.8483,1995-11-17,Premium,2021-11-10,492,Johnathanview,KY,34180
+CUST0457,Alexis,Rodriguez,alexis @email.com,911.378.6712,1959-11-26,Premium,2019-11-11,514,New Joanne,TN,59044
+CUST0458,Mitchell,Thompson,badformat457,902-124-1105,1961-11-25,Premium,2020-11-10,614,South Henry,NC,04838
+CUST0459,Matthew,Miller,matthew@,974.309.2879,1944-11-29,Basic,2017-11-11,723,New Sarah,FL,65505
+CUST0460,Karen,Gutierrez,karen @email.com,735.690.9123,1953-11-27,Basic,2019-11-11,416,Youngmouth,VA,84069
+CUST0461,Gary,Lane,badformat460,789-818-7084,1985-11-19,premium,2016-11-11,746,Brianview,WV,15704
+CUST0462,Brian,Marshall,brian @email.com,700.833.9925,1971-11-23,PREMIUM,2023-11-10,406,Turnerside,IN,50282
+CUST0463,Frances,Price,frances@invalid,887.127.5590,1955-11-27,PREMIUM,2017-11-11,402,Dustinchester,AL,38353
+CUST0464,Sara,Cole,sara @email.com,812.154.7533,1970-11-23,Gold,2021-11-10,528,Suzanneton,CT,70138
+CUST0465,Dana,Blanchard,dana @email.com,8377393458,1982-11-20,Gold,2023-11-10,659,Bishopview,MA,35933
+CUST0466,Joseph,Garcia,joseph @email.com,7667640565,1960-11-25,premium,2016-11-11,590,Murraybury,VA,88566
+CUST0467,Brianna,Lee,briannamissing,892-543-7558,1954-11-27,premium,2024-11-09,724,Ericaburgh,MD,72277
+CUST0468,Alex,Smith,alex@invalid,5621440348,1960-11-25,VIP,2019-11-11,474,North Roberthaven,CT,90350
+CUST0469,Sean,Robinson,sean@,775.505.7252,1957-11-26,premium,2015-11-12,702,Johnathanton,AK,81686
+CUST0470,Christopher,Mays,christopher@invalid,9658199144,1958-11-26,premium,2018-11-11,625,New Danielle,VT,16226
+CUST0471,Christopher,Jacobs,christopher@,6368338380,1995-11-17,premium,2016-11-11,421,Douglasshire,AS,24718
+CUST0472,Paula,Dominguez,paula@,956.757.6872,1974-11-22,premium,2019-11-11,508,Kennethland,SC,59934
+CUST0473,Sandra,Hill,sandra@invalid,602-143-0171,2006-11-14,premium,2024-11-09,380,Schwartzmouth,KS,21730
+CUST0474,Kimberly,Ramirez,kimberly@,750.142.4293,1991-11-18,Gold,2019-11-11,491,South Paulton,KS,35191
+CUST0475,Gregory,Jones,badformat474,889-472-0435,1983-11-20,premium,2018-11-11,566,New Philip,SD,64995
+CUST0476,Daniel,Fernandez,daniel@invalid,6952391894,2015-11-12,PREMIUM,2023-11-10,770,Robinsonville,PW,58379
+CUST0477,Jennifer,Garcia,jennifer@,6172796448,1925-12-04,VIP,2022-11-10,395,North Ashleyview,WI,58943
+CUST0478,Andrew,Jimenez,andrew@invalid,8087063240,1915-12-07,PREMIUM,2017-11-11,322,North Elizabethview,FL,92258
+CUST0479,Mark,Myers,mark @email.com,592.916.2405,2015-11-12,premium,2018-11-11,684,New Jasminefort,NJ,57655
+CUST0480,Richard,Luna,richardmissing,8798564486,2010-11-13,VIP,2024-11-09,482,New Jeremiahfurt,UT,63686
+CUST0481,David,Nichols,david@,8781527651,1925-12-04,VIP,2017-11-11,305,Mathewport,MO,07735
+CUST0482,Cynthia,Benjamin,badformat481,8225269818,2010-11-13,PREMIUM,2016-11-11,323,West Amandamouth,CO,60746
+CUST0483,Kathleen,Roberts,kathleen@,8173555942,1925-12-04,PREMIUM,2021-11-10,330,East Angela,MS,87104
+CUST0484,James,Dominguez,jamesmissing,6254686979,2010-11-13,VIP,2020-11-10,793,Lake Haleyfort,CO,83442
+CUST0485,Samuel,Lopez,badformat484,602.684.7755,1905-12-09,VIP,2017-11-11,807,East Anthonyshire,IA,64625
+CUST0486,Paul,Sparks,paul @email.com,8177709915,1925-12-04,premium,2021-11-10,587,Victormouth,AK,05356
+CUST0487,Matthew,Morgan,matthew @email.com,6076227531,2010-11-13,Gold,2018-11-11,756,South Davidhaven,NH,89378
+CUST0488,Molly,Herrera,molly @email.com,860-555-7932,1905-12-09,PREMIUM,2015-11-12,692,North Benjamin,FL,64581
+CUST0489,Desiree,Ruiz,desiree @email.com,657-692-0939,2015-11-12,Gold,2022-11-10,334,East Jacquelineberg,AL,23078
+CUST0490,Cynthia,Conway,cynthia@,684-787-5441,1905-12-09,VIP,2018-11-11,330,South Cherylshire,CA,14438
+CUST0491,Danny,Larson,danny@invalid,647-641-3691,2010-11-13,VIP,2021-11-10,374,North Linda,NE,44717
+CUST0492,Lisa,Hendrix,badformat491,891-723-5425,2010-11-13,VIP,2023-11-10,309,Nguyenshire,ND,18501
+CUST0493,Marc,Oconnell,marcmissing,907.118.2888,1925-12-04,premium,2017-11-11,629,Port Brandon,HI,44476
+CUST0494,Bryan,Hill,badformat493,842-211-1241,1925-12-04,premium,2016-11-11,522,Jacksonstad,OH,22128
+CUST0495,Samuel,Frost,samuel@invalid,842.566.4879,1905-12-09,PREMIUM,2015-11-12,731,East Craigfurt,WI,21178
+CUST0496,Alexis,Tucker,alexis @email.com,7176370746,2010-11-13,PREMIUM,2017-11-11,810,North Harryland,VT,85927
+CUST0497,Brittney,Campbell,brittney@invalid,6958067188,2015-11-12,Gold,2022-11-10,634,Schwartzborough,FL,84364
+CUST0498,Joseph,Cole,joseph@,751.496.6501,2015-11-12,VIP,2024-11-09,304,East Cheryl,AZ,78655
+CUST0499,Hector,Porter,hector @email.com,700-319-8789,2015-11-12,PREMIUM,2019-11-11,316,Lake Margaretport,MI,55392
+CUST0500,Adam,Young,adam@invalid,795-259-5845,1925-12-04,VIP,2019-11-11,654,New Tiffanystad,VI,71243

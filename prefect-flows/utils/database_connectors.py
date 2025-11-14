@@ -546,7 +546,7 @@ class PostgreSQLConnector(DatabaseConnector):
 
     def list_tables(self) -> List[str]:
         """
-        List all tables in database
+        List all tables in database (excluding Prefect system tables)
 
         Returns:
             List of table names
@@ -554,6 +554,20 @@ class PostgreSQLConnector(DatabaseConnector):
         try:
             conn = self.connect()
             cursor = conn.cursor()
+
+            # Exclude Prefect system tables
+            prefect_tables = [
+                'agent', 'alembic_version', 'artifact', 'artifact_collection',
+                'automation', 'automation_bucket', 'automation_event_follower',
+                'automation_related_resource', 'block_document', 'block_document_reference',
+                'block_schema', 'block_schema_reference', 'block_type',
+                'composite_trigger_child_firing', 'concurrency_limit', 'concurrency_limit_v2',
+                'configuration', 'csrf_token', 'deployment', 'deployment_schedule',
+                'event_resources', 'events', 'flow', 'flow_run', 'flow_run_input',
+                'flow_run_notification_policy', 'flow_run_notification_queue',
+                'flow_run_state', 'log', 'saved_search', 'task_run', 'task_run_state',
+                'task_run_state_cache', 'variable', 'work_pool', 'work_queue', 'worker'
+            ]
 
             cursor.execute("""
                 SELECT table_name
@@ -563,7 +577,8 @@ class PostgreSQLConnector(DatabaseConnector):
                 ORDER BY table_name
             """)
 
-            tables = [row[0] for row in cursor.fetchall()]
+            # Filter out Prefect system tables
+            tables = [row[0] for row in cursor.fetchall() if row[0] not in prefect_tables]
 
             cursor.close()
             self.close()

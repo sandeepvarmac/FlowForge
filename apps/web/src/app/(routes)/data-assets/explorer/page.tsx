@@ -11,6 +11,7 @@ import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { EnvironmentBadge } from '@/components/data-assets/EnvironmentBadge';
 import { QualityIndicator } from '@/components/data-assets/QualityIndicator';
 import { AssetCard } from '@/components/data-assets/AssetCard';
+import { SourceDatabasesView } from '@/components/data-assets/SourceDatabasesView';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
 
@@ -18,9 +19,13 @@ type Layer = 'bronze' | 'silver' | 'gold';
 type Environment = 'dev' | 'qa' | 'uat' | 'prod';
 type QualityStatus = 'healthy' | 'issues' | 'no-rules';
 type DetailTab = 'overview' | 'schema' | 'sample' | 'quality' | 'lineage' | 'jobs';
+type ViewMode = 'processed' | 'sources';
 
 export default function DataAssetsExplorerPage() {
   const router = useRouter();
+
+  // View mode state
+  const [viewMode, setViewMode] = React.useState<ViewMode>('processed');
 
   // Filters state
   const [selectedEnvironment, setSelectedEnvironment] = React.useState<Environment>('prod');
@@ -29,6 +34,15 @@ export default function DataAssetsExplorerPage() {
   const [selectedQualityStatus, setSelectedQualityStatus] = React.useState<QualityStatus[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showFilters, setShowFilters] = React.useState(true);
+
+  // Source databases state
+  const [sourceConnections, setSourceConnections] = React.useState<any[]>([]);
+  const [selectedConnection, setSelectedConnection] = React.useState<any>(null);
+  const [sourceTables, setSourceTables] = React.useState<string[]>([]);
+  const [selectedTable, setSelectedTable] = React.useState<string | null>(null);
+  const [tablePreview, setTablePreview] = React.useState<any>(null);
+  const [loadingTables, setLoadingTables] = React.useState(false);
+  const [loadingPreview, setLoadingPreview] = React.useState(false);
 
   // Data state
   const [assets, setAssets] = React.useState<any[]>([]);
@@ -140,61 +154,106 @@ export default function DataAssetsExplorerPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Data Assets Explorer</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Browse and manage your medallion architecture data catalog
+              Browse processed assets and source databases
             </p>
           </div>
 
-          {/* Environment Selector */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Environment:</label>
-              <select
-                value={selectedEnvironment}
-                onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          {/* Environment Selector (only for processed view) */}
+          {viewMode === 'processed' && (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Environment:</label>
+                <select
+                  value={selectedEnvironment}
+                  onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="prod">Production</option>
+                  <option value="uat">UAT</option>
+                  <option value="qa">QA</option>
+                  <option value="dev">Development</option>
+                </select>
+              </div>
+
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                <option value="prod">Production</option>
-                <option value="uat">UAT</option>
-                <option value="qa">QA</option>
-                <option value="dev">Development</option>
-              </select>
+                <Filter className="w-4 h-4" />
+                <span className="text-sm">{showFilters ? 'Hide' : 'Show'} Filters</span>
+              </button>
             </div>
-
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <Filter className="w-4 h-4" />
-              <span className="text-sm">{showFilters ? 'Hide' : 'Show'} Filters</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="mt-4 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search assets by name or description..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
           )}
         </div>
+
+        {/* View Mode Tabs */}
+        <div className="mt-4 flex items-center gap-1 border-b border-gray-200">
+          <button
+            onClick={() => setViewMode('processed')}
+            className={`
+              px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+              ${viewMode === 'processed'
+                ? 'bg-white text-primary-700 border-t border-l border-r border-gray-200 -mb-px'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4" />
+              <span>Processed Assets</span>
+            </div>
+          </button>
+          <button
+            onClick={() => setViewMode('sources')}
+            className={`
+              px-4 py-2 text-sm font-medium rounded-t-lg transition-colors
+              ${viewMode === 'sources'
+                ? 'bg-white text-primary-700 border-t border-l border-r border-gray-200 -mb-px'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <Table className="w-4 h-4" />
+              <span>Source Databases</span>
+            </div>
+          </button>
+        </div>
+
+        {/* Search Bar (only for processed view) */}
+        {viewMode === 'processed' && (
+          <div className="mt-4 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search assets by name or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Three-Panel Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Filters */}
-        {showFilters && (
+      {/* Content - Conditional based on view mode */}
+      {viewMode === 'sources' ? (
+        <div className="flex-1 overflow-hidden">
+          <SourceDatabasesView />
+        </div>
+      ) : (
+        <>
+          {/* Three-Panel Layout for Processed Assets */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Panel: Filters */}
+            {showFilters && (
           <div className="w-64 bg-white border-r border-gray-200 overflow-y-auto">
             <div className="p-4 space-y-6">
               {/* Layer Filter */}
@@ -446,6 +505,8 @@ export default function DataAssetsExplorerPage() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

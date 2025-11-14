@@ -57,6 +57,16 @@ export async function POST(request: NextRequest) {
       password: body.password
     })
 
+    // If connection test failed, return error without saving to database
+    if (!testResult.success) {
+      return NextResponse.json({
+        success: false,
+        message: testResult.message || 'Connection test failed',
+        testResult
+      }, { status: 400 })
+    }
+
+    // Connection test succeeded, save to database
     const db = getDatabase()
     const id = `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
     const now = Date.now()
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
       body.sslEnabled ? 1 : 0,
       body.connectionTimeout || 30,
       now,
-      testResult.success ? 'success' : 'failed',
+      'success', // Only save successful connections
       testResult.message,
       now,
       now
@@ -103,7 +113,7 @@ export async function POST(request: NextRequest) {
       sslEnabled: body.sslEnabled,
       connectionTimeout: body.connectionTimeout || 30,
       lastTestedAt: now,
-      lastTestStatus: testResult.success ? 'success' as const : 'failed' as const,
+      lastTestStatus: 'success' as const,
       lastTestMessage: testResult.message,
       createdAt: now,
       updatedAt: now

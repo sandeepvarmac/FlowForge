@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/compo
 import {
   Database, Plus, CheckCircle, XCircle, Loader2, Trash2, RefreshCw,
   Cloud, FileText, Globe, Code, Mail, ShoppingCart, MessageSquare,
-  Calendar, Zap, FolderOpen, HardDrive
+  Calendar, Zap, FolderOpen, HardDrive, Pencil
 } from 'lucide-react'
 import { DatabaseConnection } from '@/types/database-connection'
 import { CreateConnectionModal } from '@/components/database'
 import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
+import { ToastContainer } from '@/components/ui/toast-container'
+import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
 // Source categories for tabbed navigation
@@ -88,10 +90,12 @@ const comingSoonIntegrations = {
 }
 
 export default function SourcesPage() {
+  const { toasts, dismissToast, success, error: showError } = useToast()
   const [activeCategory, setActiveCategory] = useState('all')
   const [connections, setConnections] = useState<DatabaseConnection[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
+  const [editingConnection, setEditingConnection] = useState<DatabaseConnection | null>(null)
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
   const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -376,8 +380,17 @@ export default function SourcesPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => setEditingConnection(connection)}
+                      title="Edit connection"
+                    >
+                      <Pencil className="w-3 h-3 text-primary" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => openDeleteModal(connection.id, connection.name)}
                       disabled={isDeleting}
+                      title="Delete connection"
                     >
                       {isDeleting ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -493,14 +506,32 @@ export default function SourcesPage() {
         </div>
       )}
 
-      {/* Create Connection Modal */}
+      {/* Create/Edit Connection Modal */}
       <CreateConnectionModal
-        open={isCreating}
-        onOpenChange={setIsCreating}
-        onConnectionCreated={() => {
+        open={isCreating || editingConnection !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreating(false)
+            setEditingConnection(null)
+          }
+        }}
+        editConnection={editingConnection || undefined}
+        onConnectionCreated={(connection, wasEdit) => {
           fetchConnections()
+          setEditingConnection(null)
+          if (wasEdit) {
+            success('Connection updated successfully')
+          } else {
+            success('Connection created successfully')
+          }
+        }}
+        onError={(message) => {
+          showError(message)
         }}
       />
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* Delete Connection Modal */}
       <DeleteConfirmationModal

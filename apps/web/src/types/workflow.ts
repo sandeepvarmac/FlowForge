@@ -166,6 +166,10 @@ export interface FileSourceConfig {
   skipRows?: number
   skipFooterRows?: number
   compressionType?: 'none' | 'zip' | 'gzip'
+  // Incremental loading support (for temporal columns in CSV)
+  isIncremental?: boolean
+  deltaColumn?: string
+  lastWatermark?: string | Date
 }
 
 export interface DatabaseSourceConfig {
@@ -216,6 +220,12 @@ export interface LayerConfig {
   conflictResolution?: 'source_wins' | 'target_wins' | 'most_recent' // How to resolve conflicts
   surrogateKeyStrategy?: 'auto_increment' | 'uuid' | 'hash' | 'use_existing' // How to generate _sk_id
   surrogateKeyColumn?: string // Name of surrogate key column (default: _surrogate_key)
+  // AI-suggested deduplication settings
+  _dedupEnabled?: boolean // Enable advanced deduplication (AI-suggested)
+  _dedupStrategy?: 'first' | 'last' | 'none' // Deduplication strategy (AI-suggested)
+  _dedupSortColumn?: string // Sort column for deduplication (AI-suggested)
+  _partitionStrategy?: string // Partition strategy (AI-suggested from Bronze)
+  _partitionColumn?: string // Partition column (AI-suggested from Bronze)
   // SCD Type 2 specific
   scdNaturalKey?: string[] // Natural key for SCD Type 2
   scdEffectiveDateColumn?: string // Effective date column name

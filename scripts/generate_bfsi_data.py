@@ -19,7 +19,7 @@ NUM_TRANSACTIONS = 1000
 NUM_PRODUCTS = 50
 NUM_CUSTOMERS = 500
 
-# Database connection
+# Database connection (Docker PostgreSQL - actual credentials)
 DB_CONFIG = {
     'host': 'localhost',
     'port': 5432,

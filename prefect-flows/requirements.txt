@@ -28,4 +28,5 @@ croniter>=2.0.0  # Cron expression parsing
 pytz>=2024.1     # Timezone handling
 httpx>=0.25.0    # HTTP client for trigger notifications
 anthropic>=0.34.0  # Anthropic SDK for AI quality profiler
+openai>=2.8.0     # OpenAI SDK (fallback for AI features)
 requests>=2.31.0  # HTTP client for API calls

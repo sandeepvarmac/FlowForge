@@ -495,7 +495,8 @@ def get_database_schema(
         {
             "success": bool,
             "schema": list of column info,
-            "row_count": int
+            "row_count": int,
+            "preview": list of sample rows
         }
     """
     try:
@@ -504,13 +505,27 @@ def get_database_schema(
         schema = connector.get_schema(table_name)
         row_count = connector.get_row_count(table_name)
 
+        # Fetch preview data (first 20 rows)
+        preview_data = connector.preview_data(table_name, limit=20)
+
+        # Detect temporal columns (for incremental loading)
+        temporal_columns = _detect_temporal_columns(schema)
+
+        # Detect primary key candidates
+        pk_candidates = _detect_pk_candidates(schema)
+
         connector.close()
 
         return {
             "success": True,
             "schema": schema,
             "row_count": row_count,
-            "table_name": table_name
+            "preview": preview_data,
+            "table_name": table_name,
+            "metadata": {
+                "temporal_columns": temporal_columns,
+                "pk_candidates": pk_candidates
+            }
         }
 
     except Exception as e:
@@ -518,5 +533,181 @@ def get_database_schema(
             "success": False,
             "error": str(e),
             "schema": [],
+            "row_count": 0,
+            "preview": [],
+            "metadata": {
+                "temporal_columns": [],
+                "pk_candidates": []
+            }
+        }
+
+
+@task(name="preview-database-table")
+def preview_database_table(
+    db_type: str,
+    connection_config: Dict[str, Any],
+    table_name: str,
+    limit: int = 100
+) -> Dict[str, Any]:
+    """
+    Preview sample rows from a database table (for UI data preview)
+
+    Args:
+        db_type: Database type
+        connection_config: Connection parameters
+        table_name: Table name
+        limit: Maximum number of rows to return (default 100)
+
+    Returns:
+        {
+            "success": bool,
+            "schema": list of column info,
+            "rows": list of dicts (row data),
+            "total_rows": int (in sample),
+            "row_count": int (total in table)
+        }
+    """
+    try:
+        connector = _get_connector(db_type, connection_config)
+
+        # Get schema
+        schema = connector.get_schema(table_name)
+
+        # Get row count
+        row_count = connector.get_row_count(table_name)
+
+        # Read sample data
+        query = f"SELECT * FROM {table_name} LIMIT {limit}"
+        arrow_table = connector.read_query(query)
+
+        # Convert to list of dicts
+        df = pl.from_arrow(arrow_table)
+        rows = df.to_dicts()
+
+        connector.close()
+
+        return {
+            "success": True,
+            "schema": schema,
+            "rows": rows,
+            "total_rows": len(rows),
+            "row_count": row_count,
+            "table_name": table_name
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "schema": [],
+            "rows": [],
+            "total_rows": 0,
             "row_count": 0
         }
+
+
+def get_sample_data(
+    db_type: str,
+    connection_config: Dict[str, Any],
+    table_name: str,
+    sample_size: int = 1000
+) -> Dict[str, Any]:
+    """
+    Get sample data from database table for AI analysis
+
+    Args:
+        db_type: Database type (sql-server, postgresql, mysql)
+        connection_config: Connection configuration dictionary
+        table_name: Name of the table to sample
+        sample_size: Number of rows to sample (default 1000)
+
+    Returns:
+        Dictionary with success status and Polars DataFrame
+    """
+    try:
+        connector = _get_connector(db_type, connection_config)
+
+        # Read sample data
+        query = f"SELECT * FROM {table_name} LIMIT {sample_size}"
+        arrow_table = connector.read_query(query)
+
+        # Convert to Polars DataFrame
+        df = pl.from_arrow(arrow_table)
+
+        connector.close()
+
+        return {
+            "success": True,
+            "dataframe": df,
+            "row_count": len(df),
+            "column_count": len(df.columns),
+            "message": f"Sampled {len(df)} rows from {table_name}"
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "message": f"Failed to sample data: {str(e)}",
+            "dataframe": None,
+            "row_count": 0,
+            "column_count": 0
+        }
+
+
+# ========== Helper Functions for Schema Intelligence ==========
+
+def _detect_temporal_columns(schema: list) -> list:
+    """
+    Detect columns that are suitable for incremental loading (timestamps, dates)
+
+    Args:
+        schema: List of column dictionaries with 'name' and 'type'
+
+    Returns:
+        List of column names that are temporal
+    """
+    temporal_patterns = ['created', 'updated', 'modified', 'timestamp', 'date', 'time']
+    temporal_types = ['timestamp', 'datetime', 'date', 'time']
+
+    candidates = []
+
+    for col in schema:
+        col_name = col.get('name', '').lower()
+        col_type = col.get('type', '').lower()
+
+        # Check if column name contains temporal keywords
+        if any(pattern in col_name for pattern in temporal_patterns):
+            candidates.append(col['name'])
+        # Check if column type is temporal
+        elif any(t in col_type for t in temporal_types):
+            candidates.append(col['name'])
+
+    return candidates
+
+
+def _detect_pk_candidates(schema: list) -> list:
+    """
+    Detect columns that are likely primary keys
+
+    Args:
+        schema: List of column dictionaries with 'name' and 'type'
+
+    Returns:
+        List of column names that are PK candidates
+    """
+    pk_patterns = ['id', '_id', 'key', 'pk', 'code']
+
+    candidates = []
+
+    for col in schema:
+        col_name = col.get('name', '').lower()
+
+        # Check if column name matches PK patterns
+        if col_name in pk_patterns or col_name.endswith('_id') or col_name.startswith('id_'):
+            candidates.append(col['name'])
+
+    return candidates

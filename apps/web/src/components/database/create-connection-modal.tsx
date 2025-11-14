@@ -5,13 +5,15 @@ import { Button, Badge, Input } from '@/components/ui'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { FormField, FormLabel, FormError, Textarea } from '@/components/ui/form'
 import { Database, Loader2, CheckCircle, XCircle, Eye, EyeOff, Info } from 'lucide-react'
-import { DatabaseType, CreateConnectionInput } from '@/types/database-connection'
+import { DatabaseType, CreateConnectionInput, DatabaseConnection } from '@/types/database-connection'
 import { cn } from '@/lib/utils'
 
 interface CreateConnectionModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConnectionCreated?: (connection: any) => void
+  editConnection?: DatabaseConnection
+  onConnectionCreated?: (connection: any, wasEdit: boolean) => void
+  onError?: (message: string) => void
 }
 
 interface ConnectionFormData {
@@ -47,22 +49,38 @@ const databaseTypes = [
   { value: 'oracle', label: 'Oracle', icon: Database, defaultPort: 1521, disabled: true }
 ]
 
-export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated }: CreateConnectionModalProps) {
+export function CreateConnectionModal({ open, onOpenChange, editConnection, onConnectionCreated, onError }: CreateConnectionModalProps) {
   const [formData, setFormData] = React.useState<ConnectionFormData>(initialFormData)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [isCreating, setIsCreating] = React.useState(false)
   const [testResult, setTestResult] = React.useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = React.useState(false)
 
+  const isEditMode = !!editConnection
+
   React.useEffect(() => {
-    if (!open) {
+    if (open && editConnection) {
+      // Pre-fill form with edit data (but never pre-fill password for security)
+      setFormData({
+        name: editConnection.name,
+        description: editConnection.description || '',
+        type: editConnection.type as DatabaseType,
+        host: editConnection.host,
+        port: editConnection.port,
+        database: editConnection.database,
+        username: editConnection.username,
+        password: '', // Always blank for security
+        sslEnabled: editConnection.sslEnabled || false,
+        connectionTimeout: editConnection.connectionTimeout || 30
+      })
+    } else if (!open) {
       // Reset form when modal closes
       setFormData(initialFormData)
       setErrors({})
       setTestResult(null)
       setShowPassword(false)
     }
-  }, [open])
+  }, [open, editConnection])
 
   const updateFormData = (updates: Partial<ConnectionFormData>) => {
     setFormData(prev => ({ ...prev, ...updates }))
@@ -90,6 +108,7 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
     if (!formData.port || formData.port < 1 || formData.port > 65535) newErrors.port = 'Valid port number is required'
     if (!formData.database.trim()) newErrors.database = 'Database name is required'
     if (!formData.username.trim()) newErrors.username = 'Username is required'
+    // Password is always required (both create and edit)
     if (!formData.password.trim()) newErrors.password = 'Password is required'
 
     setErrors(newErrors)
@@ -116,8 +135,14 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
         connectionTimeout: formData.connectionTimeout
       }
 
-      const response = await fetch('/api/database-connections', {
-        method: 'POST',
+      const url = isEditMode
+        ? `/api/database-connections/${editConnection.id}`
+        : '/api/database-connections'
+
+      const method = isEditMode ? 'PUT' : 'POST'
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input)
       })
@@ -125,28 +150,31 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
       const data = await response.json()
 
       if (data.success) {
-        setTestResult({
-          success: true,
-          message: data.testResult?.message || 'Connection created successfully'
-        })
+        // Clear test result from modal
+        setTestResult(null)
 
-        // Wait a moment to show success message
-        setTimeout(() => {
-          onConnectionCreated?.(data.connection)
-          onOpenChange(false)
-        }, 1500)
+        // Close modal and notify parent
+        onConnectionCreated?.(data.connection, isEditMode)
+        onOpenChange(false)
       } else {
+        // Show error in modal
         setTestResult({
           success: false,
-          message: data.message || 'Failed to create connection'
+          message: data.message || (isEditMode ? 'Failed to update connection' : 'Failed to create connection')
         })
+
+        // Also show toast error
+        const errorMessage = data.testResult?.message || data.message || (isEditMode ? 'Failed to update connection. Please check your credentials.' : 'Failed to create connection. Please check your credentials.')
+        onError?.(errorMessage)
       }
     } catch (error) {
-      console.error('Failed to create connection:', error)
+      console.error(`Failed to ${isEditMode ? 'update' : 'create'} connection:`, error)
+      const errorMessage = 'An unexpected error occurred. Please try again.'
       setTestResult({
         success: false,
-        message: 'An unexpected error occurred'
+        message: errorMessage
       })
+      onError?.(errorMessage)
     } finally {
       setIsCreating(false)
     }
@@ -162,9 +190,12 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Create Database Connection</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Database Connection' : 'Create Database Connection'}</DialogTitle>
           <DialogDescription>
-            Create a reusable database connection that can be used across multiple jobs
+            {isEditMode
+              ? 'Update the database connection details. Connection will be tested on save.'
+              : 'Create a reusable database connection that can be used across multiple jobs'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -302,7 +333,7 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password}
                     onChange={(e) => updateFormData({ password: e.target.value })}
-                    placeholder="••••••••"
+                    placeholder="Enter password"
                   />
                   <button
                     type="button"
@@ -407,12 +438,12 @@ export function CreateConnectionModal({ open, onOpenChange, onConnectionCreated 
             {isCreating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Creating & Testing...
+                {isEditMode ? 'Updating & Testing...' : 'Creating & Testing...'}
               </>
             ) : (
               <>
                 <Database className="w-4 h-4" />
-                Create Connection
+                {isEditMode ? 'Update Connection' : 'Create Connection'}
               </>
             )}
           </Button>

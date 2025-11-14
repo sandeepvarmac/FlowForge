@@ -7,6 +7,8 @@ import { Input } from "@/components/ui"
 import { FormField, FormLabel, FormError, Select } from "@/components/ui/form"
 import { Database, CheckCircle2, AlertCircle, Loader2, Table, Eye, RefreshCw } from "lucide-react"
 import { ConnectionConfig, DatabaseSourceConfig as DatabaseConfig } from "@/types/workflow"
+import { SchemaLoadingProgress, type SchemaLoadingStep } from "@/components/shared/schema-loading-progress"
+import { SchemaSuccessCard } from "@/components/shared/schema-success-card"
 
 interface DatabaseSourceConfigProps {
   dbType: 'sql-server' | 'postgresql' | 'mysql' | 'oracle'
@@ -14,7 +16,13 @@ interface DatabaseSourceConfigProps {
   databaseConfig: Partial<DatabaseConfig>
   onConnectionChange: (connection: Partial<ConnectionConfig>) => void
   onDatabaseConfigChange: (config: Partial<DatabaseConfig>) => void
-  onSchemaDetected?: (schema: Array<{ name: string; type: string }>) => void
+  onSchemaDetected?: (
+    schema: Array<{ name: string; type: string }>,
+    tableName: string,
+    metadata?: { temporal_columns?: string[]; pk_candidates?: string[]; preview?: any[]; rowCount?: number }
+  ) => void
+  useSavedConnection?: boolean // When true, hide connection form and only show table selection
+  connectionId?: string // ID of saved connection (for password lookup)
 }
 
 interface ConnectionState {
@@ -23,9 +31,14 @@ interface ConnectionState {
   connectionError: string | null
   availableTables: string[]
   isLoadingTables: boolean
-  tableSchema: Array<{ name: string; type: string }> | null
+  tableSchema: any[] | null
+  fullSchemaData: any[] | null // Full schema with all metadata
   isLoadingSchema: boolean
   schemaError: string | null
+  schemaLoadingStep: SchemaLoadingStep
+  schemaProgressPercent: number
+  rowCount: number | null
+  previewData: any[] | null // Preview data rows
 }
 
 const dbTypeLabels = {
@@ -41,18 +54,40 @@ export function DatabaseSourceConfig({
   databaseConfig,
   onConnectionChange,
   onDatabaseConfigChange,
-  onSchemaDetected
+  onSchemaDetected,
+  useSavedConnection = false,
+  connectionId
 }: DatabaseSourceConfigProps) {
   const [state, setState] = React.useState<ConnectionState>({
     isConnecting: false,
-    isConnected: false,
+    isConnected: useSavedConnection, // If using saved connection, start as connected
     connectionError: null,
     availableTables: [],
     isLoadingTables: false,
     tableSchema: null,
+    fullSchemaData: null,
     isLoadingSchema: false,
-    schemaError: null
+    schemaError: null,
+    schemaLoadingStep: 'connecting',
+    schemaProgressPercent: 0,
+    rowCount: null,
+    previewData: null
   })
+
+  // Auto-load tables when using saved connection
+  React.useEffect(() => {
+    console.log('DatabaseSourceConfig useEffect:', {
+      useSavedConnection,
+      hasDatabase: !!connection.database,
+      isConnected: state.isConnected,
+      database: connection.database
+    })
+
+    if (useSavedConnection && connection.database && state.isConnected) {
+      console.log('Auto-loading tables...')
+      loadTables()
+    }
+  }, [useSavedConnection, connection.database, connection.host, connection.port, state.isConnected])
 
   const [showPassword, setShowPassword] = React.useState(false)
 
@@ -100,29 +135,53 @@ export function DatabaseSourceConfig({
   }
 
   const loadTables = async () => {
-    if (!state.isConnected && !connection.database) return
+    console.log('loadTables called:', {
+      isConnected: state.isConnected,
+      hasDatabase: !!connection.database,
+      dbType,
+      connectionId,
+      useSavedConnection
+    })
 
+    // Skip if not connected OR missing connection details
+    if (!state.isConnected || !connection.database) {
+      console.log('Skipping loadTables - not ready')
+      return
+    }
+
+    console.log('Loading tables from API...')
     setState(prev => ({ ...prev, isLoadingTables: true }))
 
     try {
+      // Build request body - use connectionId for saved connections, full connection for new ones
+      const requestBody: any = { dbType }
+
+      if (useSavedConnection && connectionId) {
+        requestBody.connectionId = connectionId
+        console.log('Using saved connection ID:', connectionId)
+      } else {
+        requestBody.connection = connection
+        console.log('Using direct connection object')
+      }
+
       const response = await fetch('/api/database/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dbType,
-          connection
-        })
+        body: JSON.stringify(requestBody)
       })
 
       const result = await response.json()
+      console.log('Tables API response:', result)
 
       if (result.success) {
+        console.log('Tables loaded successfully:', result.tables)
         setState(prev => ({
           ...prev,
           isLoadingTables: false,
           availableTables: result.tables || []
         }))
       } else {
+        console.error('Tables API returned error:', result.message)
         setState(prev => ({
           ...prev,
           isLoadingTables: false,
@@ -130,6 +189,7 @@ export function DatabaseSourceConfig({
         }))
       }
     } catch (error) {
+      console.error('Error loading tables:', error)
       setState(prev => ({
         ...prev,
         isLoadingTables: false,
@@ -139,44 +199,108 @@ export function DatabaseSourceConfig({
   }
 
   const loadSchema = async (tableName: string) => {
-    setState(prev => ({ ...prev, isLoadingSchema: true, schemaError: null }))
+    // Stage 1: Connecting (0-30%)
+    setState(prev => ({
+      ...prev,
+      isLoadingSchema: true,
+      schemaError: null,
+      schemaLoadingStep: 'connecting',
+      schemaProgressPercent: 0
+    }))
 
     try {
-      const response = await fetch('/api/database/schema', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dbType,
-          connection,
-          tableName
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        const schema = result.schema.map((col: any) => ({
-          name: col.column_name,
-          type: col.data_type
-        }))
-
+      // Simulate progress stages for better UX
+      setTimeout(() => {
         setState(prev => ({
           ...prev,
-          isLoadingSchema: false,
-          tableSchema: schema,
-          schemaError: null
+          schemaLoadingStep: 'analyzing',
+          schemaProgressPercent: 30
+        }))
+      }, 500)
+
+      setTimeout(() => {
+        setState(prev => ({
+          ...prev,
+          schemaLoadingStep: 'detecting',
+          schemaProgressPercent: 60
+        }))
+      }, 1500)
+
+      let result: any
+      if (useSavedConnection && connectionId) {
+        // Use the dedicated schema route for saved connections
+        const resp = await fetch(`/api/database-connections/${connectionId}/tables/${tableName}?action=schema`)
+        result = await resp.json()
+      } else {
+        // Fallback to generic route for ad-hoc connections
+        const requestBody: any = { dbType, tableName, connection }
+        const resp = await fetch('/api/database/schema', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        })
+        result = await resp.json()
+      }
+
+      if (result.success) {
+        // Stage 4: Profiling (90-100%)
+        setState(prev => ({
+          ...prev,
+          schemaLoadingStep: 'profiling',
+          schemaProgressPercent: 90
         }))
 
-        // Notify parent of schema detection
-        if (onSchemaDetected) {
-          onSchemaDetected(schema)
-        }
+        console.log('[DatabaseSourceConfig] Schema API response:', {
+          hasSchema: !!result.schema,
+          schemaLength: result.schema?.length,
+          hasPreview: !!result.preview,
+          previewLength: result.preview?.length,
+          rowCount: result.row_count
+        })
+
+        const schema = (result.schema || []).map((col: any) => ({
+          // Support both normalized (name/type) and raw (column_name/data_type)
+          name: col.name ?? col.column_name,
+          type: col.type ?? col.data_type
+        }))
+
+        // Complete
+        setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            isLoadingSchema: false,
+            tableSchema: schema,
+            fullSchemaData: result.schema,
+            rowCount: result.row_count || null,
+            previewData: result.preview || null,
+            schemaError: null,
+            schemaProgressPercent: 100,
+            schemaLoadingStep: 'complete'
+          }))
+
+          // Notify parent of schema detection with metadata
+          console.log('[DatabaseSourceConfig] Schema loaded, calling onSchemaDetected with', schema.length, 'columns for table:', tableName)
+          console.log('[DatabaseSourceConfig] Metadata:', result.metadata)
+          if (onSchemaDetected) {
+            console.log('[DatabaseSourceConfig] onSchemaDetected callback exists, calling it now with tableName:', tableName)
+            onSchemaDetected(schema, tableName, {
+              temporal_columns: result.metadata?.temporal_columns || [],
+              pk_candidates: result.metadata?.pk_candidates || [],
+              preview: result.preview || [],
+              rowCount: result.row_count
+            })
+          } else {
+            console.log('[DatabaseSourceConfig] WARNING: onSchemaDetected callback is NULL!')
+          }
+        }, 500)
       } else {
         setState(prev => ({
           ...prev,
           isLoadingSchema: false,
           tableSchema: null,
-          schemaError: result.message || 'Failed to load schema'
+          fullSchemaData: null,
+          previewData: null,
+          schemaError: result.message || result.error || 'Failed to load schema'
         }))
       }
     } catch (error) {
@@ -184,6 +308,8 @@ export function DatabaseSourceConfig({
         ...prev,
         isLoadingSchema: false,
         tableSchema: null,
+        fullSchemaData: null,
+        previewData: null,
         schemaError: 'Failed to load table schema'
       }))
     }
@@ -198,115 +324,117 @@ export function DatabaseSourceConfig({
 
   return (
     <div className="space-y-6">
-      {/* Database Type Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg">{dbTypeLabels[dbType]} Connection</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Connection Fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <FormField>
-              <FormLabel required>Host</FormLabel>
-              <Input
-                placeholder="localhost or IP address"
-                value={connection.host || ''}
-                onChange={(e) => onConnectionChange({ ...connection, host: e.target.value })}
-              />
-            </FormField>
-
-            <FormField>
-              <FormLabel required>Port</FormLabel>
-              <Input
-                type="number"
-                placeholder={dbType === 'sql-server' ? '1433' : dbType === 'postgresql' ? '5432' : '3306'}
-                value={connection.port || ''}
-                onChange={(e) => onConnectionChange({ ...connection, port: parseInt(e.target.value) || undefined })}
-              />
-            </FormField>
-
-            <FormField>
-              <FormLabel required>Database Name</FormLabel>
-              <Input
-                placeholder="database_name"
-                value={connection.database || ''}
-                onChange={(e) => onConnectionChange({ ...connection, database: e.target.value })}
-              />
-            </FormField>
-
-            <FormField>
-              <FormLabel required>Username</FormLabel>
-              <Input
-                placeholder="db_user"
-                value={connection.username || ''}
-                onChange={(e) => onConnectionChange({ ...connection, username: e.target.value })}
-              />
-            </FormField>
-
-            <FormField className="col-span-2">
-              <FormLabel required>Password</FormLabel>
-              <div className="relative">
+      {/* Only show connection form if NOT using saved connection */}
+      {!useSavedConnection && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-blue-600" />
+              <CardTitle className="text-lg">{dbTypeLabels[dbType]} Connection</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Connection Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField>
+                <FormLabel required>Host</FormLabel>
                 <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={connection.password || ''}
-                  onChange={(e) => onConnectionChange({ ...connection, password: e.target.value })}
+                  placeholder="localhost or IP address"
+                  value={connection.host || ''}
+                  onChange={(e) => onConnectionChange({ ...connection, host: e.target.value })}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-1/2 -translate-y-1/2"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-              </div>
-            </FormField>
-          </div>
+              </FormField>
 
-          {/* Test Connection Button */}
-          <div className="flex items-center gap-3">
-            <Button
-              type="button"
-              onClick={testConnection}
-              disabled={state.isConnecting || !connection.host || !connection.database || !connection.username || !connection.password}
-              className="flex items-center gap-2"
-            >
-              {state.isConnecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Testing Connection...
-                </>
-              ) : (
-                <>
-                  <Database className="h-4 w-4" />
-                  Test Connection
-                </>
+              <FormField>
+                <FormLabel required>Port</FormLabel>
+                <Input
+                  type="number"
+                  placeholder={dbType === 'sql-server' ? '1433' : dbType === 'postgresql' ? '5432' : '3306'}
+                  value={connection.port || ''}
+                  onChange={(e) => onConnectionChange({ ...connection, port: parseInt(e.target.value) || undefined })}
+                />
+              </FormField>
+
+              <FormField>
+                <FormLabel required>Database Name</FormLabel>
+                <Input
+                  placeholder="database_name"
+                  value={connection.database || ''}
+                  onChange={(e) => onConnectionChange({ ...connection, database: e.target.value })}
+                />
+              </FormField>
+
+              <FormField>
+                <FormLabel required>Username</FormLabel>
+                <Input
+                  placeholder="db_user"
+                  value={connection.username || ''}
+                  onChange={(e) => onConnectionChange({ ...connection, username: e.target.value })}
+                />
+              </FormField>
+
+              <FormField className="col-span-2">
+                <FormLabel required>Password</FormLabel>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={connection.password || ''}
+                    onChange={(e) => onConnectionChange({ ...connection, password: e.target.value })}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              </FormField>
+            </div>
+
+            {/* Test Connection Button */}
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                onClick={testConnection}
+                disabled={state.isConnecting || !connection.host || !connection.database || !connection.username || !connection.password}
+                className="flex items-center gap-2"
+              >
+                {state.isConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Testing Connection...
+                  </>
+                ) : (
+                  <>
+                    <Database className="h-4 w-4" />
+                    Test Connection
+                  </>
+                )}
+              </Button>
+
+              {state.isConnected && (
+                <Badge variant="success" className="flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Connected
+                </Badge>
               )}
-            </Button>
 
-            {state.isConnected && (
-              <Badge variant="success" className="flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                Connected
-              </Badge>
-            )}
+              {state.connectionError && (
+                <Badge variant="destructive" className="flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {state.connectionError}
+                </Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {state.connectionError && (
-              <Badge variant="destructive" className="flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {state.connectionError}
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Table Selection (shown after connection) */}
+      {/* Table Selection (shown after connection OR when using saved connection) */}
       {state.isConnected && (
         <Card>
           <CardHeader>
@@ -345,108 +473,56 @@ export function DatabaseSourceConfig({
                 <p className="text-sm text-muted-foreground mt-2">Loading tables...</p>
               )}
             </FormField>
-
-            {/* Incremental Load Options */}
-            <div className="space-y-3 pt-2 border-t">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isIncremental"
-                  checked={databaseConfig.isIncremental || false}
-                  onChange={(e) => onDatabaseConfigChange({ ...databaseConfig, isIncremental: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                <label htmlFor="isIncremental" className="text-sm font-medium">
-                  Enable Incremental Load
-                </label>
-              </div>
-
-              {databaseConfig.isIncremental && (
-                <div className="ml-6 space-y-3">
-                  <FormField>
-                    <FormLabel required>Delta Column</FormLabel>
-                    <Select
-                      value={databaseConfig.deltaColumn || ''}
-                      onChange={(e) => onDatabaseConfigChange({ ...databaseConfig, deltaColumn: e.target.value })}
-                      disabled={!state.tableSchema}
-                    >
-                      <option value="">Select delta column...</option>
-                      {state.tableSchema?.map((col) => (
-                        <option key={col.name} value={col.name}>
-                          {col.name} ({col.type})
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Column used to track changes (e.g., modified_date, updated_at)
-                    </p>
-                  </FormField>
-
-                  <FormField>
-                    <FormLabel>Last Watermark (Optional)</FormLabel>
-                    <Input
-                      placeholder="2024-01-01 or leave empty for full load"
-                      value={databaseConfig.lastWatermark?.toString() || ''}
-                      onChange={(e) => onDatabaseConfigChange({ ...databaseConfig, lastWatermark: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Leave empty to load all records on first run
-                    </p>
-                  </FormField>
-                </div>
-              )}
-            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Schema Preview */}
-      {state.tableSchema && databaseConfig.tableName && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Eye className="h-5 w-5 text-blue-600" />
-              Schema Preview - {databaseConfig.tableName}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {state.isLoadingSchema ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading schema...
-              </div>
-            ) : state.schemaError ? (
-              <div className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                {state.schemaError}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground mb-3">
-                  Found {state.tableSchema.length} columns
-                </p>
-                <div className="max-h-64 overflow-y-auto border rounded-md">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted sticky top-0">
-                      <tr>
-                        <th className="text-left p-2 font-medium">Column Name</th>
-                        <th className="text-left p-2 font-medium">Data Type</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {state.tableSchema.map((col, idx) => (
-                        <tr key={idx} className="border-t">
-                          <td className="p-2 font-mono text-xs">{col.name}</td>
-                          <td className="p-2 text-muted-foreground">{col.type}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+      {/* AI-Powered Schema Loading & Preview */}
+      {databaseConfig.tableName && (
+        <div className="space-y-6">
+          {state.isLoadingSchema ? (
+            <div className="border-2 border-dashed border-border rounded-lg p-8">
+              <SchemaLoadingProgress
+                step={state.schemaLoadingStep}
+                progressPercent={state.schemaProgressPercent}
+                sourceType="database"
+              />
+            </div>
+          ) : state.schemaError ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  {state.schemaError}
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ) : state.tableSchema ? (
+            <SchemaSuccessCard
+              sourceName={databaseConfig.tableName}
+              sourceType="database"
+              schema={state.fullSchemaData || state.tableSchema}
+              rowCount={state.rowCount || undefined}
+              metadata={{
+                dbType: dbTypeLabels[dbType],
+                connectionName: connection.database
+              }}
+              showAiBadge={true}
+              expandInline={true}
+              previewData={state.previewData || undefined}
+              onClear={() => {
+                onDatabaseConfigChange({ ...databaseConfig, tableName: '' })
+                setState(prev => ({
+                  ...prev,
+                  tableSchema: null,
+                  fullSchemaData: null,
+                  previewData: null,
+                  schemaError: null
+                }))
+              }}
+            />
+          ) : null}
+        </div>
       )}
     </div>
   )

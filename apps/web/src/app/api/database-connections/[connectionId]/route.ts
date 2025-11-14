@@ -51,14 +51,26 @@ export async function PUT(
     const body: UpdateConnectionInput = await request.json()
     const db = getDatabase()
 
-    // Check if connection exists
-    const existing = db.prepare('SELECT id FROM database_connections WHERE id = ?').get(params.connectionId)
+    // Check if connection exists and get current password
+    const existing = db.prepare('SELECT id, password, type, host, port, database, username FROM database_connections WHERE id = ?').get(params.connectionId) as any
     if (!existing) {
       return NextResponse.json(
         { success: false, message: 'Connection not found' },
         { status: 404 }
       )
     }
+
+    // Test connection with updated credentials
+    const testResult = await testConnection(
+      body.type || existing.type,
+      {
+        host: body.host || existing.host,
+        port: body.port || existing.port,
+        database: body.database || existing.database,
+        username: body.username || existing.username,
+        password: body.password || existing.password
+      }
+    )
 
     const now = Date.now()
     const updates: string[] = []
@@ -106,6 +118,14 @@ export async function PUT(
       values.push(body.connectionTimeout)
     }
 
+    // Update test results
+    updates.push('last_tested_at = ?')
+    values.push(now)
+    updates.push('last_test_status = ?')
+    values.push(testResult.success ? 'success' : 'failed')
+    updates.push('last_test_message = ?')
+    values.push(testResult.message)
+
     updates.push('updated_at = ?')
     values.push(now)
 
@@ -135,7 +155,15 @@ export async function PUT(
       WHERE id = ?
     `).get(params.connectionId) as Omit<DatabaseConnection, 'password'>
 
-    return NextResponse.json({ success: true, connection })
+    // Return success based on test result
+    // Note: Connection is ALWAYS saved, but success reflects test status
+    // This allows modal to stay open on failure while preserving changes
+    return NextResponse.json({
+      success: testResult.success,
+      connection,
+      testResult,
+      message: testResult.success ? undefined : testResult.message
+    }, { status: testResult.success ? 200 : 400 })
   } catch (error: any) {
     console.error('Failed to update connection:', error)
 
@@ -151,6 +179,76 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+// Helper function to test database connection
+async function testConnection(dbType: string, connection: any): Promise<{ success: boolean; message: string }> {
+  const { spawn } = require('child_process')
+  const path = require('path')
+
+  const prefectFlowsPath = path.join(process.cwd(), '..', '..', 'prefect-flows')
+  const pythonPath = path.join(prefectFlowsPath, '.venv', 'Scripts', 'python.exe')
+
+  const testScript = `
+import sys
+import json
+sys.path.insert(0, '${prefectFlowsPath.replace(/\\/g, '\\\\')}')
+from tasks.database_bronze import test_database_connection
+
+result = test_database_connection(
+    db_type='${dbType}',
+    connection_config={
+        'host': '${connection.host}',
+        'port': ${connection.port},
+        'database': '${connection.database}',
+        'username': '${connection.username}',
+        'password': '''${connection.password}'''
+    }
+)
+print(json.dumps(result))
+`
+
+  return new Promise((resolve) => {
+    const python = spawn(pythonPath, ['-c', testScript])
+    let output = ''
+    let errorOutput = ''
+
+    python.stdout.on('data', (data: Buffer) => {
+      output += data.toString()
+    })
+
+    python.stderr.on('data', (data: Buffer) => {
+      errorOutput += data.toString()
+    })
+
+    python.on('close', (code: number) => {
+      if (code !== 0) {
+        resolve({
+          success: false,
+          message: errorOutput || 'Connection test failed'
+        })
+        return
+      }
+
+      try {
+        const jsonMatch = output.match(/\{[^{}]*"success"[^}]*\}/g)
+        if (jsonMatch && jsonMatch.length > 0) {
+          const result = JSON.parse(jsonMatch[jsonMatch.length - 1])
+          resolve(result)
+        } else {
+          resolve({
+            success: false,
+            message: 'Invalid response from connection test'
+          })
+        }
+      } catch (error) {
+        resolve({
+          success: false,
+          message: 'Failed to parse connection test response'
+        })
+      }
+    })
+  })
 }
 
 // DELETE /api/database-connections/[connectionId] - Delete connection

@@ -5,12 +5,43 @@ import path from 'path'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { dbType, connection } = body
+    const { dbType, connection, connectionId } = body
 
     // Validate required fields
-    if (!dbType || !connection) {
+    if (!dbType) {
       return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
+        { success: false, message: 'Database type is required' },
+        { status: 400 }
+      )
+    }
+
+    let connectionConfig = connection
+
+    // If connectionId is provided, fetch full connection details (including password)
+    if (connectionId) {
+      const { getDatabase } = require('@/lib/db')
+      const db = getDatabase()
+
+      const savedConnection = db.prepare(`
+        SELECT host, port, database, username, password
+        FROM database_connections
+        WHERE id = ?
+      `).get(connectionId) as any
+
+      if (!savedConnection) {
+        return NextResponse.json(
+          { success: false, message: 'Connection not found' },
+          { status: 404 }
+        )
+      }
+
+      connectionConfig = savedConnection
+    }
+
+    // Validate we have connection details
+    if (!connectionConfig || !connectionConfig.host || !connectionConfig.database) {
+      return NextResponse.json(
+        { success: false, message: 'Missing connection details' },
         { status: 400 }
       )
     }
@@ -28,11 +59,11 @@ from tasks.database_bronze import list_database_tables
 result = list_database_tables(
     db_type='${dbType}',
     connection_config={
-        'host': '${connection.host}',
-        'port': ${connection.port || (dbType === 'sql-server' ? 1433 : dbType === 'postgresql' ? 5432 : 3306)},
-        'database': '${connection.database}',
-        'username': '${connection.username}',
-        'password': '''${connection.password}'''
+        'host': '${connectionConfig.host}',
+        'port': ${connectionConfig.port || (dbType === 'sql-server' ? 1433 : dbType === 'postgresql' ? 5432 : 3306)},
+        'database': '${connectionConfig.database}',
+        'username': '${connectionConfig.username}',
+        'password': '''${connectionConfig.password || ''}'''
     }
 )
 print(json.dumps(result))

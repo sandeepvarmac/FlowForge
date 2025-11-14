@@ -1,0 +1,21 @@
+product_id,product_name,product_category,base_fee,transaction_fee,annual_fee,interest_rate,min_balance,last_updated
+PROD001,Premier Checking Account,Checking,13.66,0.31,0.0,1.47,4415.18,2024-10-01
+PROD002,Business Checking Account,Checking,7.59,1.47,0.0,0.51,6470.93,2024-10-01
+PROD003,Student Checking Account,Checking,5.02,0.28,0.0,4.24,4391.08,2024-10-01
+PROD004,Basic Checking Account,Checking,6.24,1.54,0.0,1.23,8091.45,2024-10-01
+PROD005,Senior Checking Account,Checking,5.12,1.01,0.0,0.44,3724.36,2024-10-01
+PROD006,High Yield Savings Account,Savings,11.32,0.72,0.0,3.33,1516.11,2024-10-01
+PROD007,Business Savings Account,Savings,11.3,0.84,0.0,1.15,8017.69,2024-10-01
+PROD008,Money Market Account,Savings,6.2,0.82,0.0,2.3,8523.9,2024-10-01
+PROD009,Kids Savings Account,Savings,11.92,0.72,0.0,0.16,1455.84,2024-10-01
+PROD010,Emergency Fund Account,Savings,0.15,1.61,0.0,4.72,847.78,2024-10-01
+PROD011,Rewards Card,Credit Card,4.72,1.96,24.65,0.32,0.0,2024-10-01
+PROD012,Cashback Card,Credit Card,11.39,1.32,96.22,4.51,0.0,2024-10-01
+PROD013,Travel Card,Credit Card,0.87,1.26,107.01,3.31,0.0,2024-10-01
+PROD014,Business Card,Credit Card,7.8,0.59,60.3,3.41,0.0,2024-10-01
+PROD015,Secured Card,Credit Card,8.3,0.61,111.4,4.55,0.0,2024-10-01
+PROD016,Personal Loan,Loan,0.12,0.56,0.0,2.64,0.0,2024-10-01
+PROD017,Auto Loan,Loan,13.81,1.4,0.0,2.24,0.0,2024-10-01
+PROD018,Home Equity,Loan,3.08,1.09,0.0,3.94,0.0,2024-10-01
+PROD019,Student Loan,Loan,9.78,1.39,0.0,4.44,0.0,2024-10-01
+PROD020,Business Loan,Loan,11.72,0.81,0.0,0.99,0.0,2024-10-01

@@ -11,7 +11,11 @@ interface CSVFileUploadProps {
     file: File,
     schema: Array<{ name: string; type: string; sample?: string }>,
     preview: any[],
-    columnMappings?: Array<{ sourceColumn: string; targetColumn: string; dataType: string }>
+    columnMappings?: Array<{ sourceColumn: string; targetColumn: string; dataType: string }>,
+    metadata?: {
+      temporal_columns: string[]
+      pk_candidates: string[]
+    }
   ) => void
   expectedColumns?: string[]
   maxSizeInMB?: number
@@ -98,6 +102,11 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
       return trimmed.includes('.') ? 'decimal' : 'integer'
     }
 
+    // Check if it's a datetime (ISO format or common datetime formats)
+    if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}/.test(trimmed) && !isNaN(Date.parse(trimmed))) {
+      return 'timestamp'
+    }
+
     // Check if it's a date (YYYY-MM-DD format)
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !isNaN(Date.parse(trimmed))) {
       return 'date'
@@ -113,7 +122,47 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
       return 'phone'
     }
 
+    // Check if it's a URL
+    if (/^https?:\/\//i.test(trimmed) || /^www\./i.test(trimmed)) {
+      return 'url'
+    }
+
     return 'string'
+  }
+
+  // Helper function to detect temporal columns (for incremental loading)
+  const detectTemporalColumns = (schema: Array<{ name: string; type: string }>): string[] => {
+    const temporalTypes = ['date', 'timestamp', 'datetime']
+    const temporalPatterns = ['created', 'updated', 'modified', 'timestamp', 'date', 'time', '_at', '_on']
+
+    return schema
+      .filter(col => {
+        // Check if column type is temporal
+        if (temporalTypes.includes(col.type)) {
+          return true
+        }
+        // Check if column name contains temporal keywords
+        const lowerName = col.name.toLowerCase()
+        return temporalPatterns.some(pattern => lowerName.includes(pattern))
+      })
+      .map(col => col.name)
+  }
+
+  // Helper function to detect primary key candidates
+  const detectPKCandidates = (schema: Array<{ name: string; type: string }>): string[] => {
+    const pkPatterns = ['id', '_id', 'key', 'pk', 'code', 'uuid', 'guid']
+
+    return schema
+      .filter(col => {
+        const lowerName = col.name.toLowerCase()
+        // Check if column name matches PK patterns
+        return pkPatterns.some(pattern =>
+          lowerName === pattern ||
+          lowerName.endsWith('_' + pattern) ||
+          lowerName.startsWith(pattern + '_')
+        )
+      })
+      .map(col => col.name)
   }
 
   const parseCSV = (text: string, customHeaders?: string[]): { headers: string[]; rows: string[][] } => {
@@ -344,6 +393,15 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
         return obj
       })
 
+      // Detect temporal columns and PK candidates
+      const temporalColumns = detectTemporalColumns(schema)
+      const pkCandidates = detectPKCandidates(schema)
+
+      console.log('CSV Metadata Detection:', {
+        temporal_columns: temporalColumns,
+        pk_candidates: pkCandidates
+      })
+
       setState(prev => ({
         ...prev,
         isProcessing: false,
@@ -355,8 +413,11 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
         aiValidation
       }))
 
-      // Notify parent component
-      onFileUpload(file, schema, preview)
+      // Notify parent component with metadata
+      onFileUpload(file, schema, preview, undefined, {
+        temporal_columns: temporalColumns,
+        pk_candidates: pkCandidates
+      })
 
     } catch (error) {
       setState(prev => ({
@@ -468,6 +529,15 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
 
       console.log('Generated column mappings:', columnMappings)
 
+      // Detect temporal columns and PK candidates
+      const temporalColumns = detectTemporalColumns(schema)
+      const pkCandidates = detectPKCandidates(schema)
+
+      console.log('CSV Metadata Detection (custom headers):', {
+        temporal_columns: temporalColumns,
+        pk_candidates: pkCandidates
+      })
+
       // Update state with final schema and preview
       setState(prev => ({
         ...prev,
@@ -479,8 +549,11 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
         pendingFileData: undefined
       }))
 
-      // Notify parent component with column mappings
-      onFileUpload(state.pendingFileData.file, schema, preview, columnMappings)
+      // Notify parent component with column mappings and metadata
+      onFileUpload(state.pendingFileData.file, schema, preview, columnMappings, {
+        temporal_columns: temporalColumns,
+        pk_candidates: pkCandidates
+      })
 
     } catch (error) {
       console.error('Error processing file with custom headers:', error)

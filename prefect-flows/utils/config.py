@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     environment: str = "local"
     log_level: str = "INFO"
 
+    # AI Configuration (Anthropic)
+    anthropic_api_key: Optional[str] = None
+    anthropic_model: Optional[str] = "claude-sonnet-4-5-20250929"
+
+    # AI Configuration (OpenAI - fallback)
+    openai_api_key: Optional[str] = None
+    openai_model: Optional[str] = "gpt-4o-mini"
+
     @property
     def is_production(self) -> bool:
         """Check if running in production environment."""
