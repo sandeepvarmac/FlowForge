@@ -387,7 +387,9 @@ Based on this data, suggest optimal Bronze layer configuration:
 3. **Incremental Load**: Should incremental loading be enabled? If yes, which column should be used as watermark?
 4. **Partitioning**: Should data be partitioned? If yes, what strategy (DATE, HASH, RANGE) and which column?
 5. **Schema Evolution**: Should schema evolution be enabled to handle new columns?
-6. **Validation Hints**: What data quality validation rules would be beneficial? (e.g., null checks, range checks, uniqueness checks)
+6. **Data Type Conversions**: Analyze column data types - suggest conversions to more appropriate types (e.g., string→date, string→numeric, numeric→category)
+7. **Column Naming**: Suggest standardized column names following snake_case convention (e.g., "First Name" → "first_name")
+8. **Validation Hints**: What data quality validation rules would be beneficial? (e.g., null checks, range checks, uniqueness checks)
 
 For each suggestion, provide:
 - enabled: true/false (where applicable)
@@ -425,6 +427,20 @@ Respond ONLY with valid JSON in this exact format:
     "enabled": true/false,
     "confidence": 0-100,
     "reasoning": "explanation"
+  },
+  "type_conversions": {
+    "suggested_conversions": [
+      {"column": "column_name", "from_type": "current_type", "to_type": "recommended_type", "confidence": 0-100, "reasoning": "explanation"}
+    ],
+    "confidence": 0-100,
+    "reasoning": "overall type conversion strategy"
+  },
+  "column_naming": {
+    "suggested_renames": [
+      {"original": "old_name", "standardized": "new_name", "confidence": 0-100, "reasoning": "explanation"}
+    ],
+    "confidence": 0-100,
+    "reasoning": "overall naming strategy"
   },
   "validation_hints": {
     "suggested_rules": [
@@ -640,6 +656,16 @@ Respond ONLY with valid JSON in this exact format:
                     "enabled": True,
                     "confidence": 50,
                     "reasoning": "Enabled by default for flexibility"
+                },
+                "type_conversions": {
+                    "suggested_conversions": [],
+                    "confidence": 0,
+                    "reasoning": "Failed to analyze data types"
+                },
+                "column_naming": {
+                    "suggested_renames": [],
+                    "confidence": 0,
+                    "reasoning": "Failed to analyze column names"
                 },
                 "validation_hints": {
                     "suggested_rules": [],
