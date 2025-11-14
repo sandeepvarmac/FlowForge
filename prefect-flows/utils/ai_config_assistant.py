@@ -98,14 +98,17 @@ class AIConfigAssistant:
         )
 
         # Call AI API based on provider
-        response_text = self._call_ai_api(prompt)
+        response_text, used_fallback = self._call_ai_api(prompt)
 
         # Parse response
         suggestions = self._parse_bronze_response(response_text)
 
+        # Add fallback indicator
+        suggestions['_using_fallback'] = used_fallback
+
         return suggestions
 
-    def _call_ai_api(self, prompt: str) -> str:
+    def _call_ai_api(self, prompt: str) -> tuple[str, bool]:
         """
         Call the appropriate AI API based on provider
 
@@ -113,20 +116,23 @@ class AIConfigAssistant:
             prompt: The prompt to send to the AI
 
         Returns:
-            The AI's response text
+            Tuple of (response_text, used_fallback)
         """
         if self.provider == "anthropic":
             try:
-                return self._call_anthropic(prompt)
+                response = self._call_anthropic(prompt)
+                return response, False
             except Exception as err:
                 fallback_key = os.getenv("OPENAI_API_KEY")
                 if fallback_key:
                     print("[AIConfigAssistant] Anthropic call failed, falling back to OpenAI:", err)
-                    return self._call_openai(prompt, fallback_key)
+                    response = self._call_openai(prompt, fallback_key)
+                    return response, True
                 raise
 
         elif self.provider == "openai":
-            return self._call_openai(prompt, self.api_key)
+            response = self._call_openai(prompt, self.api_key)
+            return response, False
 
         else:
             raise ValueError(f"Unsupported provider: {self.provider}")
@@ -201,10 +207,13 @@ class AIConfigAssistant:
             duplicate_analysis=duplicate_analysis
         )
 
-        response_text = self._call_ai_api(prompt)
+        response_text, used_fallback = self._call_ai_api(prompt)
 
         # Parse response
         suggestions = self._parse_silver_response(response_text)
+
+        # Add fallback indicator
+        suggestions['_using_fallback'] = used_fallback
 
         return suggestions
 
@@ -240,10 +249,13 @@ class AIConfigAssistant:
             business_context=business_context
         )
 
-        response_text = self._call_ai_api(prompt)
+        response_text, used_fallback = self._call_ai_api(prompt)
 
         # Parse response
         suggestions = self._parse_gold_response(response_text)
+
+        # Add fallback indicator
+        suggestions['_using_fallback'] = used_fallback
 
         return suggestions
 

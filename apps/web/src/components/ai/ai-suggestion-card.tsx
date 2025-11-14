@@ -22,6 +22,7 @@ export interface AISuggestionCardProps {
   onAdjust?: () => void
   isExpanded?: boolean
   onToggleExpand?: () => void
+  usingFallback?: boolean
 }
 
 export function AISuggestionCard({
@@ -33,7 +34,8 @@ export function AISuggestionCard({
   onAccept,
   onAdjust,
   isExpanded = false,
-  onToggleExpand
+  onToggleExpand,
+  usingFallback = false
 }: AISuggestionCardProps) {
   const [localExpanded, setLocalExpanded] = React.useState(isExpanded)
 
@@ -117,6 +119,11 @@ export function AISuggestionCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {usingFallback && (
+              <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-xs border-amber-200">
+                ℹ Using OpenAI Fallback
+              </Badge>
+            )}
             {getConfidenceBadge(overallConfidence)}
             <Button
               variant="ghost"

@@ -15,6 +15,7 @@ import { DatabaseConnection } from '@/types/database-connection'
 import { AISuggestionCard, AISuggestion } from '@/components/ai/ai-suggestion-card'
 import { useToast } from '@/hooks/use-toast'
 import { ToastContainer } from '@/components/ui/toast-container'
+import { trackAISuggestionsFetched, trackAISuggestionsApplied, trackAIError, trackAISuggestionExpanded } from '@/lib/telemetry'
 
 interface CreateJobModalProps {
   open: boolean
@@ -187,12 +188,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [isLoadingAiSuggestions, setIsLoadingAiSuggestions] = React.useState(false)
   const [aiSuggestionsError, setAiSuggestionsError] = React.useState<string | null>(null)
   const [aiSuggestionsExpanded, setAiSuggestionsExpanded] = React.useState(false)
+  const [usingFallbackBronze, setUsingFallbackBronze] = React.useState(false)
 
   // AI Suggestions state - Silver Layer
   const [silverAiSuggestions, setSilverAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
   const [isLoadingSilverAiSuggestions, setIsLoadingSilverAiSuggestions] = React.useState(false)
   const [silverAiSuggestionsError, setSilverAiSuggestionsError] = React.useState<string | null>(null)
   const [silverAiSuggestionsExpanded, setSilverAiSuggestionsExpanded] = React.useState(false)
+  const [usingFallbackSilver, setUsingFallbackSilver] = React.useState(false)
 
   // AI Suggestions state - Gold Layer
   const [goldAiSuggestions, setGoldAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
@@ -200,6 +203,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [goldAiSuggestionsError, setGoldAiSuggestionsError] = React.useState<string | null>(null)
   const [goldAiSuggestionsExpanded, setGoldAiSuggestionsExpanded] = React.useState(false)
   const [businessContext, setBusinessContext] = React.useState<string>('')
+  const [usingFallbackGold, setUsingFallbackGold] = React.useState(false)
 
   const resetForm = React.useCallback(() => {
     setFormData(initialFormData)
@@ -348,8 +352,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (result.success && result.suggestions) {
         console.log('[AI] Suggestions received:', Object.keys(result.suggestions))
+        // Extract fallback indicator before setting suggestions
+        const usingFallback = result.suggestions._using_fallback || false
+        setUsingFallbackBronze(usingFallback)
         setAiSuggestions(result.suggestions)
         setAiSuggestionsError(null)
+
+        // Track telemetry
+        const suggestionsCount = Object.keys(result.suggestions).filter(k => !k.startsWith('_')).length
+        const confidenceScores = Object.values(result.suggestions)
+          .filter((s: any) => s?.confidence)
+          .map((s: any) => s.confidence)
+        const overallConfidence = confidenceScores.length > 0
+          ? Math.round(confidenceScores.reduce((a: number, b: number) => a + b, 0) / confidenceScores.length)
+          : 0
+
+        trackAISuggestionsFetched({
+          layer: 'bronze',
+          tableName: useTableName || '',
+          suggestionsCount,
+          overallConfidence,
+          usingFallback
+        })
       } else {
         console.error('[AI] Failed to get suggestions:', result.message)
 
@@ -364,10 +388,25 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         }
 
         setAiSuggestionsError(errorMessage)
+
+        // Track error telemetry
+        trackAIError({
+          layer: 'bronze',
+          errorMessage,
+          fallbackUsed: false
+        })
       }
     } catch (error) {
       console.error('[AI] Error fetching AI suggestions:', error)
-      setAiSuggestionsError('Failed to generate AI suggestions. Please try again.')
+      const errorMsg = 'Failed to generate AI suggestions. Please try again.'
+      setAiSuggestionsError(errorMsg)
+
+      // Track error telemetry
+      trackAIError({
+        layer: 'bronze',
+        errorMessage: errorMsg,
+        fallbackUsed: false
+      })
     } finally {
       setIsLoadingAiSuggestions(false)
     }
@@ -408,6 +447,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (result.success && result.suggestions) {
         console.log('[Silver AI] Setting suggestions:', result.suggestions)
+        // Extract fallback indicator before setting suggestions
+        const usingFallback = result.suggestions._using_fallback || false
+        setUsingFallbackSilver(usingFallback)
         setSilverAiSuggestions(result.suggestions)
         setSilverAiSuggestionsError(null)
       } else {
@@ -468,6 +510,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (result.success && result.suggestions) {
         console.log('[Gold AI] Setting suggestions:', result.suggestions)
+        // Extract fallback indicator before setting suggestions
+        const usingFallback = result.suggestions._using_fallback || false
+        setUsingFallbackGold(usingFallback)
         setGoldAiSuggestions(result.suggestions)
         setGoldAiSuggestionsError(null)
       } else {
@@ -561,6 +606,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     // Show success toast notification
     toast.success(`Applied ${appliedCount} AI suggestions to Bronze layer configuration`, 4000)
     console.log('[AI] Applied', appliedCount, 'AI suggestions to Bronze layer:', bronzeUpdates)
+
+    // Track telemetry
+    const suggestionsTotal = Object.keys(aiSuggestions).filter(k => !k.startsWith('_')).length
+    trackAISuggestionsApplied({
+      layer: 'bronze',
+      suggestionsAccepted: appliedCount,
+      suggestionsTotal
+    })
 
     // Collapse the AI suggestions card after applying
     setAiSuggestionsExpanded(false)
@@ -1593,6 +1646,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     console.log('[AI] onToggleExpand from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
                     setAiSuggestionsExpanded(!aiSuggestionsExpanded)
                   } : undefined}
+                  usingFallback={usingFallbackBronze}
                 />
               )
             })()}
@@ -1918,6 +1972,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     console.log('[Silver AI] onToggleExpand from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
                     setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
                   } : undefined}
+                  usingFallback={usingFallbackSilver}
                 />
               )
             })()}
@@ -2469,6 +2524,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       console.log('[Gold AI] onToggleExpand from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
                       setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
                     } : undefined}
+                    usingFallback={usingFallbackGold}
                   />
                 </div>
               )
