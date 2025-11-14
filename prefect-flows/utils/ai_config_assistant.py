@@ -492,7 +492,8 @@ Based on this data, suggest optimal Silver layer configuration:
 2. **Deduplication Strategy**: If duplicates exist, should we keep first, last, or all records?
 3. **Sort Column**: If keeping latest, which column should be used for sorting (usually timestamp)?
 4. **Merge Strategy**: Should updates use merge (upsert), full_refresh, append, or SCD Type 2?
-5. **Quality Rules**: What data quality validation rules would ensure clean data? (not null, unique, range, pattern, enum checks)
+5. **Relationships**: Detect potential foreign key relationships (columns ending in _id, _key, or matching other table patterns)
+6. **Quality Rules**: What data quality validation rules would ensure clean data? (not null, unique, range, pattern, enum checks)
 
 For each suggestion, provide:
 - relevant parameters
@@ -521,6 +522,13 @@ Respond ONLY with valid JSON in this exact format:
     "conflict_resolution": "source_wins/target_wins/most_recent",
     "confidence": 0-100,
     "reasoning": "explanation"
+  },
+  "relationships": {
+    "detected_foreign_keys": [
+      {"column": "column_name", "references_table": "estimated_table_name", "confidence": 0-100, "reasoning": "explanation"}
+    ],
+    "confidence": 0-100,
+    "reasoning": "overall relationship detection strategy"
   },
   "quality_rules": {
     "suggested_rules": [
@@ -574,6 +582,8 @@ Based on this data, suggest optimal Gold layer configuration:
 2. **Metrics**: What metrics should be calculated (COUNT, SUM, AVG, etc.)?
 3. **Indexing**: Which columns should be indexed for query performance?
 4. **Materialization**: Should this be materialized? What refresh strategy?
+5. **Schedule Recommendation**: Based on data patterns, suggest optimal execution schedule (hourly/daily/weekly/monthly) with cron expression
+6. **Sampling Strategy**: Recommend optimal sample size for data preview based on table size and complexity
 
 For each suggestion, provide:
 - relevant parameters
@@ -603,6 +613,20 @@ Respond ONLY with valid JSON in this exact format:
     "refresh_strategy": "INCREMENTAL/FULL",
     "confidence": 0-100,
     "reasoning": "explanation"
+  },
+  "schedule": {
+    "frequency": "hourly/daily/weekly/monthly",
+    "cron_expression": "0 0 * * *",
+    "recommended_time": "description of optimal execution time",
+    "confidence": 0-100,
+    "reasoning": "explanation"
+  },
+  "sampling": {
+    "recommended_sample_size": 1000,
+    "min_sample_size": 100,
+    "max_sample_size": 10000,
+    "confidence": 0-100,
+    "reasoning": "explanation based on table size and complexity"
   }
 }
 """
@@ -711,6 +735,11 @@ Respond ONLY with valid JSON in this exact format:
                     "confidence": 50,
                     "reasoning": "Default merge strategy recommended"
                 },
+                "relationships": {
+                    "detected_foreign_keys": [],
+                    "confidence": 0,
+                    "reasoning": "Failed to detect relationships"
+                },
                 "quality_rules": {
                     "suggested_rules": [],
                     "confidence": 0,
@@ -753,6 +782,20 @@ Respond ONLY with valid JSON in this exact format:
                     "refresh_strategy": None,
                     "confidence": 0,
                     "reasoning": "Failed to analyze data"
+                },
+                "schedule": {
+                    "frequency": "daily",
+                    "cron_expression": "0 0 * * *",
+                    "recommended_time": "Default daily execution at midnight",
+                    "confidence": 0,
+                    "reasoning": "Failed to analyze data patterns"
+                },
+                "sampling": {
+                    "recommended_sample_size": 1000,
+                    "min_sample_size": 100,
+                    "max_sample_size": 10000,
+                    "confidence": 50,
+                    "reasoning": "Default sampling strategy"
                 }
             }
 
