@@ -55,6 +55,27 @@ interface JobFormData {
     strategy: string
     columns: string[]
   }
+  // AI usage tracking for Review Step
+  _aiUsageMetadata?: {
+    bronze?: {
+      applied: boolean
+      suggestionsCount: number
+      appliedCount: number
+      confidence: number
+    }
+    silver?: {
+      applied: boolean
+      suggestionsCount: number
+      appliedCount: number
+      confidence: number
+    }
+    gold?: {
+      applied: boolean
+      suggestionsCount: number
+      appliedCount: number
+      confidence: number
+    }
+  }
 }
 
 const initialFormData: JobFormData = {
@@ -614,6 +635,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       suggestionsAccepted: appliedCount,
       suggestionsTotal
     })
+
+    // Calculate overall confidence for metadata
+    const confidenceScores = Object.values(aiSuggestions)
+      .filter((s: any) => s?.confidence)
+      .map((s: any) => s.confidence)
+    const overallConfidence = confidenceScores.length > 0
+      ? Math.round(confidenceScores.reduce((a: number, b: number) => a + b, 0) / confidenceScores.length)
+      : 0
+
+    // Store AI usage metadata for Review Step
+    setFormData(prev => ({
+      ...prev,
+      _aiUsageMetadata: {
+        ...prev._aiUsageMetadata,
+        bronze: {
+          applied: true,
+          suggestionsCount: suggestionsTotal,
+          appliedCount,
+          confidence: overallConfidence
+        }
+      }
+    }))
 
     // Collapse the AI suggestions card after applying
     setAiSuggestionsExpanded(false)
@@ -2871,6 +2914,211 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </Card>
               )}
             </div>
+          </div>
+        )
+
+      case 5:
+        return (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-6 h-6 text-purple-600" />
+                <div>
+                  <h4 className="text-lg font-semibold text-purple-900 mb-1">Review & Submit</h4>
+                  <p className="text-sm text-purple-800">
+                    Review your configuration and AI assistance levels before creating the job
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Source Configuration Summary */}
+            <Card className="border-blue-200 bg-blue-50/30">
+              <CardHeader className="pb-3 bg-blue-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Database className="w-4 h-4 text-blue-600" />
+                    Source Configuration
+                  </CardTitle>
+                  <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
+                    Manual ⚙
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span className="font-medium">{formData.type === 'database' ? 'Database' : 'File-based'}</span>
+                </div>
+                {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Database Type:</span>
+                      <span className="font-medium">{formData.sourceConfig.type}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Table:</span>
+                      <span className="font-medium">{formData.sourceConfig.databaseConfig.tableName}</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Bronze Layer Summary */}
+            <Card className="border-amber-200 bg-amber-50/30">
+              <CardHeader className="pb-3 bg-amber-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                    Bronze Layer (Raw)
+                  </CardTitle>
+                  {formData._aiUsageMetadata?.bronze?.applied ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200">
+                      ✓ AI Applied
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
+                      Manual ⚙
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Storage Format:</span>
+                  <span className="font-medium">{formData.destinationConfig.bronzeConfig?.storageFormat || 'parquet'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Load Strategy:</span>
+                  <span className="font-medium">{formData.destinationConfig.bronzeConfig?.loadStrategy || 'append'}</span>
+                </div>
+                {formData._aiUsageMetadata?.bronze?.applied && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.bronze.appliedCount} of {formData._aiUsageMetadata.bronze.suggestionsCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Confidence:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.bronze.confidence}%</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Silver Layer Summary */}
+            <Card className="border-gray-300 bg-gray-50/30">
+              <CardHeader className="pb-3 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
+                    Silver Layer (Validated)
+                  </CardTitle>
+                  {formData._aiUsageMetadata?.silver?.applied ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200">
+                      ✓ AI Applied
+                    </Badge>
+                  ) : silverAiSuggestions && Object.keys(silverAiSuggestions).length > 0 ? (
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                      ℹ AI Suggested
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
+                      Manual ⚙
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Primary Key:</span>
+                  <span className="font-medium">{formData.destinationConfig.silverConfig?.primaryKey || 'Not configured'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Merge Strategy:</span>
+                  <span className="font-medium">{formData.destinationConfig.silverConfig?.mergeStrategy || 'merge'}</span>
+                </div>
+                {formData._aiUsageMetadata?.silver?.applied && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.silver.appliedCount} of {formData._aiUsageMetadata.silver.suggestionsCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Confidence:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.silver.confidence}%</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Gold Layer Summary */}
+            <Card className="border-yellow-300 bg-yellow-50/30">
+              <CardHeader className="pb-3 bg-yellow-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                    Gold Layer (Business-Ready)
+                  </CardTitle>
+                  {formData._aiUsageMetadata?.gold?.applied ? (
+                    <Badge className="bg-green-100 text-green-700 border-green-200">
+                      ✓ AI Applied
+                    </Badge>
+                  ) : goldAiSuggestions && Object.keys(goldAiSuggestions).length > 0 ? (
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
+                      ℹ AI Suggested
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
+                      Manual ⚙
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Aggregation:</span>
+                  <span className="font-medium">{formData.destinationConfig.goldConfig?.aggregationEnabled ? 'Enabled' : 'Disabled'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Materialization:</span>
+                  <span className="font-medium">{formData.destinationConfig.goldConfig?.materializationType || 'view'}</span>
+                </div>
+                {formData._aiUsageMetadata?.gold?.applied && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.gold.appliedCount} of {formData._aiUsageMetadata.gold.suggestionsCount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">AI Confidence:</span>
+                      <span className="font-medium">{formData._aiUsageMetadata.gold.confidence}%</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Overall Summary */}
+            {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+              <Card className="border-green-200 bg-green-50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600" />
+                    Configuration Complete
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Your job is configured and ready to process <strong>{formData._detectedSchema.length} columns</strong> through the medallion architecture.
+                    {mode === 'edit' ? ' Click "Save Changes" to update this job.' : ' Click "Create Job" to add this job to your workflow.'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )
 
