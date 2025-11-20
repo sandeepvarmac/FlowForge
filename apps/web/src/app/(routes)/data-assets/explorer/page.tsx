@@ -43,7 +43,7 @@ export default function DataAssetsExplorerPage() {
         params.set('layers', selectedLayer);
       }
 
-      const response = await fetch(`/api/data-assets?${params}`);
+      const response = await fetch(`/api/data-assets/list?${params}`);
       const data = await response.json();
 
       setAssets(data.assets || []);
@@ -69,7 +69,7 @@ export default function DataAssetsExplorerPage() {
 
     const loadDetails = async () => {
       try {
-        const response = await fetch(`/api/data-assets/${selectedAsset.id}/details`);
+        const response = await fetch(`/api/data-assets/${selectedAsset.id}`);
         const data = await response.json();
         setAssetDetails(data);
       } catch (error) {
