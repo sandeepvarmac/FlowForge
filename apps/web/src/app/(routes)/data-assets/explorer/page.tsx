@@ -21,7 +21,7 @@ export default function DataAssetsExplorerPage() {
   const router = useRouter();
 
   // State
-  const [selectedEnvironment, setSelectedEnvironment] = React.useState<Environment>('prod');
+  const [selectedEnvironment, setSelectedEnvironment] = React.useState<Environment>('dev');
   const [selectedLayer, setSelectedLayer] = React.useState<Layer | 'all'>('all');
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedAsset, setSelectedAsset] = React.useState<any>(null);
