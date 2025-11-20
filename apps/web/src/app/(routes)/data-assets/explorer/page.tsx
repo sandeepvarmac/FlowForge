@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation';
 type Layer = 'bronze' | 'silver' | 'gold';
 type Environment = 'dev' | 'qa' | 'uat' | 'prod';
 type QualityStatus = 'healthy' | 'issues' | 'no-rules';
-type DetailTab = 'overview' | 'schema' | 'sample' | 'quality' | 'lineage' | 'jobs';
+type DetailTab = 'overview' | 'schema' | 'preview' | 'quality' | 'lineage' | 'jobs';
 type ViewMode = 'processed' | 'sources';
 type ViewDensity = 'comfortable' | 'compact';
 type ListViewType = 'workflow' | 'list';
@@ -744,7 +744,7 @@ export default function DataAssetsExplorerPage() {
                   {[
                     { id: 'overview', label: 'Overview', icon: Database },
                     { id: 'schema', label: 'Schema', icon: Table },
-                    { id: 'sample', label: 'Sample', icon: FileText },
+                    { id: 'preview', label: 'Preview', icon: FileText },
                     { id: 'quality', label: 'Quality', icon: null },
                     { id: 'lineage', label: 'Lineage', icon: null },
                     { id: 'jobs', label: 'Jobs', icon: null },
@@ -778,7 +778,7 @@ export default function DataAssetsExplorerPage() {
                 {activeTab === 'schema' && (
                   <SchemaTab asset={selectedAsset} />
                 )}
-                {activeTab === 'sample' && (
+                {activeTab === 'preview' && (
                   <SampleTab asset={selectedAsset} />
                 )}
                 {activeTab === 'quality' && (
