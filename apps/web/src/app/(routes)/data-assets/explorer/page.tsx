@@ -4,6 +4,7 @@
  * Data Assets Explorer - Microsoft Purview-Inspired Design with Hierarchical Navigation
  * Left Sidebar: Workflow tree navigation (collapsible)
  * Main Panel: Asset cards with pagination
+ * Header: Consistent across browse and detail views
  */
 
 import React from 'react';
@@ -220,114 +221,139 @@ export default function DataAssetsExplorerPage() {
     </div>
   );
 
-  // If asset is selected, show detail view WITH sidebar
+  // Main layout structure (same for both browse and detail views)
+  const renderMainHeader = () => (
+    <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold text-gray-900">Data Assets Explorer</h1>
+
+        {/* Environment & Layer Filters */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Environment:</label>
+            <select
+              value={selectedEnvironment}
+              onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="prod">Production</option>
+              <option value="uat">UAT</option>
+              <option value="qa">QA</option>
+              <option value="dev">Development</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Layer:</label>
+            <select
+              value={selectedLayer}
+              onChange={(e) => setSelectedLayer(e.target.value as Layer | 'all')}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="all">All Layers</option>
+              <option value="bronze">Bronze</option>
+              <option value="silver">Silver</option>
+              <option value="gold">Gold</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Global Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search workflows, jobs, or data assets..."
+          className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        />
+      </div>
+    </div>
+  );
+
+  // If asset is selected, show detail view
   if (selectedAsset) {
     return (
       <div className="h-screen flex flex-col bg-gray-50">
-        {/* Top Header with Search & Filters */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSelectedAsset(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Back to asset list"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h1>
-                  <LayerBadge layer={selectedAsset.layer} />
-                </div>
-                <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                  <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
-                  <span>•</span>
-                  <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
-                  {selectedAsset.file_size && (
-                    <>
-                      <span>•</span>
-                      <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Keep filters visible in detail view */}
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Environment:</label>
-                <select
-                  value={selectedEnvironment}
-                  onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  <option value="prod">Production</option>
-                  <option value="uat">UAT</option>
-                  <option value="qa">QA</option>
-                  <option value="dev">Development</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700">Layer:</label>
-                <select
-                  value={selectedLayer}
-                  onChange={(e) => setSelectedLayer(e.target.value as Layer | 'all')}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  <option value="all">All Layers</option>
-                  <option value="bronze">Bronze</option>
-                  <option value="silver">Silver</option>
-                  <option value="gold">Gold</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex items-center gap-1">
-            {[
-              { id: 'overview', label: 'Overview', icon: Database },
-              { id: 'schema', label: 'Schema', icon: Table },
-              { id: 'preview', label: 'Preview', icon: FileText },
-              { id: 'quality', label: 'Quality', icon: CheckCircle2 },
-              { id: 'lineage', label: 'Lineage', icon: GitBranch },
-              { id: 'jobs', label: 'Jobs', icon: Briefcase },
-            ].map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as DetailTab)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? 'border-primary-600 text-primary-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Top Header - Same as browse view */}
+        {renderMainHeader()}
 
         {/* Main Content: Sidebar + Detail Panel */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar - Same as browse view */}
+          {/* Left Sidebar */}
           {renderSidebar()}
 
-          {/* Detail Panel */}
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-            {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
-            {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
-            {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
-            {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
-            {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
-            {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+          {/* Detail Panel with its own header and tabs */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Detail Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center gap-4 mb-4">
+                <button
+                  onClick={() => setSelectedAsset(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Back to asset list"
+                >
+                  <ArrowLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h2>
+                    <LayerBadge layer={selectedAsset.layer} />
+                  </div>
+                  <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                    <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
+                    <span>•</span>
+                    <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
+                    {selectedAsset.file_size && (
+                      <>
+                        <span>•</span>
+                        <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Detail Tabs */}
+              <div className="flex items-center gap-1">
+                {[
+                  { id: 'overview', label: 'Overview', icon: Database },
+                  { id: 'schema', label: 'Schema', icon: Table },
+                  { id: 'preview', label: 'Preview', icon: FileText },
+                  { id: 'quality', label: 'Quality', icon: CheckCircle2 },
+                  { id: 'lineage', label: 'Lineage', icon: GitBranch },
+                  { id: 'jobs', label: 'Jobs', icon: Briefcase },
+                ].map(tab => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as DetailTab)}
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === tab.id
+                          ? 'border-primary-600 text-primary-600'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Detail Content */}
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+              {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
+              {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
+              {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
+              {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
+              {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
+              {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+            </div>
           </div>
         </div>
       </div>
@@ -337,55 +363,8 @@ export default function DataAssetsExplorerPage() {
   // Browse view with Sidebar + Main Panel
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Top Header with Search & Filters */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-semibold text-gray-900">Data Assets Explorer</h1>
-
-          {/* Environment & Layer Filters */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Environment:</label>
-              <select
-                value={selectedEnvironment}
-                onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="prod">Production</option>
-                <option value="uat">UAT</option>
-                <option value="qa">QA</option>
-                <option value="dev">Development</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Layer:</label>
-              <select
-                value={selectedLayer}
-                onChange={(e) => setSelectedLayer(e.target.value as Layer | 'all')}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              >
-                <option value="all">All Layers</option>
-                <option value="bronze">Bronze</option>
-                <option value="silver">Silver</option>
-                <option value="gold">Gold</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Global Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search workflows, jobs, or data assets..."
-            className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          />
-        </div>
-      </div>
+      {/* Top Header - Same as detail view */}
+      {renderMainHeader()}
 
       {/* Main Content Area: Sidebar + Assets Panel */}
       <div className="flex-1 flex overflow-hidden">
