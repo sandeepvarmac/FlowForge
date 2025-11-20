@@ -12,6 +12,7 @@ import { EnvironmentBadge } from '@/components/data-assets/EnvironmentBadge';
 import { QualityIndicator } from '@/components/data-assets/QualityIndicator';
 import { AssetCard } from '@/components/data-assets/AssetCard';
 import { SourceDatabasesView } from '@/components/data-assets/SourceDatabasesView';
+import { GlobalSearchBar } from '@/components/data-assets/global-search-bar';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
 
@@ -222,23 +223,12 @@ export default function DataAssetsExplorerPage() {
 
         {/* Search Bar (only for processed view) */}
         {viewMode === 'processed' && (
-          <div className="mt-4 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search assets by name or description..."
+          <div className="mt-4">
+            <GlobalSearchBar
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Search tables, workflows, descriptions…"
+              onChange={setSearchQuery}
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
           </div>
         )}
       </div>
