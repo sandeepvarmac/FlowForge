@@ -41,11 +41,22 @@ export async function GET(request: NextRequest) {
     // Get stats for current environment
     const stats = service.getAssetStats(environments[0] || 'prod');
 
+    // Workflow-centric groups for explorer view
+    const workflowGroups = service.getWorkflowAssetGroups({
+      layers,
+      environments,
+      workflowIds,
+      qualityStatus,
+      tags,
+      search,
+    });
+
     return NextResponse.json({
       assets: result.assets,
       workflows,
       stats,
       pagination: result.pagination,
+      workflowGroups,
     });
   } catch (error: any) {
     console.error('Error fetching data assets:', error);

@@ -6,12 +6,20 @@ import path from 'path'
  * POST /api/ai/config/bronze
  * Get AI-powered configuration suggestions for Bronze layer
  *
- * Request body:
+ * Request body (Option 1 - Database Source):
  * {
  *   "dbType": "postgresql" | "sql-server" | "mysql",
  *   "connection": { host, port, database, username, password },
  *   "tableName": "table_name",
  *   "connectionId": "optional_saved_connection_id"
+ * }
+ *
+ * Request body (Option 2 - File/Other Sources):
+ * {
+ *   "sourceType": "file" | "api" | "nosql" | "streaming",
+ *   "tableName": "source_name",
+ *   "schema": [{ name: "col1", type: "string" }, ...],
+ *   "sampleData": [[val1, val2, ...], [val1, val2, ...], ...]
  * }
  *
  * Response:
@@ -27,52 +35,83 @@ import path from 'path'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { dbType, connection, tableName, connectionId } = body
+    const { dbType, connection, tableName, connectionId, sourceType, schema, sampleData } = body
 
-    console.log('[AI API] Request received:', { dbType, tableName, connectionId: connectionId ? 'provided' : 'missing' })
+    // Determine if this is a database source or file/other source
+    const isDatabaseSource = !!dbType
+    const isFileOrOtherSource = !!sourceType
 
-    // Validate required fields
-    if (!dbType || !tableName) {
-      console.error('[AI API] Validation failed - missing required fields')
+    console.log('[AI API] Request received:', {
+      isDatabaseSource,
+      isFileOrOtherSource,
+      tableName,
+      sourceType,
+      connectionId: connectionId ? 'provided' : 'missing',
+      schemaProvided: !!schema,
+      sampleDataProvided: !!sampleData
+    })
+
+    // Validate required fields based on source type
+    if (isDatabaseSource) {
+      if (!dbType || !tableName) {
+        console.error('[AI API] Validation failed - database source missing required fields')
+        return NextResponse.json(
+          { success: false, message: 'Database type and table name are required' },
+          { status: 400 }
+        )
+      }
+    } else if (isFileOrOtherSource) {
+      if (!sourceType || !tableName || !schema || !sampleData) {
+        console.error('[AI API] Validation failed - file source missing required fields')
+        return NextResponse.json(
+          { success: false, message: 'Source type, table name, schema, and sample data are required' },
+          { status: 400 }
+        )
+      }
+    } else {
+      console.error('[AI API] Validation failed - no source type specified')
       return NextResponse.json(
-        { success: false, message: 'Database type and table name are required' },
+        { success: false, message: 'Either database or file source information must be provided' },
         { status: 400 }
       )
     }
 
     let connectionConfig = connection
 
-    // If connectionId provided, fetch connection details from database
-    if (connectionId) {
-      console.log('[AI API] Fetching connection details for ID:', connectionId)
-      const { getDatabase } = require('@/lib/db')
-      const db = getDatabase()
+    // Only handle database connection logic if this is a database source
+    if (isDatabaseSource) {
+      // If connectionId provided, fetch connection details from database
+      if (connectionId) {
+        console.log('[AI API] Fetching connection details for ID:', connectionId)
+        const { getDatabase } = require('@/lib/db')
+        const db = getDatabase()
 
-      const savedConnection = db.prepare(`
-        SELECT host, port, database, username, password
-        FROM database_connections
-        WHERE id = ?
-      `).get(connectionId) as any
+        const savedConnection = db.prepare(`
+          SELECT host, port, database, username, password
+          FROM database_connections
+          WHERE id = ?
+        `).get(connectionId) as any
 
-      if (!savedConnection) {
-        console.error('[AI API] Connection not found:', connectionId)
-        return NextResponse.json(
-          { success: false, message: 'Connection not found' },
-          { status: 404 }
-        )
+        if (!savedConnection) {
+          console.error('[AI API] Connection not found:', connectionId)
+          return NextResponse.json(
+            { success: false, message: 'Connection not found' },
+            { status: 404 }
+          )
+        }
+
+        console.log('[AI API] Connection loaded:', { host: savedConnection.host, database: savedConnection.database })
+        connectionConfig = savedConnection
       }
 
-      console.log('[AI API] Connection loaded:', { host: savedConnection.host, database: savedConnection.database })
-      connectionConfig = savedConnection
-    }
-
-    // Validate connection details
-    if (!connectionConfig || !connectionConfig.host || !connectionConfig.database) {
-      console.error('[AI API] Invalid connection config:', connectionConfig ? 'incomplete' : 'missing')
-      return NextResponse.json(
-        { success: false, message: 'Missing connection details' },
-        { status: 400 }
-      )
+      // Validate connection details
+      if (!connectionConfig || !connectionConfig.host || !connectionConfig.database) {
+        console.error('[AI API] Invalid connection config:', connectionConfig ? 'incomplete' : 'missing')
+        return NextResponse.json(
+          { success: false, message: 'Missing connection details' },
+          { status: 400 }
+        )
+      }
     }
 
     // Call Python AI Config Assistant
@@ -82,7 +121,11 @@ export async function POST(request: NextRequest) {
     console.log('[AI API] Python path:', pythonPath)
     console.log('[AI API] Prefect flows path:', prefectFlowsPath)
 
-    const pythonScript = `
+    let pythonScript = ''
+
+    if (isDatabaseSource) {
+      // Generate script for database source
+      pythonScript = `
 import sys
 import json
 import os
@@ -136,6 +179,57 @@ print(json.dumps({
     'suggestions': suggestions
 }))
 `
+    } else {
+      // Generate script for file/other source
+      const schemaJson = JSON.stringify(schema)
+      const sampleDataJson = JSON.stringify(sampleData)
+
+      pythonScript = `
+import sys
+import json
+import os
+import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Debug: Print which AI provider will be used
+anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+openai_key = os.getenv("OPENAI_API_KEY")
+print(f"[DEBUG] ANTHROPIC_API_KEY: {'SET' if anthropic_key else 'NOT SET'}", file=sys.stderr)
+print(f"[DEBUG] OPENAI_API_KEY: {'SET' if openai_key else 'NOT SET'}", file=sys.stderr)
+
+sys.path.insert(0, '${prefectFlowsPath.replace(/\\/g, '\\\\')}')
+
+from utils.ai_config_assistant import get_bronze_suggestions
+
+# Create DataFrame from provided schema and sample data
+schema = ${schemaJson}
+sample_data = ${sampleDataJson}
+
+# Build column mapping from schema
+columns = [col['name'] for col in schema]
+
+# Create DataFrame
+df = pd.DataFrame(sample_data, columns=columns)
+
+print(f"[DEBUG] Created DataFrame with {len(df)} rows and {len(df.columns)} columns", file=sys.stderr)
+print(f"[DEBUG] Columns: {list(df.columns)}", file=sys.stderr)
+
+# Get AI suggestions
+suggestions = get_bronze_suggestions(
+    df=df,
+    table_name='${tableName}',
+    source_type='${sourceType}'
+)
+
+print(json.dumps({
+    'success': True,
+    'suggestions': suggestions
+}))
+`
+    }
 
     return new Promise<NextResponse>((resolve) => {
       const python = spawn(pythonPath, ['-c', pythonScript])

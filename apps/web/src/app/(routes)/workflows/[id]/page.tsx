@@ -12,7 +12,7 @@ import { MetadataCatalog } from '@/components/metadata'
 import { WorkflowTriggersSection } from '@/components/workflows/workflow-triggers-section'
 import { AddTriggerModal } from '@/components/workflows/add-trigger-modal'
 import { CreateWorkflowModal } from '@/components/workflows/create-workflow-modal'
-import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil } from 'lucide-react'
+import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil, ChevronDown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const getStatusVariant = (status: string) => {
@@ -85,6 +85,210 @@ const formatRows = (value?: number) => {
     notation: 'compact',
     maximumFractionDigits: 1
   }).format(value)
+}
+
+type TimelineEventSeverity = 'info' | 'warning' | 'error'
+
+interface TimelineEvent {
+  label: string
+  description: string
+  severity: TimelineEventSeverity
+}
+
+const formatTimeOnly = (value?: Date) => {
+  if (!value) return 'unknown time'
+  return new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(value)
+}
+
+const buildExecutionTimeline = (
+  logs: string[] = [],
+  context: { startTime?: Date; endTime?: Date; durationMs?: number } = {}
+): TimelineEvent[] => {
+  const events: TimelineEvent[] = []
+  if (!logs.length) {
+    if (context.startTime) {
+      events.push({
+        label: 'Run started',
+        description: `Job started at ${formatTimeOnly(context.startTime)}`,
+        severity: 'info'
+      })
+    }
+
+    if (context.endTime || context.durationMs) {
+      const pieces: string[] = []
+      if (context.endTime) pieces.push(`Finished at ${formatTimeOnly(context.endTime)}`)
+      if (context.durationMs) pieces.push(`Duration ${formatDuration(context.durationMs)}`)
+      events.push({
+        label: 'Run finished',
+        description: pieces.length ? pieces.join(' · ') : 'Completed',
+        severity: 'info'
+      })
+    }
+
+    return events
+  }
+
+  let dataIntake: string | null = null
+  let bronzeDataset: string | null = null
+  let bronzeRows: number | undefined
+  let silverDataset: string | null = null
+  let qualitySummary: string | null = null
+  let goldDataset: string | null = null
+  let goldRows: number | undefined
+  let finishNote: string | null = null
+  const warningMessages: string[] = []
+  const errorMessages: string[] = []
+
+  logs.forEach((raw) => {
+    const severity: TimelineEventSeverity = raw.includes('[ERROR]')
+      ? 'error'
+      : raw.includes('[WARNING]')
+      ? 'warning'
+      : 'info'
+    const cleaned = raw.replace(/^\[\w+\]\s*/, '').replace(/^\d+\s*/, '').trim()
+
+    if (!dataIntake) {
+      const match = cleaned.match(/Starting Bronze ingest for\s+(.+)/i)
+      if (match) {
+        const target = match[1].trim()
+        const fileName = target.split(/[\\/]/).filter(Boolean).pop() || target
+        dataIntake = fileName.toLowerCase().endsWith('.csv')
+          ? `File ${fileName} ingested`
+          : `Data intake started for ${fileName}`
+      }
+    }
+
+    if (!bronzeRows && /Successfully read/i.test(cleaned)) {
+      const rowsMatch = cleaned.match(/(\d+)\s+rows/i)
+      if (rowsMatch) {
+        bronzeRows = Number(rowsMatch[1])
+      }
+    }
+
+    if (!bronzeDataset) {
+      const bronzeMatch = cleaned.match(/Bronze dataset created:\s*(.+)/i)
+      if (bronzeMatch) {
+        bronzeDataset = bronzeMatch[1].trim()
+      }
+    }
+
+    if (!silverDataset) {
+      const silverMatch = cleaned.match(/Silver dataset ready at\s*(.+)/i)
+      if (silverMatch) {
+        silverDataset = silverMatch[1].trim()
+      }
+    }
+
+    if (!goldDataset) {
+      const goldMatch = cleaned.match(/Gold layer published:\s*(.+?)(?:\s*\((\d+)\s+rows\))?$/i)
+      if (goldMatch) {
+        goldDataset = goldMatch[1].trim()
+        if (goldMatch[2]) {
+          goldRows = Number(goldMatch[2])
+        }
+      }
+    }
+
+    if (!qualitySummary && /quality|dedup/i.test(cleaned)) {
+      qualitySummary = cleaned
+    }
+
+    if (!finishNote && /Medallion pipeline completed/i.test(cleaned)) {
+      finishNote = 'Completed successfully'
+    } else if (!finishNote && /Finished in state/i.test(cleaned)) {
+      finishNote = cleaned.replace('Finished in state', 'Finished')
+    }
+
+    if (severity === 'warning') {
+      warningMessages.push(cleaned)
+    } else if (severity === 'error') {
+      errorMessages.push(cleaned)
+    }
+  })
+
+  if (context.startTime) {
+    events.push({
+      label: 'Run started',
+      description: `Job started at ${formatTimeOnly(context.startTime)}`,
+      severity: 'info'
+    })
+  }
+
+  if (dataIntake) {
+    events.push({
+      label: 'Data intake',
+      description: dataIntake,
+      severity: 'info'
+    })
+  }
+
+  if (bronzeDataset) {
+    const description = bronzeRows
+      ? `${bronzeDataset} · ${bronzeRows.toLocaleString()} rows`
+      : bronzeDataset
+    events.push({
+      label: 'Bronze layer completed',
+      description,
+      severity: 'info'
+    })
+  }
+
+  if (silverDataset) {
+    const description = qualitySummary ? `${silverDataset} · ${qualitySummary}` : silverDataset
+    events.push({
+      label: 'Silver layer completed',
+      description,
+      severity: 'info'
+    })
+  }
+
+  if (goldDataset) {
+    const description = goldRows
+      ? `${goldDataset} · ${goldRows.toLocaleString()} rows`
+      : goldDataset
+    events.push({
+      label: 'Gold layer completed',
+      description,
+      severity: 'info'
+    })
+  }
+
+  const problemMessages = errorMessages.length ? errorMessages : warningMessages
+  if (problemMessages.length) {
+    const uniqueMessages = Array.from(new Set(problemMessages))
+    const summary =
+      uniqueMessages.length > 1
+        ? `${uniqueMessages[0]} · ${uniqueMessages.length - 1}+ more`
+        : uniqueMessages[0]
+    events.push({
+      label: errorMessages.length ? 'Errors / warnings' : 'Warnings',
+      description: summary,
+      severity: errorMessages.length ? 'error' : 'warning'
+    })
+  }
+
+  if (context.endTime || context.durationMs || finishNote) {
+    const pieces: string[] = []
+    if (context.endTime) pieces.push(`Finished at ${formatTimeOnly(context.endTime)}`)
+    if (context.durationMs) pieces.push(`Duration ${formatDuration(context.durationMs)}`)
+    if (finishNote) pieces.push(finishNote)
+    events.push({
+      label: 'Run finished',
+      description: pieces.length ? pieces.join(' · ') : 'Completed',
+      severity: 'info'
+    })
+  }
+
+  return events
+}
+
+const TIMELINE_BADGE_STYLES: Record<TimelineEventSeverity, string> = {
+  info: 'bg-blue-50 text-blue-700 border-blue-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  error: 'bg-red-50 text-red-700 border-red-200'
 }
 
 export default function WorkflowDetailPage() {
@@ -625,6 +829,11 @@ export default function WorkflowDetailPage() {
                   const completedJobs = jobExecutions.filter((je: any) => je.status === 'completed').length
                   const failedJobs = jobExecutions.filter((je: any) => je.status === 'failed').length
                   const runningJobs = jobExecutions.filter((je: any) => je.status === 'running').length
+                  const timelineEvents = buildExecutionTimeline(execution.logs || [], {
+                    startTime: execution.startTime,
+                    endTime: execution.endTime,
+                    durationMs: execution.duration
+                  })
 
                   return (
                     <Card key={execution.id} className="border-2">
@@ -853,24 +1062,85 @@ export default function WorkflowDetailPage() {
                           </details>
                         )}
 
-                        {/* Execution Logs */}
-                        {execution.logs && execution.logs.length > 0 && (
-                          <details className="border-t border-border pt-3">
-                            <summary className="cursor-pointer text-sm font-medium text-foreground-muted hover:text-foreground transition-colors mb-2">
-                              Execution Logs ({execution.logs.length} entries)
+                        {/* Execution Timeline */}
+                        {timelineEvents.length > 0 && (
+                          <details className="border-t border-border pt-3 group" open>
+                            <summary className="flex items-center justify-between text-sm font-medium text-foreground cursor-pointer list-none hover:text-foreground-muted transition-colors">
+                              <div className="flex items-center gap-2">
+                                <ChevronDown className="w-4 h-4 transition-transform duration-200 group-open:-rotate-180" />
+                                <span>Execution Timeline</span>
+                              </div>
+                              <span className="text-xs text-foreground-muted">
+                                {timelineEvents.length} milestone{timelineEvents.length === 1 ? '' : 's'}
+                              </span>
                             </summary>
-                            <div className="bg-background-secondary rounded-md p-3 space-y-1 max-h-60 overflow-y-auto">
-                              {execution.logs.map((log: string, index: number) => (
-                                <div key={index} className="text-xs font-mono text-foreground-muted">
-                                  <span className="text-foreground-muted/60 mr-2">
-                                    {String(index + 1).padStart(3, '0')}
-                                  </span>
-                                  {log}
+                            <div className="mt-2 space-y-2">
+                              {timelineEvents.map((event, index) => (
+                                <div
+                                  key={`${event.label}-${index}`}
+                                  className="flex items-start gap-3 rounded-md border border-border bg-white px-3 py-2"
+                                >
+                                  <div
+                                    className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-semibold border ${TIMELINE_BADGE_STYLES[event.severity]}`}
+                                  >
+                                    {index + 1}
+                                  </div>
+                                  <div className="flex-1 space-y-1">
+                                    <div className="text-sm font-semibold text-foreground">{event.label}</div>
+                                    <p className="text-xs sm:text-sm text-foreground-muted leading-relaxed">
+                                      {event.description}
+                                    </p>
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           </details>
                         )}
+
+                        {execution.logs && execution.logs.length > 0 && (
+                          <details
+                            className={`pt-3 ${timelineEvents.length ? 'border-t border-border mt-4' : 'border-t border-border'}`}
+                          >
+                            <summary className="cursor-pointer text-sm font-medium text-foreground-muted hover:text-foreground transition-colors mb-2">
+                              View technical logs ({execution.logs.length})
+                            </summary>
+                            <div className="bg-background-secondary rounded-md p-3 space-y-2 max-h-60 overflow-y-auto text-sm">
+                              {execution.logs.map((log: string, index: number) => {
+                                const severity = log.includes('[ERROR]')
+                                  ? 'error'
+                                  : log.includes('[WARNING]')
+                                  ? 'warning'
+                                  : 'info'
+                                const message = log
+                                  .replace(/^\[\w+\]\s*/, '')
+                                  .replace(/^\d+\s*/, '')
+                                  .trim()
+                                const iconColor =
+                                  severity === 'error'
+                                    ? 'text-red-600 bg-red-50'
+                                    : severity === 'warning'
+                                    ? 'text-amber-700 bg-amber-50'
+                                    : 'text-blue-700 bg-blue-50'
+                                return (
+                                  <div
+                                    key={index}
+                                    className="flex items-start gap-3 rounded-md border border-border px-3 py-2 bg-white"
+                                  >
+                                    <span
+                                      className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold ${iconColor}`}
+                                    >
+                                      {severity === 'error' ? '!' : severity === 'warning' ? '!' : 'i'}
+                                    </span>
+                                    <div className="flex-1 text-foreground text-xs sm:text-sm leading-relaxed">
+                                      {message}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </details>
+                        )}
+
                       </CardContent>
                     </Card>
                   )

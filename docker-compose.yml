@@ -64,7 +64,7 @@ services:
   # Prefect Server (Optional - use if not using Prefect Cloud)
   # Uncomment if you want self-hosted Prefect
   prefect-server:
-    image: prefecthq/prefect:2-python3.11
+    image: prefecthq/prefect:2.20.23-python3.11
     container_name: flowforge-prefect-server
     ports:
       - "4200:4200"
@@ -78,6 +78,38 @@ services:
         condition: service_healthy
     networks:
       - flowforge
+
+  # Prefect Worker - Executes flows from deployments
+  prefect-worker:
+    image: prefecthq/prefect:2.20.23-python3.11
+    container_name: flowforge-prefect-worker
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin123
+      S3_BUCKET_NAME: flowforge-data
+      DATABASE_URL: postgresql://flowforge:flowforge123@postgres:5432/flowforge
+      FLOWFORGE_DB_PATH: /opt/apps/web/data/flowforge.db
+    volumes:
+      - ./prefect-flows:/opt/prefect
+      - ./apps/web/data:/opt/apps/web/data
+    working_dir: /opt/prefect
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        pip install --quiet -r requirements.txt
+        prefect worker start --pool flowforge-development
+    depends_on:
+      prefect-server:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - flowforge
+    restart: unless-stopped
 
 volumes:
   minio_data:

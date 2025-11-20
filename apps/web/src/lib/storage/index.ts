@@ -5,8 +5,21 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import crypto from 'crypto'
 
+const rawEndpoint = process.env.S3_ENDPOINT_URL || 'http://localhost:9000'
+const endpointUrl = (() => {
+  try {
+    const parsed = new URL(rawEndpoint)
+    if (parsed.hostname === 'localhost' || parsed.hostname === '::1') {
+      parsed.hostname = '127.0.0.1'
+    }
+    return parsed.toString()
+  } catch {
+    return rawEndpoint
+  }
+})()
+
 const s3Client = new S3Client({
-  endpoint: process.env.S3_ENDPOINT_URL || 'http://localhost:9000',
+  endpoint: endpointUrl,
   region: 'us-east-1',
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID || 'prefect',
@@ -23,7 +36,8 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'flowforge-data'
 export async function saveUploadedFile(
   workflowId: string,
   jobId: string,
-  file: File
+  file: File,
+  bufferOverride?: Buffer
 ): Promise<string> {
   console.log(`🔵 === STORAGE FUNCTION CALLED ===`)
   console.log(`🔵 Workflow ID: ${workflowId}`)
@@ -31,8 +45,8 @@ export async function saveUploadedFile(
   console.log(`🔵 File name: ${file.name}`)
   console.log(`🔵 File size: ${file.size} bytes`)
 
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
+  const buffer =
+    bufferOverride ?? Buffer.from(await file.arrayBuffer())
 
   const key = `landing/${workflowId}/${jobId}/${file.name}`
 

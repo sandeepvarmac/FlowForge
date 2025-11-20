@@ -104,7 +104,11 @@ def medallion_pipeline(
         if source_type == "database":
             logger.info("Database job detected - using database_bronze task")
             bronze_result = ingest_from_database(
+                workflow_id=workflow_id,
                 job_id=job_id,
+                workflow_slug=workflow_slug,
+                job_slug=job_slug,
+                run_id=run_id,
                 source_config=source_config,
                 destination_config=destination_config,
                 batch_id=batch_id or run_id,

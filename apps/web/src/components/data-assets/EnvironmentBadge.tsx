@@ -6,7 +6,7 @@
 import React from 'react';
 
 interface EnvironmentBadgeProps {
-  environment: 'dev' | 'qa' | 'uat' | 'prod';
+  environment?: string;
   size?: 'sm' | 'md';
   className?: string;
 }
@@ -44,7 +44,15 @@ export function EnvironmentBadge({ environment, size = 'sm', className = '' }: E
     },
   };
 
-  const config = envConfig[environment];
+  const normalizedEnv = (environment || 'prod').toLowerCase() as keyof typeof envConfig;
+  const config =
+    envConfig[normalizedEnv] ||
+    {
+      label: normalizedEnv?.toUpperCase() || 'N/A',
+      bg: 'bg-gray-50',
+      text: 'text-gray-700',
+      border: 'border-gray-200',
+    };
 
   return (
     <span

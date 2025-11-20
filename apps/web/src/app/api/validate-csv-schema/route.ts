@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { anthropic } from '@/lib/ai/anthropic-client'
+import { openai } from '@/lib/ai/openai-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'
 
 interface ColumnSuggestion {
   position: number
@@ -24,6 +26,56 @@ interface SchemaResult {
   }
   progress: number
   error?: string
+}
+
+async function requestAiJson({
+  systemPrompt,
+  userPrompt,
+  maxTokens = 1200
+}: {
+  systemPrompt: string
+  userPrompt: string
+  maxTokens?: number
+}): Promise<string | null> {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const completion = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+      const text = (completion.content?.find((c: any) => c.type === 'text') as any)?.text
+      if (text) {
+        return text
+      }
+    } catch (error) {
+      console.error('Anthropic column naming failed, trying OpenAI fallback:', error)
+    }
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+      const text = completion.choices[0]?.message?.content
+      if (text) {
+        return text
+      }
+    } catch (error) {
+      console.error('OpenAI fallback for column naming failed:', error)
+    }
+  }
+
+  return null
 }
 
 /**
@@ -66,10 +118,8 @@ export async function POST(request: NextRequest) {
     console.log('🤖 No headers detected. Asking AI for intelligent column names...')
 
     try {
-      const columnNamingCompletion = await anthropic.messages.create({
-        model: ANTHROPIC_MODEL,
-        max_tokens: 1200,
-        system: `You are an expert data analyst. Analyze CSV data (without headers) and suggest meaningful column names.
+      const columnNamingResponse = await requestAiJson({
+        systemPrompt: `You are an expert data analyst. Analyze CSV data (without headers) and suggest meaningful column names.
 
 For each column, provide:
 1. A descriptive, snake_case column name
@@ -96,19 +146,23 @@ Return ONLY valid JSON in this exact format:
       "confidence": 90
     }
   ]
-}`,
-        messages: [
-          { role: 'user', content: `Analyze this CSV data and suggest column names:\n\nRow 1: ${firstThreeRows[0]}\nRow 2: ${firstThreeRows[1]}\nRow 3: ${firstThreeRows[2] || 'N/A'}\n\nSuggest intelligent column names for each column.` }
-        ]
+}` ,
+        userPrompt: `Analyze this CSV data and suggest column names:
+
+Row 1: ${firstThreeRows[0]}
+Row 2: ${firstThreeRows[1]}
+Row 3: ${firstThreeRows[2] || 'N/A'}
+
+Suggest intelligent column names for each column.`,
+        maxTokens: 1200
       })
 
-      const columnNamingResponse = (columnNamingCompletion.content?.find((c: any) => c.type === 'text') as any)?.text
       if (!columnNamingResponse) {
-        throw new Error('No response from AI')
+        throw new Error('No response from AI provider')
       }
 
       const columnNaming = JSON.parse(columnNamingResponse)
-      console.log('🤖 AI Column Naming Suggestions:', columnNaming)
+      console.log('dY- AI Column Naming Suggestions:', columnNaming)
 
       // Parse first 5 rows from the provided data to get sample values
       const allRows = [firstThreeRows[0], firstThreeRows[1], firstThreeRows[2] || '']
@@ -137,7 +191,7 @@ Return ONLY valid JSON in this exact format:
         progress: 100
       }
 
-      console.log('✅ Step 3/3 complete: AI column names generated (100%)')
+      console.log('?o. Step 3/3 complete: AI column names generated (100%)')
       return NextResponse.json(result)
 
     } catch (aiError) {

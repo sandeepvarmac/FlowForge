@@ -1,0 +1,177 @@
+###
+### A complete description of a Prefect Deployment for flow 'flowforge-medallion'
+###
+name: docker-manifest
+description: "Execute the Bronze \u2192 Silver \u2192 Gold pipeline with human-readable\
+  \ S3 keys.\n\nSupports file-based ingestion (CSV, JSON, Parquet, Excel) and database\
+  \ ingestion\n(SQL Server, PostgreSQL, MySQL).\n\nArgs:\n    workflow_id: Workflow\
+  \ identifier\n    job_id: Job identifier\n    workflow_name: Workflow name\n   \
+  \ job_name: Job name\n    landing_key: S3 key for source data (file-based jobs only)\n\
+  \    primary_keys: Primary keys for deduplication\n    column_mappings: Column mappings\n\
+  \    has_header: Whether file has headers\n    flow_run_id: Prefect flow run ID\n\
+  \    file_format: File format (csv, json, parquet, excel)\n    file_options: File-specific\
+  \ options\n    execution_id: FlowForge execution ID (for dependency triggers)\n\
+  \    source_type: Source type (\"file\" or \"database\")\n    source_config: Database\
+  \ connection config (database jobs only)\n    destination_config: Bronze layer config\
+  \ (database jobs only)\n    batch_id: Batch identifier (database jobs only)"
+version: f1a19d7d29211ce12a60a1c7a2ffc483
+# The work queue that will handle this deployment's runs
+work_queue_name: default
+work_pool_name: flowforge-development
+tags:
+- docker
+- manifest
+- development
+parameters: {}
+schedule: null
+schedules: []
+is_schedule_active: null
+infra_overrides: {}
+infrastructure:
+  type: process
+  env: {}
+  labels: {}
+  name: null
+  command: null
+  stream_output: true
+  working_dir: null
+  block_type_slug: process
+  _block_type_slug: process
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: flowforge-medallion
+manifest_path: .
+storage: null
+path: /opt/prefect
+entrypoint: flows/medallion.py:medallion_pipeline
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties:
+    workflow_id:
+      description: Workflow identifier
+      position: 0
+      title: workflow_id
+      type: string
+    job_id:
+      description: Job identifier
+      position: 1
+      title: job_id
+      type: string
+    workflow_name:
+      description: Workflow name
+      position: 2
+      title: workflow_name
+      type: string
+    job_name:
+      description: Job name
+      position: 3
+      title: job_name
+      type: string
+    landing_key:
+      default: null
+      description: S3 key for source data (file-based jobs only)
+      position: 4
+      title: landing_key
+      type: string
+    primary_keys:
+      anyOf:
+      - items:
+          type: string
+        type: array
+      - type: 'null'
+      default: null
+      description: Primary keys for deduplication
+      position: 5
+      title: primary_keys
+    column_mappings:
+      anyOf:
+      - items:
+          additionalProperties: true
+          type: object
+        type: array
+      - type: 'null'
+      default: null
+      description: Column mappings
+      position: 6
+      title: column_mappings
+    has_header:
+      default: true
+      description: Whether file has headers
+      position: 7
+      title: has_header
+      type: boolean
+    flow_run_id:
+      anyOf:
+      - type: string
+      - type: 'null'
+      default: null
+      description: Prefect flow run ID
+      position: 8
+      title: flow_run_id
+    file_format:
+      default: csv
+      description: File format (csv, json, parquet, excel)
+      position: 9
+      title: file_format
+      type: string
+    file_options:
+      anyOf:
+      - additionalProperties: true
+        type: object
+      - type: 'null'
+      default: null
+      description: File-specific options
+      position: 10
+      title: file_options
+    execution_id:
+      anyOf:
+      - type: string
+      - type: 'null'
+      default: null
+      description: FlowForge execution ID (for dependency triggers)
+      position: 11
+      title: execution_id
+    source_type:
+      default: file
+      description: Source type ("file" or "database")
+      position: 12
+      title: source_type
+      type: string
+    source_config:
+      anyOf:
+      - additionalProperties: true
+        type: object
+      - type: 'null'
+      default: null
+      description: Database connection config (database jobs only)
+      position: 13
+      title: source_config
+    destination_config:
+      anyOf:
+      - additionalProperties: true
+        type: object
+      - type: 'null'
+      default: null
+      description: Bronze layer config (database jobs only)
+      position: 14
+      title: destination_config
+    batch_id:
+      anyOf:
+      - type: string
+      - type: 'null'
+      default: null
+      description: Batch identifier (database jobs only)
+      position: 15
+      title: batch_id
+  required:
+  - workflow_id
+  - job_id
+  - workflow_name
+  - job_name
+  definitions: null
+timestamp: '2025-11-17T21:56:14.434418+00:00'
+triggers: []
+enforce_parameter_schema: null

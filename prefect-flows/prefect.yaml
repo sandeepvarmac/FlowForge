@@ -1,0 +1,23 @@
+# Prefect deployment configuration
+name: flowforge-medallion
+version: 1.0.0
+description: FlowForge Medallion Architecture Pipeline
+
+# Pull steps: Your worker already mounts ./prefect-flows at /opt/prefect,
+# so we just set that as the working directory before running the flow.
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect
+
+# Deployments
+deployments:
+  - name: production
+    entrypoint: flows/medallion.py:medallion_pipeline
+    work_pool:
+      name: flowforge-development
+      work_queue_name: default
+    schedule: null
+    parameters: {}
+    tags:
+      - production
+      - s3

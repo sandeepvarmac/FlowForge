@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
+import { listFiles } from '@/lib/storage'
 
 const PREFECT_API_URL = (process.env.PREFECT_API_URL || 'http://127.0.0.1:4200/api').replace(/\/$/, '')
+const WORKER_LOCALHOST_ALIAS = process.env.WORKER_LOCALHOST_ALIAS || 'host.docker.internal'
 
 // Legacy deployment ID (fallback)
 const PREFECT_DEPLOYMENT_ID = process.env.PREFECT_DEPLOYMENT_ID || '6418e5a3-9205-4fa6-a5fe-6e852c32281a'
@@ -13,6 +15,8 @@ const DEPLOYMENT_IDS = {
   qa: process.env.PREFECT_DEPLOYMENT_ID_QA,
   development: process.env.PREFECT_DEPLOYMENT_ID_DEVELOPMENT,
 }
+
+const LOCAL_HOST_VALUES = new Set(['localhost', '127.0.0.1', '::1'])
 
 /**
  * Get deployment ID based on workflow environment and team
@@ -126,7 +130,9 @@ export async function POST(
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(jobExecutionId, executionId, job.id, 'running', jobStartTime, jobStartTime, jobStartTime)
 
-      const sourceConfig = typeof job.source_config === 'string' ? JSON.parse(job.source_config) : job.source_config
+      const rawSourceConfig = typeof job.source_config === 'string' ? JSON.parse(job.source_config) : job.source_config
+      const enrichedSourceConfig = enrichConnectionCredentials(rawSourceConfig, db)
+      const sourceConfig = normalizeSourceConfigForWorker(enrichedSourceConfig)
       const transformationConfig = typeof job.transformation_config === 'string' ? JSON.parse(job.transformation_config) : job.transformation_config
       const fileConfig = sourceConfig?.fileConfig || {}
       const uploadMode = fileConfig.uploadMode || 'single'
@@ -148,9 +154,22 @@ export async function POST(
           console.log(`📊 Database source detected: ${sourceType}`)
 
           const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+          const workflowSlug = workflow.slug || workflow.name?.toLowerCase().replace(/\s+/g, '-') || workflowId
+          const jobSlug = job.slug || job.name?.toLowerCase().replace(/\s+/g, '-') || job.id
+          const placeholderLandingKey = `landing/${workflowId}/${job.id}/${sourceConfig?.databaseConfig?.tableName || 'database-source'}`
 
           const prefectRun = await triggerPrefectRun(deploymentId, {
+            workflow_id: workflowId,
             job_id: job.id,
+            workflow_name: workflow.name,
+            job_name: job.name,
+            landing_key: placeholderLandingKey,
+            column_mappings: columnMappings,
+            has_header: true,
+            flow_run_id: null,
+            file_format: 'csv',
+            file_options: null,
+            primary_keys: primaryKeys,
             source_config: sourceConfig,
             destination_config: {
               bronzeConfig: {
@@ -163,7 +182,7 @@ export async function POST(
             },
             batch_id: batchId,
             execution_id: jobExecutionId,
-            task_type: 'database_bronze'  // Signal to use database_bronze task
+            source_type: 'database',
           })
 
           console.log(`✅ Database ingestion flow run created: ${prefectRun.id}`)
@@ -234,8 +253,19 @@ export async function POST(
             throw new Error(`No files found matching pattern '${fileConfig.filePattern}' in ${s3Prefix}`)
           }
         } else {
-          // Single file mode: use the landingKey directly
-          const landingKey = sourceConfig?.landingKey || `landing/${workflowId}/${job.id}/${fileConfig.filePath || ''}`
+          let landingKey = sourceConfig?.landingKey
+          if (!landingKey) {
+            landingKey = await resolveLandingKey(
+              workflowId,
+              job.id,
+              fileConfig.filePath
+            )
+          }
+
+          if (!landingKey) {
+            throw new Error(`No landing file found for job ${job.name}. Upload a file before running the workflow.`)
+          }
+
           filesToProcess = [landingKey]
         }
 
@@ -333,4 +363,83 @@ export async function POST(
       { status: 500 }
     )
   }
+}
+
+function normalizeSourceConfigForWorker(config: any) {
+  if (!config || typeof config !== 'object') return config
+  const cloned = JSON.parse(JSON.stringify(config))
+
+  if (cloned.connection?.host && typeof cloned.connection.host === 'string') {
+    const lower = cloned.connection.host.toLowerCase()
+    if (LOCAL_HOST_VALUES.has(lower)) {
+      cloned.connection.host = WORKER_LOCALHOST_ALIAS
+      console.log(
+        `Normalized database host for Prefect worker: ${lower} -> ${cloned.connection.host}`
+      )
+    }
+  }
+
+  return cloned
+}
+
+function extractFileName(filePath?: string) {
+  if (!filePath) return ''
+  const parts = filePath.split(/[/\\]/)
+  return parts[parts.length - 1] || ''
+}
+
+function enrichConnectionCredentials(config: any, db: ReturnType<typeof getDatabase>) {
+  if (!config || typeof config !== 'object') return config
+  if (!config.connection || typeof config.connection !== 'object') return config
+
+  const cloned = JSON.parse(JSON.stringify(config))
+  const connection = cloned.connection
+
+  if (!connection.password && connection.host && connection.port && connection.database && connection.username) {
+    try {
+      const record = db
+        .prepare(
+          `
+          SELECT password FROM database_connections
+          WHERE host = ? AND port = ? AND database = ? AND username = ?
+        `
+        )
+        .get(connection.host, connection.port, connection.database, connection.username) as any
+
+      if (record?.password) {
+        connection.password = record.password
+        console.log(`Hydrated password for connection to ${connection.host}/${connection.database}`)
+      }
+    } catch (error) {
+      console.warn('Failed to hydrate database password from saved connections:', error)
+    }
+  }
+
+  return cloned
+}
+
+async function resolveLandingKey(workflowId: string, jobId: string, originalFilePath?: string) {
+  const prefix = `landing/${workflowId}/${jobId}/`
+  try {
+    const files = await listFiles(prefix)
+    if (files?.length) {
+      const sorted = files
+        .filter(file => file.key && !file.key.endsWith('/'))
+        .sort(
+          (a, b) =>
+            new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+        )
+      if (sorted.length) {
+        return sorted[0].key
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to resolve landing key from storage:', error)
+  }
+
+  const fallbackName = extractFileName(originalFilePath)
+  if (fallbackName) {
+    return `landing/${workflowId}/${jobId}/${fallbackName}`
+  }
+  return null
 }

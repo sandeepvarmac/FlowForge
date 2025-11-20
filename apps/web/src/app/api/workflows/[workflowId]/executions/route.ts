@@ -136,6 +136,14 @@ function extractFlowRunIdFromLogs(serialisedLogs?: string | null): string | null
 }
 
 async function syncPrefectExecutions(database: SqliteDatabase, workflowId: string) {
+  // Drop any orphaned job executions referencing deleted jobs before syncing.
+  database.prepare(`
+    DELETE FROM job_executions
+    WHERE job_id NOT IN (SELECT id FROM jobs)
+  `).run()
+
+  // Only sync executions for jobs that still exist locally. This prevents deleted
+  // jobs from reappearing when Prefect reports historical flow runs.
   const inflightJobs = database.prepare(`
     SELECT
       je.id,
@@ -148,6 +156,7 @@ async function syncPrefectExecutions(database: SqliteDatabase, workflowId: strin
       e.started_at AS execution_started_at
     FROM job_executions je
     JOIN executions e ON je.execution_id = e.id
+    JOIN jobs j ON j.id = je.job_id
     WHERE e.workflow_id = ?
       AND je.status IN ('running', 'pending')
   `).all(workflowId) as Array<{

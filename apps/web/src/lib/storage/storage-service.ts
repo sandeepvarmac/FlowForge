@@ -14,7 +14,7 @@ export interface IStorageService {
    * @param file - File to upload
    * @returns S3 URI of uploaded file (e.g., s3://bucket/key)
    */
-  saveUploadedFile(workflowId: string, jobId: string, file: File): Promise<string>
+  saveUploadedFile(workflowId: string, jobId: string, file: File, bufferOverride?: Buffer): Promise<string>
 
   /**
    * List files in a storage prefix/folder
@@ -46,10 +46,10 @@ export class S3StorageService implements IStorageService {
     this.providerName = providerName
   }
 
-  async saveUploadedFile(workflowId: string, jobId: string, file: File): Promise<string> {
+  async saveUploadedFile(workflowId: string, jobId: string, file: File, bufferOverride?: Buffer): Promise<string> {
     // Delegate to existing implementation
     const { saveUploadedFile } = await import('./index')
-    return saveUploadedFile(workflowId, jobId, file)
+    return saveUploadedFile(workflowId, jobId, file, bufferOverride)
   }
 
   async listFiles(prefix: string) {

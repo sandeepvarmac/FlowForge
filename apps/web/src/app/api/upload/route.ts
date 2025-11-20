@@ -32,11 +32,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`📁 Uploading file: ${file.name} for job ${jobId}`)
 
-    // Save file
-    const filepath = await saveUploadedFile(workflowId, jobId, file)
+    // Read file once to reuse across operations
+    const arrayBuffer = await file.arrayBuffer()
+    const fileBuffer = Buffer.from(arrayBuffer)
 
-    // Parse CSV for analysis
-    const fileContent = await file.text()
+    // Save file to storage
+    const filepath = await saveUploadedFile(workflowId, jobId, file, fileBuffer)
+
+    // Parse CSV for analysis (use same buffer to avoid duplicate reads)
+    const fileContent = fileBuffer.toString('utf-8')
     const parseResult = Papa.parse(fileContent, {
       header: true,
       skipEmptyLines: true,
@@ -85,8 +89,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Get file hash for caching
-    const buffer = await file.arrayBuffer()
-    const fileHash = getFileHash(Buffer.from(buffer))
+    const fileHash = getFileHash(fileBuffer)
 
     // Check if we have cached AI analysis
     const db = getDatabase()

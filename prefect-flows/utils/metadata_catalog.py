@@ -8,6 +8,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from prefect import get_run_logger
+import logging
+
+
+def _logger():
+    try:
+        return get_run_logger()
+    except Exception:
+        return logging.getLogger("metadata_catalog")
 
 
 def get_sqlite_db_path() -> Path:
@@ -17,7 +25,11 @@ def get_sqlite_db_path() -> Path:
     # Try environment variable first
     env_db_path = os.getenv('FLOWFORGE_DB_PATH')
     if env_db_path:
-        return Path(env_db_path)
+        env_path = Path(env_db_path)
+        if env_path.exists():
+            return env_path
+        logger = _logger()
+        logger.warning(f"FLOWFORGE_DB_PATH={env_db_path} not found, falling back to repo default")
 
     # Hardcoded fallback for development
     # TODO: Make this configurable for production deployments
@@ -61,7 +73,7 @@ def get_file_size_from_s3(s3_key: str) -> int:
         response = s3.s3_client.head_object(Bucket=s3.bucket, Key=s3_key)
         return response.get('ContentLength', 0)
     except Exception as e:
-        logger = get_run_logger()
+        logger = _logger()
         logger.warning(f"Failed to get file size for {s3_key}: {e}")
         return 0
 
@@ -151,7 +163,7 @@ def upsert_metadata_catalog_entry(
     Returns:
         The asset ID (created or updated)
     """
-    logger = get_run_logger()
+    logger = _logger()
     conn = get_database_connection()
     cursor = conn.cursor()
 
@@ -396,7 +408,7 @@ def update_job_execution_metrics(
         gold_records: Number of gold records (optional)
         quarantined_records: Number of quarantined records (optional)
     """
-    logger = get_run_logger()
+    logger = _logger()
     conn = get_database_connection()
     cursor = conn.cursor()
 

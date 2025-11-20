@@ -1,6 +1,7 @@
 # Prefect and core dependencies
-prefect>=2.14.0,<3.0.0
-prefect-aws>=0.4.0  # S3 blocks for MinIO/AWS
+# Note: prefect is already installed in the Docker image, don't reinstall
+# prefect>=2.14.0,<3.0.0
+prefect-aws>=0.4.0,<0.5.0  # S3 blocks for MinIO/AWS (compatible with Prefect 2.x)
 
 # Data processing
 polars[excel]>=0.20.0  # Fast DataFrame library with Excel support

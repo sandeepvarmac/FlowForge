@@ -15,15 +15,20 @@ import tempfile
 from utils.database_connectors import SQLServerConnector, PostgreSQLConnector, MySQLConnector
 from utils.s3 import S3Client
 from utils.ai_quality_profiler import AIQualityProfiler
+from utils.metadata_catalog import catalog_bronze_asset, update_job_execution_metrics
 import polars as pl
 import requests
 
 
 @task(name="ingest-from-database", retries=2, retry_delay_seconds=30)
 def ingest_from_database(
+    workflow_id: str,
     job_id: str,
+    workflow_slug: str,
+    job_slug: str,
+    run_id: str,
     source_config: Dict[str, Any],
-    destination_config: Dict[str, Any],
+    destination_config: Optional[Dict[str, Any]],
     batch_id: str,
     execution_id: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -81,7 +86,8 @@ def ingest_from_database(
         db_type = source_config.get('type')
         connection_config = source_config.get('connection', {})
         database_config = source_config.get('databaseConfig', {})
-        bronze_config = destination_config.get('bronzeConfig', {})
+        destination_config = destination_config or {}
+        bronze_config = destination_config.get('bronzeConfig', {}) or {}
 
         # Initialize database connector
         print(f"1. Initializing {db_type} connector...")
@@ -142,9 +148,10 @@ def ingest_from_database(
             print(f"   Added 5 audit columns")
 
         # Prepare output path
-        bronze_table_name = bronze_config.get('tableName', f'bronze_{table_name}')
-        output_filename = f"{batch_id}.parquet"
-        s3_key = f"bronze/{bronze_table_name}/{output_filename}"
+        bronze_table_name = bronze_config.get('tableName') or f"{workflow_slug}_{job_slug}_bronze"
+        date_folder = datetime.utcnow().strftime("%Y%m%d")
+        output_filename = bronze_config.get('fileName') or f"{workflow_slug}_{job_slug}_{run_id}_v001.parquet"
+        s3_key = bronze_config.get('s3Key') or f"bronze/{workflow_slug}/{job_slug}/{date_folder}/{output_filename}"
 
         # Write to Parquet locally first
         print(f"\n4. Writing to Parquet...")
@@ -185,12 +192,23 @@ def ingest_from_database(
             watermark_value = _get_max_watermark(arrow_table, delta_column)
             print(f"\n6. New watermark: {delta_column} = {watermark_value}")
 
-        # Prepare result
+        row_count = arrow_table.num_rows
+        column_names = [field.name for field in arrow_table.schema]
+
+        # Prepare result payload required by downstream Silver/Gold tasks
         result = {
             "status": "success",
-            "records_processed": arrow_table.num_rows,
+            "workflow_id": workflow_id,
+            "job_id": job_id,
+            "workflow_slug": workflow_slug,
+            "job_slug": job_slug,
+            "run_id": run_id,
+            "records": row_count,
+            "columns": column_names,
+            "records_processed": row_count,
             "bronze_file_path": s3_url,
-            "bronze_key": s3_key,  # For compatibility with silver_transform
+            "bronze_key": s3_key,
+            "bronze_filename": os.path.basename(s3_key),
             "file_size_bytes": file_size,
             "schema": [
                 {
@@ -201,20 +219,43 @@ def ingest_from_database(
             ],
             "compression": compression,
             "table_name": bronze_table_name,
-            "records": arrow_table.num_rows,  # For compatibility
-            "columns": [field.name for field in arrow_table.schema]  # For compatibility
         }
 
         if watermark_value:
             result["watermark_value"] = watermark_value
 
+        # Convert to Polars for downstream processing (metadata + AI)
+        df_polars = pl.from_arrow(arrow_table)
+
+        # Catalog dataset in FlowForge metadata store
+        try:
+            asset_id = catalog_bronze_asset(
+                job_id=job_id,
+                workflow_slug=workflow_slug,
+                job_slug=job_slug,
+                s3_key=s3_key,
+                row_count=row_count,
+                dataframe=df_polars,
+                environment=os.getenv("FLOWFORGE_ENVIRONMENT", "prod"),
+            )
+            print(f"   Cataloged bronze asset: {asset_id}")
+        except Exception as e:
+            print(f"   WARNING: Failed to catalog bronze metadata: {e}")
+
+        # Update job execution metrics for UI dashboards
+        try:
+            update_job_execution_metrics(
+                job_id=job_id,
+                bronze_records=row_count,
+            )
+            print(f"   Updated job execution metrics (bronze_records={row_count})")
+        except Exception as e:
+            print(f"   WARNING: Failed to update job execution metrics: {e}")
+
         # Run AI Quality Profiler to generate quality rule suggestions
         try:
             print(f"\n7. Running AI Quality Profiler...")
             profiler = AIQualityProfiler()
-
-            # Convert PyArrow table to Polars DataFrame for profiling
-            df_polars = pl.from_arrow(arrow_table)
 
             # Use bronze table name for profiling
             profiling_result = profiler.profile_dataframe(df_polars, bronze_table_name)

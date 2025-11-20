@@ -29,16 +29,18 @@ export async function GET(
     }
 
     // Call Python function to list tables
-    const result = await listDatabaseTables(
-      connection.type,
-      {
-        host: connection.host,
-        port: connection.port,
-        database: connection.database,
-        username: connection.username,
-        password: connection.password
-      }
-    )
+    const host =
+      connection.host === 'localhost' || connection.host === '::1'
+        ? '127.0.0.1'
+        : connection.host
+
+    const result = await listDatabaseTables(connection.type, {
+      host,
+      port: connection.port,
+      database: connection.database,
+      username: connection.username,
+      password: connection.password
+    })
 
     if (!result.success) {
       return NextResponse.json(

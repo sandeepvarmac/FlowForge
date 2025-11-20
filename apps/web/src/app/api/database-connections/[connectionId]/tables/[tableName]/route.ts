@@ -32,8 +32,13 @@ export async function GET(
       )
     }
 
+    const host =
+      connection.host === 'localhost' || connection.host === '::1'
+        ? '127.0.0.1'
+        : connection.host
+
     const connectionConfig = {
-      host: connection.host,
+      host,
       port: connection.port,
       database: connection.database,
       username: connection.username,

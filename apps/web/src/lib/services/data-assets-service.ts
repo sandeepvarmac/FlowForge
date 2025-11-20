@@ -236,6 +236,187 @@ export class DataAssetsService {
   }
 
   /**
+   * Return assets grouped by workflow and job for Explorer workflow view.
+   */
+  getWorkflowAssetGroups(filters: AssetFilters = {}) {
+    const {
+      layers = [],
+      environments = ['prod'],
+      workflowIds = [],
+      qualityStatus = [],
+      tags = [],
+      search = '',
+    } = filters;
+
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (layers.length > 0) {
+      whereClauses.push(`mc.layer IN (${layers.map(() => '?').join(', ')})`);
+      params.push(...layers);
+    }
+
+    if (environments.length > 0) {
+      whereClauses.push(`mc.environment IN (${environments.map(() => '?').join(', ')})`);
+      params.push(...environments);
+    }
+
+    if (workflowIds.length > 0) {
+      whereClauses.push(`w.id IN (${workflowIds.map(() => '?').join(', ')})`);
+      params.push(...workflowIds);
+    }
+
+    if (search) {
+      const like = `%${search}%`;
+      whereClauses.push(`(
+        w.name LIKE ?
+        OR j.name LIKE ?
+        OR mc.table_name LIKE ?
+      )`);
+      params.push(like, like, like);
+    }
+
+    const whereClause = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const query = `
+      SELECT
+        w.id AS workflow_id,
+        w.name AS workflow_name,
+        w.description AS workflow_description,
+        w.owner AS workflow_owner,
+        w.team AS workflow_team,
+        w.environment AS workflow_environment,
+        w.last_run AS workflow_last_run,
+        j.id AS job_id,
+        j.name AS job_name,
+        j.type AS job_type,
+        j.status AS job_status,
+        j.order_index AS job_order_index,
+        (
+          SELECT je.started_at
+          FROM job_executions je
+          WHERE je.job_id = j.id
+          ORDER BY je.started_at DESC
+          LIMIT 1
+        ) AS last_job_execution,
+        mc.id AS asset_id,
+        mc.layer AS asset_layer,
+        mc.table_name AS asset_table_name,
+        mc.environment AS asset_environment,
+        mc.row_count AS asset_row_count,
+        mc.file_size AS asset_file_size,
+        mc.file_path AS asset_file_path,
+        mc.schema AS asset_schema,
+        mc.tags AS asset_tags,
+        mc.parent_tables AS asset_parent_tables,
+        mc.created_at AS asset_created_at,
+        mc.updated_at AS asset_updated_at,
+        mc.job_id AS asset_job_id,
+        (
+          SELECT COUNT(*)
+          FROM dq_rules
+          WHERE job_id = mc.job_id AND is_active = 1
+        ) AS total_rules
+      FROM metadata_catalog mc
+      JOIN jobs j ON mc.job_id = j.id
+      JOIN workflows w ON j.workflow_id = w.id
+      ${whereClause}
+      ORDER BY w.name, j.order_index, mc.layer
+    `;
+
+    const rows = this.db.prepare(query).all(...params) as any[];
+
+    const grouped = new Map<string, any>();
+
+    const determineQualityStatus = (score: number, totalRules: number): QualityStatus => {
+      if (totalRules === 0) return 'no-rules';
+      return score >= 95 ? 'healthy' : 'issues';
+    };
+
+    rows.forEach((row) => {
+      const workflowId = row.workflow_id;
+      const tagsJson = row.asset_tags ? JSON.parse(row.asset_tags) : null;
+
+      if (tags.length > 0) {
+        const hasTag = tagsJson && tagsJson.some((tag: string) => tags.includes(tag));
+        if (!hasTag) {
+          return;
+        }
+      }
+
+      const qualityScore = this.calculateQualityScore(row.asset_id) || 0;
+      const qualityState = determineQualityStatus(qualityScore, row.total_rules || 0);
+
+      if (qualityStatus.length > 0 && !qualityStatus.includes(qualityState)) {
+        return;
+      }
+
+      if (!grouped.has(workflowId)) {
+        grouped.set(workflowId, {
+          workflowId,
+          workflowName: row.workflow_name,
+          description: row.workflow_description,
+          owner: row.workflow_owner,
+          team: row.workflow_team,
+          environment: row.workflow_environment,
+          lastRun: row.workflow_last_run,
+          jobs: [] as any[],
+        });
+      }
+
+      const workflowGroup = grouped.get(workflowId);
+
+      let jobGroup = workflowGroup.jobs.find((job: any) => job.jobId === row.job_id);
+      if (!jobGroup) {
+        jobGroup = {
+          jobId: row.job_id,
+          jobName: row.job_name,
+          jobType: row.job_type,
+          jobStatus: row.job_status,
+          orderIndex: row.job_order_index,
+          lastExecution: row.last_job_execution,
+          datasets: [] as any[],
+        };
+        workflowGroup.jobs.push(jobGroup);
+      }
+
+      jobGroup.datasets.push({
+        id: row.asset_id,
+        layer: row.asset_layer,
+        table_name: row.asset_table_name,
+        environment: row.asset_environment,
+        row_count: row.asset_row_count,
+        file_size: row.asset_file_size,
+        file_path: row.asset_file_path,
+        schema: row.asset_schema ? JSON.parse(row.asset_schema) : [],
+        tags: tagsJson,
+        parent_tables: row.asset_parent_tables ? JSON.parse(row.asset_parent_tables) : null,
+        created_at: row.asset_created_at,
+        updated_at: row.asset_updated_at,
+        quality_score: qualityScore,
+        quality_status: qualityState,
+        job_id: row.asset_job_id,
+        job_name: row.job_name,
+        workflow_id: workflowId,
+        workflow_name: row.workflow_name,
+        total_rules: row.total_rules || 0,
+      });
+    });
+
+    return Array.from(grouped.values()).map((workflow) => {
+      const datasetCount = workflow.jobs.reduce(
+        (acc: number, job: any) => acc + job.datasets.length,
+        0
+      );
+      return {
+        ...workflow,
+        jobCount: workflow.jobs.length,
+        datasetCount,
+      };
+    });
+  }
+
+  /**
    * Get single asset by ID
    */
   getAssetById(id: string): DataAsset | null {

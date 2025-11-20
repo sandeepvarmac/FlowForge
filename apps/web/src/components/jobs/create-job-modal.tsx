@@ -289,6 +289,27 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     }
   }
 
+  const fetchNextOrder = React.useCallback(async () => {
+    if (mode === 'edit') return
+    try {
+      const response = await fetch(`/api/workflows/${workflowId}`)
+      if (!response.ok) return
+      const data = await response.json()
+      const jobs = data.workflow?.jobs || []
+      const maxOrder = jobs.reduce((max: number, job: Job) => Math.max(max, job.order ?? 0), 0)
+      const nextOrder = maxOrder + 1 || 1
+      setFormData(prev => ({ ...prev, order: nextOrder }))
+    } catch (error) {
+      console.error('Failed to fetch next job order:', error)
+    }
+  }, [workflowId, mode])
+
+  React.useEffect(() => {
+    if (open && mode !== 'edit') {
+      fetchNextOrder()
+    }
+  }, [open, mode, fetchNextOrder])
+
   const handleConnectionSelect = (connectionId: string) => {
     const connection = availableConnections.find(c => c.id === connectionId)
     if (connection) {
@@ -324,48 +345,149 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const fetchAiSuggestions = React.useCallback(async (tableName?: string, connectionId?: string, dbType?: string) => {
     console.log('[AI] ===== fetchAiSuggestions CALLED =====')
 
-    // Use provided parameters or fall back to formData
-    const useTableName = tableName || formData.sourceConfig.databaseConfig?.tableName
-    const useConnectionId = connectionId || selectedConnectionId
-    const useDbType = dbType || formData.sourceConfig.type
+    // Determine source type: database or file
+    const isDatabaseSource = formData.type === 'database'
+    const isFileSource = formData.type === 'file-based'
 
-    console.log('[AI] Parameters:', {
-      providedTableName: tableName,
-      providedConnectionId: connectionId,
-      providedDbType: dbType,
-      finalTableName: useTableName,
-      finalConnectionId: useConnectionId,
-      finalDbType: useDbType
-    })
+    console.log('[AI] Source type:', { isDatabaseSource, isFileSource })
 
-    if (!useConnectionId || !useTableName || !useDbType) {
-      console.log('[AI] Skipping AI suggestions - missing required data:', {
-        hasConnectionId: !!useConnectionId,
-        hasTableName: !!useTableName,
-        hasType: !!useDbType
+    // For database sources
+    if (isDatabaseSource) {
+      const useTableName = tableName || formData.sourceConfig.databaseConfig?.tableName
+      const useConnectionId = connectionId || selectedConnectionId
+      const useDbType = dbType || formData.sourceConfig.type
+
+      console.log('[AI] Database Parameters:', {
+        providedTableName: tableName,
+        providedConnectionId: connectionId,
+        providedDbType: dbType,
+        finalTableName: useTableName,
+        finalConnectionId: useConnectionId,
+        finalDbType: useDbType
       })
-      return
-    }
 
-    console.log('[AI] Fetching AI suggestions with:', {
-      dbType: useDbType,
-      connectionId: useConnectionId,
-      tableName: useTableName
-    })
-
-    setIsLoadingAiSuggestions(true)
-    setAiSuggestionsError(null)
-
-    try {
-      const response = await fetch('/api/ai/config/bronze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dbType: useDbType,
-          connectionId: useConnectionId,
-          tableName: useTableName
+      if (!useConnectionId || !useTableName || !useDbType) {
+        console.log('[AI] Skipping AI suggestions - missing required database data:', {
+          hasConnectionId: !!useConnectionId,
+          hasTableName: !!useTableName,
+          hasType: !!useDbType
         })
+        return
+      }
+
+      setIsLoadingAiSuggestions(true)
+      setAiSuggestionsError(null)
+
+      try {
+        const response = await fetch('/api/ai/config/bronze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dbType: useDbType,
+            connectionId: useConnectionId,
+            tableName: useTableName
+          })
+        })
+
+        console.log('[AI] Response status:', response.status)
+        const result = await response.json()
+        console.log('[AI] Response data:', result)
+
+        if (result.success && result.suggestions) {
+          console.log('[AI] Suggestions received:', Object.keys(result.suggestions))
+          // Extract fallback indicator before setting suggestions
+          const usingFallback = result.suggestions._using_fallback || false
+          setUsingFallbackBronze(usingFallback)
+          setAiSuggestions(result.suggestions)
+          setAiSuggestionsError(null)
+
+          // Track telemetry
+          const suggestionsCount = Object.keys(result.suggestions).filter(k => !k.startsWith('_')).length
+          const confidenceScores = Object.values(result.suggestions)
+            .filter((s: any) => s?.confidence)
+            .map((s: any) => s.confidence)
+          const overallConfidence = confidenceScores.length > 0
+            ? Math.round(confidenceScores.reduce((a: number, b: number) => a + b, 0) / confidenceScores.length)
+            : 0
+
+          trackAISuggestionsFetched({
+            layer: 'bronze',
+            tableName: useTableName || '',
+            suggestionsCount,
+            overallConfidence,
+            usingFallback
+          })
+        } else {
+          console.error('[AI] Failed to get suggestions:', result.message)
+
+          // Check if it's an API credit issue
+          let errorMessage = result.message || 'Failed to generate AI suggestions'
+          if (result.error && (
+            result.error.includes('credit balance is too low') ||
+            result.error.includes('insufficient credits') ||
+            result.error.includes('BadRequestError')
+          )) {
+            errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
+          }
+
+          setAiSuggestionsError(errorMessage)
+
+          // Track error telemetry
+          trackAIError({
+            layer: 'bronze',
+            errorMessage,
+            fallbackUsed: false
+          })
+        }
+      } catch (error) {
+        console.error('[AI] Exception fetching suggestions:', error)
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch AI suggestions'
+        setAiSuggestionsError(errorMessage)
+
+        trackAIError({
+          layer: 'bronze',
+          errorMessage,
+          fallbackUsed: false
+        })
+      } finally {
+        setIsLoadingAiSuggestions(false)
+      }
+    }
+    // For file sources
+    else if (isFileSource) {
+      const useTableName = tableName || formData._uploadedFile?.name || formData.name
+      const schema = formData._detectedSchema
+      const sampleData = formData._previewData
+
+      console.log('[AI] File Parameters:', {
+        tableName: useTableName,
+        schemaColumns: schema?.length || 0,
+        sampleRows: sampleData?.length || 0
       })
+
+      if (!useTableName || !schema || !sampleData || schema.length === 0 || sampleData.length === 0) {
+        console.log('[AI] Skipping AI suggestions - missing required file data:', {
+          hasTableName: !!useTableName,
+          hasSchema: !!(schema && schema.length > 0),
+          hasSampleData: !!(sampleData && sampleData.length > 0)
+        })
+        return
+      }
+
+      setIsLoadingAiSuggestions(true)
+      setAiSuggestionsError(null)
+
+      try {
+        const response = await fetch('/api/ai/config/bronze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceType: 'file',
+            tableName: useTableName,
+            schema: schema,
+            sampleData: sampleData
+          })
+        })
 
       console.log('[AI] Response status:', response.status)
       const result = await response.json()
@@ -431,22 +553,80 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     } finally {
       setIsLoadingAiSuggestions(false)
     }
-  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type])
+    }
+  }, [formData.type, formData.sourceConfig, formData._detectedSchema, formData._previewData, formData._uploadedFile, formData.name, selectedConnectionId])
+
+  // Auto-trigger AI suggestions when file data becomes available
+  React.useEffect(() => {
+    if (formData.type === 'file-based' && formData._detectedSchema && formData._previewData && formData._previewData.length > 0 && !aiSuggestions) {
+      console.log('[AI] File data detected, auto-triggering AI suggestions...')
+      fetchAiSuggestions()
+    }
+  }, [formData.type, formData._detectedSchema, formData._previewData, aiSuggestions, fetchAiSuggestions])
 
   // Fetch AI suggestions for Silver layer configuration
   const fetchSilverAiSuggestions = React.useCallback(async () => {
     console.log('[Silver AI] ===== fetchSilverAiSuggestions CALLED =====')
 
-    const useTableName = formData.sourceConfig.databaseConfig?.tableName
-    const useConnectionId = selectedConnectionId
-    const useDbType = formData.sourceConfig.type
+    // Determine if this is a database source or file/other source
+    const isDatabaseSource = formData.type === 'database'
+    const isFileSource = formData.type === 'file-based' || formData.type === 'api' || formData.type === 'nosql'
 
-    if (!useTableName || !useConnectionId || !useDbType) {
-      console.log('[Silver AI] Missing required data:', { useTableName, useConnectionId, useDbType })
+    console.log('[Silver AI] Source type check:', { type: formData.type, isDatabaseSource, isFileSource })
+
+    let requestBody: any = {}
+
+    if (isDatabaseSource) {
+      // Database source - use existing logic
+      const useTableName = formData.sourceConfig.databaseConfig?.tableName
+      const useConnectionId = selectedConnectionId
+      const useDbType = formData.sourceConfig.type
+
+      if (!useTableName || !useConnectionId || !useDbType) {
+        console.log('[Silver AI] Missing required database data:', { useTableName, useConnectionId, useDbType })
+        return
+      }
+
+      console.log('[Silver AI] Fetching suggestions for database:', { useTableName, useConnectionId, useDbType })
+
+      requestBody = {
+        dbType: useDbType,
+        connectionId: useConnectionId,
+        tableName: useTableName,
+        bronzeMetadata: formData._detectedMetadata || null
+      }
+    } else if (isFileSource) {
+      // File/Other source - use schema and sample data
+      const schema = formData._detectedSchema
+      const sampleData = formData._previewData
+      const sourceName = formData.sourceConfig.fileConfig?.filePath?.split(/[/\\]/).pop() || formData.name || 'unknown_source'
+
+      if (!schema || !sampleData || sampleData.length === 0) {
+        console.log('[Silver AI] Missing required file data:', {
+          hasSchema: !!schema,
+          sampleDataRows: sampleData?.length || 0
+        })
+        return
+      }
+
+      console.log('[Silver AI] Fetching suggestions for file source:', {
+        sourceType: formData.type,
+        sourceName,
+        schemaColumns: schema.length,
+        sampleRows: sampleData.length
+      })
+
+      requestBody = {
+        sourceType: formData.type,
+        tableName: sourceName,
+        schema: schema,
+        sampleData: sampleData,
+        bronzeMetadata: formData._detectedMetadata || null
+      }
+    } else {
+      console.log('[Silver AI] Unsupported source type:', formData.type)
       return
     }
-
-    console.log('[Silver AI] Fetching suggestions for:', { useTableName, useConnectionId, useDbType })
 
     setIsLoadingSilverAiSuggestions(true)
     setSilverAiSuggestionsError(null)
@@ -455,12 +635,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       const response = await fetch('/api/ai/config/silver', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dbType: useDbType,
-          connectionId: useConnectionId,
-          tableName: useTableName,
-          bronzeMetadata: formData._detectedMetadata || null
-        })
+        body: JSON.stringify(requestBody)
       })
 
       const result = await response.json()
@@ -494,22 +669,81 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     } finally {
       setIsLoadingSilverAiSuggestions(false)
     }
-  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type, formData._detectedMetadata])
+  }, [
+    formData.type,
+    formData.sourceConfig.databaseConfig?.tableName,
+    formData.sourceConfig.fileConfig?.filePath,
+    formData.name,
+    formData._detectedSchema,
+    formData._previewData,
+    formData._detectedMetadata,
+    selectedConnectionId
+  ])
 
   // Fetch Gold AI Suggestions
   const fetchGoldAiSuggestions = React.useCallback(async () => {
     console.log('[Gold AI] ===== fetchGoldAiSuggestions CALLED =====')
 
-    const useTableName = formData.sourceConfig.databaseConfig?.tableName
-    const useConnectionId = selectedConnectionId
-    const useDbType = formData.sourceConfig.type
+    // Determine if this is a database source or file/other source
+    const isDatabaseSource = formData.type === 'database'
+    const isFileSource = formData.type === 'file-based' || formData.type === 'api' || formData.type === 'nosql'
 
-    if (!useTableName || !useConnectionId || !useDbType) {
-      console.log('[Gold AI] Missing required data:', { useTableName, useConnectionId, useDbType })
+    console.log('[Gold AI] Source type check:', { type: formData.type, isDatabaseSource, isFileSource })
+
+    let requestBody: any = {}
+
+    if (isDatabaseSource) {
+      // Database source - use existing logic
+      const useTableName = formData.sourceConfig.databaseConfig?.tableName
+      const useConnectionId = selectedConnectionId
+      const useDbType = formData.sourceConfig.type
+
+      if (!useTableName || !useConnectionId || !useDbType) {
+        console.log('[Gold AI] Missing required database data:', { useTableName, useConnectionId, useDbType })
+        return
+      }
+
+      console.log('[Gold AI] Fetching suggestions for database:', { useTableName, useConnectionId, useDbType, businessContext: businessContext || 'not provided' })
+
+      requestBody = {
+        dbType: useDbType,
+        connectionId: useConnectionId,
+        tableName: useTableName,
+        businessContext: businessContext || null
+      }
+    } else if (isFileSource) {
+      // File/Other source - use schema and sample data
+      const schema = formData._detectedSchema
+      const sampleData = formData._previewData
+      const sourceName = formData.sourceConfig.fileConfig?.filePath?.split(/[/\\]/).pop() || formData.name || 'unknown_source'
+
+      if (!schema || !sampleData || sampleData.length === 0) {
+        console.log('[Gold AI] Missing required file data:', {
+          hasSchema: !!schema,
+          sampleDataRows: sampleData?.length || 0
+        })
+        return
+      }
+
+      console.log('[Gold AI] Fetching suggestions for file source:', {
+        sourceType: formData.type,
+        sourceName,
+        schemaColumns: schema.length,
+        sampleRows: sampleData.length,
+        businessContext: businessContext || 'not provided'
+      })
+
+      requestBody = {
+        sourceType: formData.type,
+        tableName: sourceName,
+        schema: schema,
+        sampleData: sampleData,
+        businessContext: businessContext || null
+      }
+    } else {
+      console.log('[Gold AI] Unsupported source type:', formData.type)
       return
     }
-
-    console.log('[Gold AI] Fetching suggestions for:', { useTableName, useConnectionId, useDbType, businessContext: businessContext || 'not provided' })
 
     setIsLoadingGoldAiSuggestions(true)
     setGoldAiSuggestionsError(null)
@@ -518,12 +752,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       const response = await fetch('/api/ai/config/gold', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dbType: useDbType,
-          connectionId: useConnectionId,
-          tableName: useTableName,
-          businessContext: businessContext || null
-        })
+        body: JSON.stringify(requestBody)
       })
 
       const result = await response.json()
@@ -557,7 +786,16 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     } finally {
       setIsLoadingGoldAiSuggestions(false)
     }
-  }, [selectedConnectionId, formData.sourceConfig.databaseConfig?.tableName, formData.sourceConfig.type, businessContext])
+  }, [
+    formData.type,
+    formData.sourceConfig.databaseConfig?.tableName,
+    formData.sourceConfig.fileConfig?.filePath,
+    formData.name,
+    formData._detectedSchema,
+    formData._previewData,
+    selectedConnectionId,
+    businessContext
+  ])
 
   // Apply AI suggestions to Bronze config
   const applyAiSuggestions = React.useCallback(() => {
@@ -1011,19 +1249,25 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 />
               </FormField>
 
-              <FormField>
-                <FormLabel>Execution Order</FormLabel>
-                <Input
-                  type="number"
-                  value={formData.order}
-                  onChange={(e) => updateFormData({ order: parseInt(e.target.value) || 1 })}
-                  min={1}
-                  className="w-32"
-                />
-                <p className="text-xs text-foreground-muted mt-1">
-                  Jobs execute sequentially based on this order (1, 2, 3...)
-                </p>
-              </FormField>
+              <details className="border border-border rounded-lg p-3 bg-background-secondary/30">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground flex items-center justify-between">
+                  Advanced Settings
+                  <span className="text-xs text-foreground-muted ml-2">(Execution order)</span>
+                </summary>
+                <div className="mt-3 space-y-2">
+                  <FormLabel>Execution Order</FormLabel>
+                  <Input
+                    type="number"
+                    value={formData.order}
+                    onChange={(e) => updateFormData({ order: parseInt(e.target.value) || 1 })}
+                    min={1}
+                    className="w-32"
+                  />
+                  <p className="text-xs text-foreground-muted">
+                    Default order is assigned automatically. Adjust only if you need this job to run before/after others.
+                  </p>
+                </div>
+              </details>
             </div>
 
             {/* Job Type Selection */}
@@ -1667,15 +1911,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               </div>
             </div>
 
-            {/* AI Suggestions Card - Only show for database jobs */}
-            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+            {/* AI Suggestions Card - Show for both database and file sources */}
+            {(() => {
+              // Check if we have analyzable data from any source type
+              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
+              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
+
+              if (!isDatabaseSource && !isFileSource) {
+                return null
+              }
+
               const hasSuggestions = !!(aiSuggestions && Object.keys(aiSuggestions).length > 0)
-              console.log('[Step2] Rendering AI card - hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions, 'suggestions:', aiSuggestions)
+              console.log('[Step2] Rendering AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions)
+
+              // Get source name for description
+              const sourceName = isDatabaseSource
+                ? formData.sourceConfig.databaseConfig?.tableName
+                : formData._uploadedFile?.name || formData.name
 
               return (
                 <AISuggestionCard
                   title="AI Data Architect Suggestions"
-                  description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}`}
+                  description={`Based on analyzing ${sourceName}`}
                   suggestions={aiSuggestions || {}}
                   loading={isLoadingAiSuggestions}
                   error={aiSuggestionsError}
@@ -1993,15 +2250,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               </div>
             </div>
 
-            {/* Silver AI Suggestions Card - Only show for database jobs */}
-            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+            {/* Silver AI Suggestions Card - Show for both database and file sources */}
+            {(() => {
+              // Check if we have analyzable data from any source type
+              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
+              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
+
+              if (!isDatabaseSource && !isFileSource) {
+                return null
+              }
+
               const hasSilverSuggestions = !!(silverAiSuggestions && Object.keys(silverAiSuggestions).length > 0)
-              console.log('[Step3] Rendering Silver AI card - hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions, 'suggestions:', silverAiSuggestions)
+              console.log('[Step3] Rendering Silver AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions)
+
+              // Get source name for description
+              const sourceName = isDatabaseSource
+                ? formData.sourceConfig.databaseConfig?.tableName
+                : formData._uploadedFile?.name || formData.name
 
               return (
                 <AISuggestionCard
                   title="AI Data Quality Architect Suggestions"
-                  description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}`}
+                  description={`Based on analyzing ${sourceName}`}
                   suggestions={silverAiSuggestions || {}}
                   loading={isLoadingSilverAiSuggestions}
                   error={silverAiSuggestionsError}
@@ -2513,10 +2783,23 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               </div>
             </div>
 
-            {/* Gold AI Suggestions Card - Only show for database jobs */}
-            {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (() => {
+            {/* Gold AI Suggestions Card - Show for both database and file sources */}
+            {(() => {
+              // Check if we have analyzable data from any source type
+              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
+              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
+
+              if (!isDatabaseSource && !isFileSource) {
+                return null
+              }
+
               const hasGoldSuggestions = !!(goldAiSuggestions && Object.keys(goldAiSuggestions).length > 0)
-              console.log('[Step4] Rendering Gold AI card - hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions, 'suggestions:', goldAiSuggestions)
+              console.log('[Step4] Rendering Gold AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions)
+
+              // Get source name for description
+              const sourceName = isDatabaseSource
+                ? formData.sourceConfig.databaseConfig?.tableName
+                : formData._uploadedFile?.name || formData.name
 
               return (
                 <div className="mb-4 space-y-3">
@@ -2553,7 +2836,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   {/* AI Suggestions Card */}
                   <AISuggestionCard
                     title="AI Analytics Architect Suggestions"
-                    description={`Based on analyzing ${formData.sourceConfig.databaseConfig.tableName}${businessContext ? ' with business context' : ''}`}
+                    description={`Based on analyzing ${sourceName}${businessContext ? ' with business context' : ''}`}
                     suggestions={goldAiSuggestions || {}}
                     loading={isLoadingGoldAiSuggestions}
                     error={goldAiSuggestionsError}

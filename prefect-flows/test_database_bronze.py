@@ -105,9 +105,14 @@ def test_full_ingestion():
     print("="*60)
 
     batch_id = f"test_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"testrun_{uuid.uuid4().hex[:8]}"
 
     result = ingest_from_database(
+        workflow_id='wf_test_demo',
         job_id='test_job_customers',
+        workflow_slug='test-workflow',
+        job_slug='test-customers',
+        run_id=run_id,
         source_config={
             'type': 'sql-server',
             'connection': {
@@ -157,9 +162,14 @@ def test_accounts_ingestion():
     print("="*60)
 
     batch_id = f"test_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"testrun_{uuid.uuid4().hex[:8]}"
 
     result = ingest_from_database(
+        workflow_id='wf_test_demo',
         job_id='test_job_accounts',
+        workflow_slug='test-workflow',
+        job_slug='test-accounts',
+        run_id=run_id,
         source_config={
             'type': 'sql-server',
             'connection': {
@@ -201,9 +211,14 @@ def test_incremental_load():
     # Use a past date as watermark to get some records
     watermark = '2024-01-01'
     batch_id = f"test_batch_incr_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"testrun_{uuid.uuid4().hex[:8]}"
 
     result = ingest_from_database(
+        workflow_id='wf_test_demo',
         job_id='test_job_customers_incr',
+        workflow_slug='test-workflow',
+        job_slug='test-customers-incr',
+        run_id=run_id,
         source_config={
             'type': 'sql-server',
             'connection': {

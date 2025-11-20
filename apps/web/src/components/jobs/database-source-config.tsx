@@ -48,6 +48,18 @@ const dbTypeLabels = {
   'oracle': 'Oracle'
 }
 
+function buildSampleMap(rows: any[] | null) {
+  const sampleMap: Record<string, any> = {}
+  rows?.forEach((row: Record<string, any>) => {
+    Object.entries(row).forEach(([key, value]) => {
+      if (sampleMap[key] === undefined && value !== null && value !== undefined && value !== '') {
+        sampleMap[key] = value
+      }
+    })
+  })
+  return sampleMap
+}
+
 export function DatabaseSourceConfig({
   dbType,
   connection,
@@ -243,6 +255,25 @@ export function DatabaseSourceConfig({
       }
 
       if (result.success) {
+        let previewData: any[] | null = result.preview || null
+        let resolvedRowCount: number | null = result.row_count || previewData?.length || null
+
+        // Fallback: fetch preview data if schema route did not return any
+        if ((!previewData || previewData.length === 0) && useSavedConnection && connectionId) {
+          try {
+            const previewResp = await fetch(`/api/database-connections/${connectionId}/tables/${tableName}?action=preview&limit=20`)
+            const previewJson = await previewResp.json()
+            if (previewJson.success) {
+              previewData = previewJson.rows || []
+              resolvedRowCount = previewJson.row_count || previewJson.total_rows || previewData.length || resolvedRowCount
+            }
+          } catch (previewError) {
+            console.error('[DatabaseSourceConfig] Failed to fetch preview data:', previewError)
+          }
+        }
+
+        const sampleMap = buildSampleMap(previewData)
+
         // Stage 4: Profiling (90-100%)
         setState(prev => ({
           ...prev,
@@ -258,11 +289,16 @@ export function DatabaseSourceConfig({
           rowCount: result.row_count
         })
 
-        const schema = (result.schema || []).map((col: any) => ({
-          // Support both normalized (name/type) and raw (column_name/data_type)
-          name: col.name ?? col.column_name,
-          type: col.type ?? col.data_type
-        }))
+        const schema = (result.schema || []).map((col: any) => {
+          const columnName = col.name ?? col.column_name ?? ''
+          const columnType = col.type ?? col.data_type
+          return {
+            ...col,
+            name: columnName,
+            type: columnType,
+            sample: col.sample ?? sampleMap[columnName]
+          }
+        })
 
         // Complete
         setTimeout(() => {
@@ -270,9 +306,9 @@ export function DatabaseSourceConfig({
             ...prev,
             isLoadingSchema: false,
             tableSchema: schema,
-            fullSchemaData: result.schema,
-            rowCount: result.row_count || null,
-            previewData: result.preview || null,
+            fullSchemaData: schema,
+            rowCount: resolvedRowCount || null,
+            previewData: previewData || null,
             schemaError: null,
             schemaProgressPercent: 100,
             schemaLoadingStep: 'complete'
@@ -283,12 +319,16 @@ export function DatabaseSourceConfig({
           console.log('[DatabaseSourceConfig] Metadata:', result.metadata)
           if (onSchemaDetected) {
             console.log('[DatabaseSourceConfig] onSchemaDetected callback exists, calling it now with tableName:', tableName)
-            onSchemaDetected(schema, tableName, {
+            onSchemaDetected(
+              schema.map(col => ({ name: col.name, type: col.type })),
+              tableName,
+              {
               temporal_columns: result.metadata?.temporal_columns || [],
               pk_candidates: result.metadata?.pk_candidates || [],
-              preview: result.preview || [],
-              rowCount: result.row_count
-            })
+              preview: previewData || [],
+              rowCount: resolvedRowCount || previewData?.length || undefined
+            }
+            )
           } else {
             console.log('[DatabaseSourceConfig] WARNING: onSchemaDetected callback is NULL!')
           }

@@ -22,8 +22,9 @@ export function getDatabase(): Database.Database {
     // Enable foreign keys
     db.pragma('foreign_keys = ON')
 
-    // Enable WAL mode for better concurrency
-    db.pragma('journal_mode = WAL')
+    // Allow overriding journal mode for compatibility with shared volumes
+    const journalMode = (process.env.SQLITE_JOURNAL_MODE || 'WAL').toUpperCase()
+    db.pragma(`journal_mode = ${journalMode}`)
 
     // Initialize schema
     db.exec(SCHEMA)

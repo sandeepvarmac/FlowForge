@@ -175,6 +175,37 @@ export async function DELETE(
       )
     }
 
+    // Remove job execution history tied to this job
+    db.prepare(`
+      DELETE FROM job_executions
+      WHERE job_id = ?
+    `).run(jobId)
+
+    // Clean up orphaned executions
+    db.prepare(`
+      DELETE FROM executions
+      WHERE workflow_id = ?
+        AND id NOT IN (SELECT DISTINCT execution_id FROM job_executions)
+    `).run(workflowId)
+
+    db.prepare(`
+      DELETE FROM executions
+      WHERE workflow_id = ?
+        AND id NOT IN (SELECT DISTINCT execution_id FROM job_executions)
+    `).run(workflowId)
+
+    // Remove quality rules and downstream quality data for this job
+    db.prepare(`
+      DELETE FROM dq_rules
+      WHERE job_id = ?
+    `).run(jobId)
+
+    // Remove metadata catalog entries tied to this job
+    db.prepare(`
+      DELETE FROM metadata_catalog
+      WHERE job_id = ?
+    `).run(jobId)
+
     // Delete job
     db.prepare(`
       DELETE FROM jobs
