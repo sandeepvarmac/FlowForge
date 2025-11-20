@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink, Upload, Workflow, Sparkles } from 'lucide-react';
+import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink, Upload, Workflow, Sparkles, Star, Clock } from 'lucide-react';
 import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { EnvironmentBadge } from '@/components/data-assets/EnvironmentBadge';
 import { QualityIndicator } from '@/components/data-assets/QualityIndicator';
@@ -36,6 +36,11 @@ export default function DataAssetsExplorerPage() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [showFilters, setShowFilters] = React.useState(true);
 
+  // Quick Access state
+  const [pinnedAssets, setPinnedAssets] = React.useState<string[]>([]);
+  const [recentAssets, setRecentAssets] = React.useState<string[]>([]);
+  const [showQuickAccess, setShowQuickAccess] = React.useState(true);
+
   // Source databases state
   const [sourceConnections, setSourceConnections] = React.useState<any[]>([]);
   const [selectedConnection, setSelectedConnection] = React.useState<any>(null);
@@ -55,6 +60,53 @@ export default function DataAssetsExplorerPage() {
 
   // Detail tab state
   const [activeTab, setActiveTab] = React.useState<DetailTab>('overview');
+
+  // Load preferences from localStorage on mount
+  React.useEffect(() => {
+    try {
+      const savedPinned = localStorage.getItem('flowforge-pinnedAssets');
+      const savedRecent = localStorage.getItem('flowforge-recentAssets');
+      const savedShowQuickAccess = localStorage.getItem('flowforge-showQuickAccess');
+
+      if (savedPinned) setPinnedAssets(JSON.parse(savedPinned));
+      if (savedRecent) setRecentAssets(JSON.parse(savedRecent));
+      if (savedShowQuickAccess) setShowQuickAccess(JSON.parse(savedShowQuickAccess));
+    } catch (error) {
+      console.error('Failed to load preferences from localStorage:', error);
+    }
+  }, []);
+
+  // Save preferences to localStorage
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('flowforge-pinnedAssets', JSON.stringify(pinnedAssets));
+      localStorage.setItem('flowforge-recentAssets', JSON.stringify(recentAssets));
+      localStorage.setItem('flowforge-showQuickAccess', JSON.stringify(showQuickAccess));
+    } catch (error) {
+      console.error('Failed to save preferences to localStorage:', error);
+    }
+  }, [pinnedAssets, recentAssets, showQuickAccess]);
+
+  // Track recently viewed assets
+  React.useEffect(() => {
+    if (selectedAsset) {
+      setRecentAssets(prev => {
+        const updated = [selectedAsset.id, ...prev.filter(id => id !== selectedAsset.id)];
+        return updated.slice(0, 10); // Keep only 10 most recent
+      });
+    }
+  }, [selectedAsset]);
+
+  // Pin/Unpin handlers
+  const togglePin = (assetId: string) => {
+    setPinnedAssets(prev =>
+      prev.includes(assetId)
+        ? prev.filter(id => id !== assetId)
+        : [...prev, assetId]
+    );
+  };
+
+  const isPinned = (assetId: string) => pinnedAssets.includes(assetId);
 
   // Load assets
   const loadAssets = React.useCallback(async () => {
@@ -406,6 +458,103 @@ export default function DataAssetsExplorerPage() {
           </div>
         )}
 
+        {/* Quick Access Sidebar */}
+        {showQuickAccess && (
+          <div className="w-60 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+            <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">Quick Access</h3>
+              <button
+                onClick={() => setShowQuickAccess(false)}
+                className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                title="Hide Quick Access"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* Pinned Assets */}
+              <div className="p-3 border-b border-gray-200">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase">Pinned</h4>
+                  <span className="text-xs text-gray-500">({pinnedAssets.length})</span>
+                </div>
+
+                {pinnedAssets.length > 0 ? (
+                  <div className="space-y-1">
+                    {pinnedAssets.map(assetId => {
+                      const asset = assets.find(a => a.id === assetId);
+                      if (!asset) return null;
+                      return (
+                        <button
+                          key={assetId}
+                          onClick={() => setSelectedAsset(asset)}
+                          className={`w-full text-left p-2 rounded hover:bg-gray-50 transition-colors ${
+                            selectedAsset?.id === assetId ? 'bg-primary-50 border border-primary-200' : ''
+                          }`}
+                        >
+                          <div className="text-xs font-medium text-gray-900 truncate">{asset.table_name}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <LayerBadge layer={asset.layer} size="xs" />
+                          </div>
+                        </button>
+                      );
+                    }).filter(Boolean)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 italic">No pinned assets</p>
+                )}
+              </div>
+
+              {/* Recent Assets */}
+              <div className="p-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Clock className="w-4 h-4 text-gray-500" />
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase">Recent</h4>
+                  <span className="text-xs text-gray-500">({recentAssets.length})</span>
+                </div>
+
+                {recentAssets.length > 0 ? (
+                  <div className="space-y-1">
+                    {recentAssets.map(assetId => {
+                      const asset = assets.find(a => a.id === assetId);
+                      if (!asset) return null;
+                      return (
+                        <button
+                          key={assetId}
+                          onClick={() => setSelectedAsset(asset)}
+                          className={`w-full text-left p-2 rounded hover:bg-gray-50 transition-colors ${
+                            selectedAsset?.id === assetId ? 'bg-primary-50 border border-primary-200' : ''
+                          }`}
+                        >
+                          <div className="text-xs font-medium text-gray-900 truncate">{asset.table_name}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <LayerBadge layer={asset.layer} size="xs" />
+                          </div>
+                        </button>
+                      );
+                    }).filter(Boolean)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 italic">No recent assets</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Show Quick Access Button (when hidden) */}
+        {!showQuickAccess && (
+          <button
+            onClick={() => setShowQuickAccess(true)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-r-lg p-2 shadow-sm hover:bg-gray-50 transition-colors z-10"
+            title="Show Quick Access"
+          >
+            <Star className="w-4 h-4 text-gray-600" />
+          </button>
+        )}
+
         {/* Middle Panel: Asset List */}
         <div className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col">
           <div className="p-4 bg-white border-b border-gray-200">
@@ -467,12 +616,29 @@ export default function DataAssetsExplorerPage() {
               </div>
             ) : (
               assets.map(asset => (
-                <AssetCard
-                  key={asset.id}
-                  asset={asset}
-                  isSelected={selectedAsset?.id === asset.id}
-                  onClick={() => setSelectedAsset(asset)}
-                />
+                <div key={asset.id} className="relative group">
+                  <AssetCard
+                    asset={asset}
+                    isSelected={selectedAsset?.id === asset.id}
+                    onClick={() => setSelectedAsset(asset)}
+                  />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      togglePin(asset.id);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded-full shadow-sm opacity-0 group-hover:opacity-100 hover:bg-gray-50 transition-all"
+                    title={isPinned(asset.id) ? 'Unpin from Quick Access' : 'Pin to Quick Access'}
+                  >
+                    <Star
+                      className={`w-4 h-4 ${
+                        isPinned(asset.id)
+                          ? 'text-yellow-500 fill-yellow-500'
+                          : 'text-gray-400'
+                      }`}
+                    />
+                  </button>
+                </div>
               ))
             )}
           </div>
