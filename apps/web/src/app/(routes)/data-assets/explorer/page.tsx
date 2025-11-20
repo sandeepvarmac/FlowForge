@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink, Upload, Workflow, Sparkles, Star, Clock } from 'lucide-react';
+import { Search, Filter, X, Database, Table, FileText, Download, Edit, Copy, ExternalLink, Upload, Workflow, Sparkles, Star, Clock, Grid, List as ListIcon, LayoutList } from 'lucide-react';
 import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { EnvironmentBadge } from '@/components/data-assets/EnvironmentBadge';
 import { QualityIndicator } from '@/components/data-assets/QualityIndicator';
@@ -21,6 +21,8 @@ type Environment = 'dev' | 'qa' | 'uat' | 'prod';
 type QualityStatus = 'healthy' | 'issues' | 'no-rules';
 type DetailTab = 'overview' | 'schema' | 'sample' | 'quality' | 'lineage' | 'jobs';
 type ViewMode = 'processed' | 'sources';
+type ViewDensity = 'comfortable' | 'compact';
+type ListViewType = 'workflow' | 'list';
 
 export default function DataAssetsExplorerPage() {
   const router = useRouter();
@@ -40,6 +42,10 @@ export default function DataAssetsExplorerPage() {
   const [pinnedAssets, setPinnedAssets] = React.useState<string[]>([]);
   const [recentAssets, setRecentAssets] = React.useState<string[]>([]);
   const [showQuickAccess, setShowQuickAccess] = React.useState(true);
+
+  // View preferences state
+  const [viewDensity, setViewDensity] = React.useState<ViewDensity>('comfortable');
+  const [listViewType, setListViewType] = React.useState<ListViewType>('list');
 
   // Source databases state
   const [sourceConnections, setSourceConnections] = React.useState<any[]>([]);
@@ -67,10 +73,14 @@ export default function DataAssetsExplorerPage() {
       const savedPinned = localStorage.getItem('flowforge-pinnedAssets');
       const savedRecent = localStorage.getItem('flowforge-recentAssets');
       const savedShowQuickAccess = localStorage.getItem('flowforge-showQuickAccess');
+      const savedViewDensity = localStorage.getItem('flowforge-viewDensity');
+      const savedListViewType = localStorage.getItem('flowforge-listViewType');
 
       if (savedPinned) setPinnedAssets(JSON.parse(savedPinned));
       if (savedRecent) setRecentAssets(JSON.parse(savedRecent));
       if (savedShowQuickAccess) setShowQuickAccess(JSON.parse(savedShowQuickAccess));
+      if (savedViewDensity) setViewDensity(savedViewDensity as ViewDensity);
+      if (savedListViewType) setListViewType(savedListViewType as ListViewType);
     } catch (error) {
       console.error('Failed to load preferences from localStorage:', error);
     }
@@ -82,10 +92,12 @@ export default function DataAssetsExplorerPage() {
       localStorage.setItem('flowforge-pinnedAssets', JSON.stringify(pinnedAssets));
       localStorage.setItem('flowforge-recentAssets', JSON.stringify(recentAssets));
       localStorage.setItem('flowforge-showQuickAccess', JSON.stringify(showQuickAccess));
+      localStorage.setItem('flowforge-viewDensity', viewDensity);
+      localStorage.setItem('flowforge-listViewType', listViewType);
     } catch (error) {
       console.error('Failed to save preferences to localStorage:', error);
     }
-  }, [pinnedAssets, recentAssets, showQuickAccess]);
+  }, [pinnedAssets, recentAssets, showQuickAccess, viewDensity, listViewType]);
 
   // Track recently viewed assets
   React.useEffect(() => {
@@ -558,8 +570,65 @@ export default function DataAssetsExplorerPage() {
         {/* Middle Panel: Asset List */}
         <div className="w-96 bg-gray-50 border-r border-gray-200 flex flex-col">
           <div className="p-4 bg-white border-b border-gray-200">
-            <div className="text-sm text-gray-600">
-              <span className="font-medium text-gray-900">{assets.length}</span> assets
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm text-gray-600">
+                <span className="font-medium text-gray-900">{assets.length}</span> assets
+              </div>
+
+              {/* View Controls */}
+              <div className="flex items-center gap-2">
+                {/* List View Type Toggle */}
+                <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setListViewType('workflow')}
+                    className={`p-1.5 rounded transition-colors ${
+                      listViewType === 'workflow'
+                        ? 'bg-white text-primary-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Group by Workflow"
+                  >
+                    <LayoutList className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setListViewType('list')}
+                    className={`p-1.5 rounded transition-colors ${
+                      listViewType === 'list'
+                        ? 'bg-white text-primary-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Flat List"
+                  >
+                    <ListIcon className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* View Density Toggle */}
+                <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewDensity('comfortable')}
+                    className={`p-1.5 rounded transition-colors ${
+                      viewDensity === 'comfortable'
+                        ? 'bg-white text-primary-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Comfortable"
+                  >
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewDensity('compact')}
+                    className={`p-1.5 rounded transition-colors ${
+                      viewDensity === 'compact'
+                        ? 'bg-white text-primary-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                    title="Compact"
+                  >
+                    <ListIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
