@@ -39,7 +39,7 @@ export async function GET(
     // Execute Python script to read Parquet sample
     // Use Python module syntax: python -m utils.parquet_sample
     const prefectFlowsDir = path.join(process.cwd(), '..', '..', 'prefect-flows')
-    const pythonExecutable = path.join(prefectFlowsDir, 'venv', 'Scripts', 'python.exe')
+    const pythonExecutable = path.join(prefectFlowsDir, '.venv', 'Scripts', 'python.exe')
 
     const result = await executePythonModule(
       pythonExecutable,
