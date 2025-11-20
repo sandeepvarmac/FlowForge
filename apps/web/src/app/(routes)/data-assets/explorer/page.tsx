@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * Data Assets Explorer - Microsoft Purview-Inspired Design
- * Clean, full-width layout with prominent search and card-based browsing
+ * Data Assets Explorer - Microsoft Purview-Inspired Design with Hierarchical Navigation
+ * Left Sidebar: Workflow tree navigation (collapsible)
+ * Main Panel: Asset cards with pagination
  */
 
 import React from 'react';
-import { Search, ChevronRight, Database, Layers, CheckCircle2, AlertCircle, Clock, ArrowLeft, Table, FileText, TrendingUp, GitBranch, Briefcase } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, Database, Layers, CheckCircle2, AlertCircle, Clock, ArrowLeft, Table, FileText, TrendingUp, GitBranch, Briefcase, FolderTree, Workflow } from 'lucide-react';
 import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
@@ -25,15 +26,22 @@ export default function DataAssetsExplorerPage() {
   const [selectedAsset, setSelectedAsset] = React.useState<any>(null);
   const [activeTab, setActiveTab] = React.useState<DetailTab>('overview');
 
+  // New: Workflow/Job selection state
+  const [selectedWorkflowId, setSelectedWorkflowId] = React.useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = React.useState<string | null>(null);
+  const [expandedWorkflows, setExpandedWorkflows] = React.useState<Set<string>>(new Set());
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const ITEMS_PER_PAGE = 30;
+
   // Data state
-  const [assets, setAssets] = React.useState<any[]>([]);
-  const [workflows, setWorkflows] = React.useState<any[]>([]);
-  const [stats, setStats] = React.useState<any>(null);
+  const [workflowGroups, setWorkflowGroups] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [assetDetails, setAssetDetails] = React.useState<any>(null);
 
-  // Load assets
-  const loadAssets = React.useCallback(async () => {
+  // Load workflow groups
+  const loadData = React.useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -43,22 +51,31 @@ export default function DataAssetsExplorerPage() {
         params.set('layers', selectedLayer);
       }
 
+      if (searchQuery) {
+        params.set('search', searchQuery);
+      }
+
       const response = await fetch(`/api/data-assets/list?${params}`);
       const data = await response.json();
 
-      setAssets(data.assets || []);
-      setWorkflows(data.workflows || []);
-      setStats(data.stats || null);
+      setWorkflowGroups(data.workflowGroups || []);
+
+      // Auto-select first workflow if none selected
+      if (!selectedWorkflowId && data.workflowGroups?.length > 0) {
+        setSelectedWorkflowId(data.workflowGroups[0].workflowId);
+        // Auto-expand first workflow
+        setExpandedWorkflows(new Set([data.workflowGroups[0].workflowId]));
+      }
     } catch (error) {
-      console.error('Failed to load assets:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
-  }, [selectedEnvironment, selectedLayer]);
+  }, [selectedEnvironment, selectedLayer, searchQuery, selectedWorkflowId]);
 
   React.useEffect(() => {
-    loadAssets();
-  }, [loadAssets]);
+    loadData();
+  }, [loadData]);
 
   // Load asset details when selected
   React.useEffect(() => {
@@ -80,25 +97,47 @@ export default function DataAssetsExplorerPage() {
     loadDetails();
   }, [selectedAsset]);
 
-  // Filter assets by search
-  const filteredAssets = React.useMemo(() => {
-    if (!searchQuery) return assets;
+  // Get assets to display based on selection
+  const displayAssets = React.useMemo(() => {
+    if (!selectedWorkflowId) return [];
 
-    const query = searchQuery.toLowerCase();
-    return assets.filter(asset =>
-      asset.table_name.toLowerCase().includes(query) ||
-      asset.description?.toLowerCase().includes(query)
-    );
-  }, [assets, searchQuery]);
+    const workflow = workflowGroups.find(w => w.workflowId === selectedWorkflowId);
+    if (!workflow) return [];
 
-  // Calculate layer stats
-  const layerStats = React.useMemo(() => {
-    const bronze = assets.filter(a => a.layer === 'bronze').length;
-    const silver = assets.filter(a => a.layer === 'silver').length;
-    const gold = assets.filter(a => a.layer === 'gold').length;
+    // If specific job selected, show only that job's datasets
+    if (selectedJobId) {
+      const job = workflow.jobs.find((j: any) => j.jobId === selectedJobId);
+      return job?.datasets || [];
+    }
 
-    return { bronze, silver, gold, total: assets.length };
-  }, [assets]);
+    // Otherwise show all datasets from all jobs in workflow
+    return workflow.jobs.flatMap((job: any) => job.datasets);
+  }, [workflowGroups, selectedWorkflowId, selectedJobId]);
+
+  // Paginated assets
+  const paginatedAssets = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return displayAssets.slice(startIndex, endIndex);
+  }, [displayAssets, currentPage]);
+
+  const totalPages = Math.ceil(displayAssets.length / ITEMS_PER_PAGE);
+
+  // Reset to page 1 when selection changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedWorkflowId, selectedJobId]);
+
+  // Helper: Toggle workflow expansion
+  const toggleWorkflow = (workflowId: string) => {
+    const newExpanded = new Set(expandedWorkflows);
+    if (newExpanded.has(workflowId)) {
+      newExpanded.delete(workflowId);
+    } else {
+      newExpanded.add(workflowId);
+    }
+    setExpandedWorkflows(newExpanded);
+  };
 
   // If asset is selected, show detail view
   if (selectedAsset) {
@@ -175,27 +214,15 @@ export default function DataAssetsExplorerPage() {
     );
   }
 
-  // Browse view
+  // Browse view with Sidebar + Main Panel
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header with Search */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-4">Data Assets</h1>
+      {/* Top Header with Search & Filters */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-semibold text-gray-900">Data Assets Explorer</h1>
 
-          {/* Search Bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search data assets by name or description..."
-              className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            />
-          </div>
-
-          {/* Filters */}
+          {/* Environment & Layer Filters */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">Environment:</label>
@@ -226,139 +253,203 @@ export default function DataAssetsExplorerPage() {
             </div>
           </div>
         </div>
+
+        {/* Global Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search workflows, jobs, or data assets..."
+            className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-7xl mx-auto">
-          {/* Layer Statistics Cards */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <div
-              onClick={() => setSelectedLayer('all')}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${
-                selectedLayer === 'all'
-                  ? 'border-primary-500 shadow-sm'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <Layers className="w-5 h-5 text-gray-600" />
-                <span className="text-2xl font-bold text-gray-900">{layerStats.total}</span>
-              </div>
-              <div className="text-sm font-medium text-gray-600">All Assets</div>
+      {/* Main Content Area: Sidebar + Assets Panel */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar: Workflow Tree Navigation */}
+        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+              <FolderTree className="w-4 h-4" />
+              Workflows & Jobs
             </div>
+          </div>
 
-            <div
-              onClick={() => setSelectedLayer('bronze')}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${
-                selectedLayer === 'bronze'
-                  ? 'border-orange-500 shadow-sm'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-5 h-5 rounded bg-orange-500" />
-                <span className="text-2xl font-bold text-gray-900">{layerStats.bronze}</span>
-              </div>
-              <div className="text-sm font-medium text-gray-600">Bronze Layer</div>
-            </div>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 text-center text-gray-500 text-sm">Loading workflows...</div>
+            ) : workflowGroups.length === 0 ? (
+              <div className="p-4 text-center text-gray-500 text-sm">No workflows found</div>
+            ) : (
+              <div className="py-2">
+                {workflowGroups.map((workflow) => (
+                  <div key={workflow.workflowId} className="mb-1">
+                    {/* Workflow Header */}
+                    <button
+                      onClick={() => {
+                        toggleWorkflow(workflow.workflowId);
+                        setSelectedWorkflowId(workflow.workflowId);
+                        setSelectedJobId(null);
+                      }}
+                      className={`w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${
+                        selectedWorkflowId === workflow.workflowId && !selectedJobId
+                          ? 'bg-primary-50 border-l-4 border-primary-600'
+                          : ''
+                      }`}
+                    >
+                      {expandedWorkflows.has(workflow.workflowId) ? (
+                        <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                      )}
+                      <Workflow className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                      <div className="flex-1 text-left">
+                        <div className="text-sm font-medium text-gray-900 truncate">{workflow.workflowName}</div>
+                        <div className="text-xs text-gray-500">
+                          {workflow.jobCount} jobs · {workflow.datasetCount} datasets
+                        </div>
+                      </div>
+                    </button>
 
-            <div
-              onClick={() => setSelectedLayer('silver')}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${
-                selectedLayer === 'silver'
-                  ? 'border-blue-500 shadow-sm'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-5 h-5 rounded bg-blue-500" />
-                <span className="text-2xl font-bold text-gray-900">{layerStats.silver}</span>
+                    {/* Jobs List (when expanded) */}
+                    {expandedWorkflows.has(workflow.workflowId) && (
+                      <div className="bg-gray-50">
+                        {workflow.jobs.map((job: any) => (
+                          <button
+                            key={job.jobId}
+                            onClick={() => {
+                              setSelectedWorkflowId(workflow.workflowId);
+                              setSelectedJobId(job.jobId);
+                            }}
+                            className={`w-full pl-12 pr-4 py-2 flex items-center gap-2 hover:bg-gray-100 transition-colors ${
+                              selectedJobId === job.jobId
+                                ? 'bg-primary-100 border-l-4 border-primary-600'
+                                : ''
+                            }`}
+                          >
+                            <Database className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                            <div className="flex-1 text-left">
+                              <div className="text-sm text-gray-900 truncate">{job.jobName}</div>
+                              <div className="text-xs text-gray-500">{job.datasets.length} datasets</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="text-sm font-medium text-gray-600">Silver Layer</div>
-            </div>
+            )}
+          </div>
+        </div>
 
-            <div
-              onClick={() => setSelectedLayer('gold')}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${
-                selectedLayer === 'gold'
-                  ? 'border-yellow-500 shadow-sm'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-5 h-5 rounded bg-yellow-500" />
-                <span className="text-2xl font-bold text-gray-900">{layerStats.gold}</span>
-              </div>
-              <div className="text-sm font-medium text-gray-600">Gold Layer</div>
+        {/* Main Panel: Asset Cards with Pagination */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Panel Header */}
+          <div className="px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {selectedJobId
+                  ? workflowGroups
+                      .find(w => w.workflowId === selectedWorkflowId)
+                      ?.jobs.find((j: any) => j.jobId === selectedJobId)?.jobName
+                  : workflowGroups.find(w => w.workflowId === selectedWorkflowId)?.workflowName || 'All Assets'}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {displayAssets.length} asset{displayAssets.length !== 1 ? 's' : ''} found
+                {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
+              </p>
             </div>
           </div>
 
           {/* Assets Grid */}
-          {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading assets...</div>
-          ) : filteredAssets.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-              <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-gray-600">No assets found</p>
-              {searchQuery && (
+          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-gray-500">Loading assets...</div>
+              </div>
+            ) : displayAssets.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center py-12 bg-white rounded-lg border border-gray-200 px-8">
+                  <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-600">No assets found</p>
+                  <p className="text-sm text-gray-500 mt-2">Try selecting a different workflow or adjusting filters</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {paginatedAssets.map(asset => (
+                  <button
+                    key={asset.id}
+                    onClick={() => setSelectedAsset(asset)}
+                    className="bg-white rounded-lg border border-gray-200 p-4 hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Database className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                        <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                          {asset.table_name}
+                        </h3>
+                      </div>
+                      <LayerBadge layer={asset.layer} size="sm" />
+                    </div>
+
+                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Table className="w-3.5 h-3.5" />
+                        <span>{asset.row_count?.toLocaleString() || 0} rows</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}</span>
+                      </div>
+                    </div>
+
+                    {asset.quality_score !== undefined && (
+                      <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
+                        {asset.quality_score >= 90 ? (
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        ) : asset.quality_score >= 70 ? (
+                          <AlertCircle className="w-4 h-4 text-yellow-600" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                        )}
+                        <span className="text-xs font-medium text-gray-600">
+                          Quality: {asset.quality_score}%
+                        </span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, displayAssets.length)} of {displayAssets.length} assets
+              </div>
+              <div className="flex gap-2">
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="mt-2 text-sm text-primary-600 hover:text-primary-700"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Clear search
+                  Previous
                 </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredAssets.map(asset => (
                 <button
-                  key={asset.id}
-                  onClick={() => setSelectedAsset(asset)}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Database className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
-                      <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                        {asset.table_name}
-                      </h3>
-                    </div>
-                    <LayerBadge layer={asset.layer} size="sm" />
-                  </div>
-
-                  {asset.description && (
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">{asset.description}</p>
-                  )}
-
-                  <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <Table className="w-3.5 h-3.5" />
-                      <span>{asset.row_count?.toLocaleString() || 0} rows</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}</span>
-                    </div>
-                  </div>
-
-                  {asset.quality_score !== undefined && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-2">
-                      {asset.quality_score >= 90 ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      ) : asset.quality_score >= 70 ? (
-                        <AlertCircle className="w-4 h-4 text-yellow-600" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 text-red-600" />
-                      )}
-                      <span className="text-xs font-medium text-gray-600">
-                        Quality: {asset.quality_score}%
-                      </span>
-                    </div>
-                  )}
+                  Next
                 </button>
-              ))}
+              </div>
             </div>
           )}
         </div>
