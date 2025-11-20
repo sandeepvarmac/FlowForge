@@ -139,41 +139,155 @@ export default function DataAssetsExplorerPage() {
     setExpandedWorkflows(newExpanded);
   };
 
-  // If asset is selected, show detail view
+  // Render sidebar (always visible)
+  const renderSidebar = () => (
+    <div className="w-80 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+          <FolderTree className="w-4 h-4" />
+          Workflows & Jobs
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="p-4 text-center text-gray-500 text-sm">Loading workflows...</div>
+        ) : workflowGroups.length === 0 ? (
+          <div className="p-4 text-center text-gray-500 text-sm">No workflows found</div>
+        ) : (
+          <div className="py-2">
+            {workflowGroups.map((workflow) => (
+              <div key={workflow.workflowId} className="mb-1">
+                {/* Workflow Header */}
+                <button
+                  onClick={() => {
+                    toggleWorkflow(workflow.workflowId);
+                    setSelectedWorkflowId(workflow.workflowId);
+                    setSelectedJobId(null);
+                    setSelectedAsset(null); // Clear selection when switching workflows
+                  }}
+                  className={`w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${
+                    selectedWorkflowId === workflow.workflowId && !selectedJobId
+                      ? 'bg-primary-50 border-l-4 border-primary-600'
+                      : ''
+                  }`}
+                >
+                  {expandedWorkflows.has(workflow.workflowId) ? (
+                    <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                  )}
+                  <Workflow className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                  <div className="flex-1 text-left">
+                    <div className="text-sm font-medium text-gray-900 truncate">{workflow.workflowName}</div>
+                    <div className="text-xs text-gray-500">
+                      {workflow.jobCount} jobs · {workflow.datasetCount} datasets
+                    </div>
+                  </div>
+                </button>
+
+                {/* Jobs List (when expanded) */}
+                {expandedWorkflows.has(workflow.workflowId) && (
+                  <div className="bg-gray-50">
+                    {workflow.jobs.map((job: any) => (
+                      <button
+                        key={job.jobId}
+                        onClick={() => {
+                          setSelectedWorkflowId(workflow.workflowId);
+                          setSelectedJobId(job.jobId);
+                          setSelectedAsset(null); // Clear selection when switching jobs
+                        }}
+                        className={`w-full pl-12 pr-4 py-2 flex items-center gap-2 hover:bg-gray-100 transition-colors ${
+                          selectedJobId === job.jobId
+                            ? 'bg-primary-100 border-l-4 border-primary-600'
+                            : ''
+                        }`}
+                      >
+                        <Database className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                        <div className="flex-1 text-left">
+                          <div className="text-sm text-gray-900 truncate">{job.jobName}</div>
+                          <div className="text-xs text-gray-500">{job.datasets.length} datasets</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // If asset is selected, show detail view WITH sidebar
   if (selectedAsset) {
     return (
       <div className="h-screen flex flex-col bg-gray-50">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSelectedAsset(null)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h1>
-                <LayerBadge layer={selectedAsset.layer} />
+        {/* Top Header with Search & Filters */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSelectedAsset(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Back to asset list"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h1>
+                  <LayerBadge layer={selectedAsset.layer} />
+                </div>
+                <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                  <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
+                  <span>•</span>
+                  <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
+                  {selectedAsset.file_size && (
+                    <>
+                      <span>•</span>
+                      <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
-                <span>•</span>
-                <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
-                {selectedAsset.file_size && (
-                  <>
-                    <span>•</span>
-                    <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
-                  </>
-                )}
+            </div>
+
+            {/* Keep filters visible in detail view */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Environment:</label>
+                <select
+                  value={selectedEnvironment}
+                  onChange={(e) => setSelectedEnvironment(e.target.value as Environment)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="prod">Production</option>
+                  <option value="uat">UAT</option>
+                  <option value="qa">QA</option>
+                  <option value="dev">Development</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Layer:</label>
+                <select
+                  value={selectedLayer}
+                  onChange={(e) => setSelectedLayer(e.target.value as Layer | 'all')}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="all">All Layers</option>
+                  <option value="bronze">Bronze</option>
+                  <option value="silver">Silver</option>
+                  <option value="gold">Gold</option>
+                </select>
               </div>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-1 mt-4">
+          <div className="flex items-center gap-1">
             {[
               { id: 'overview', label: 'Overview', icon: Database },
               { id: 'schema', label: 'Schema', icon: Table },
@@ -201,14 +315,20 @@ export default function DataAssetsExplorerPage() {
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
-          {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
-          {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
-          {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
-          {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
-          {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+        {/* Main Content: Sidebar + Detail Panel */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar - Same as browse view */}
+          {renderSidebar()}
+
+          {/* Detail Panel */}
+          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+            {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
+            {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
+            {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
+            {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
+            {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
+            {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+          </div>
         </div>
       </div>
     );
@@ -269,82 +389,8 @@ export default function DataAssetsExplorerPage() {
 
       {/* Main Content Area: Sidebar + Assets Panel */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Workflow Tree Navigation */}
-        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <FolderTree className="w-4 h-4" />
-              Workflows & Jobs
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="p-4 text-center text-gray-500 text-sm">Loading workflows...</div>
-            ) : workflowGroups.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 text-sm">No workflows found</div>
-            ) : (
-              <div className="py-2">
-                {workflowGroups.map((workflow) => (
-                  <div key={workflow.workflowId} className="mb-1">
-                    {/* Workflow Header */}
-                    <button
-                      onClick={() => {
-                        toggleWorkflow(workflow.workflowId);
-                        setSelectedWorkflowId(workflow.workflowId);
-                        setSelectedJobId(null);
-                      }}
-                      className={`w-full px-4 py-2 flex items-center gap-2 hover:bg-gray-50 transition-colors ${
-                        selectedWorkflowId === workflow.workflowId && !selectedJobId
-                          ? 'bg-primary-50 border-l-4 border-primary-600'
-                          : ''
-                      }`}
-                    >
-                      {expandedWorkflows.has(workflow.workflowId) ? (
-                        <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
-                      )}
-                      <Workflow className="w-4 h-4 text-primary-600 flex-shrink-0" />
-                      <div className="flex-1 text-left">
-                        <div className="text-sm font-medium text-gray-900 truncate">{workflow.workflowName}</div>
-                        <div className="text-xs text-gray-500">
-                          {workflow.jobCount} jobs · {workflow.datasetCount} datasets
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Jobs List (when expanded) */}
-                    {expandedWorkflows.has(workflow.workflowId) && (
-                      <div className="bg-gray-50">
-                        {workflow.jobs.map((job: any) => (
-                          <button
-                            key={job.jobId}
-                            onClick={() => {
-                              setSelectedWorkflowId(workflow.workflowId);
-                              setSelectedJobId(job.jobId);
-                            }}
-                            className={`w-full pl-12 pr-4 py-2 flex items-center gap-2 hover:bg-gray-100 transition-colors ${
-                              selectedJobId === job.jobId
-                                ? 'bg-primary-100 border-l-4 border-primary-600'
-                                : ''
-                            }`}
-                          >
-                            <Database className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                            <div className="flex-1 text-left">
-                              <div className="text-sm text-gray-900 truncate">{job.jobName}</div>
-                              <div className="text-xs text-gray-500">{job.datasets.length} datasets</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Left Sidebar - Reuse same component */}
+        {renderSidebar()}
 
         {/* Main Panel: Asset Cards with Pagination */}
         <div className="flex-1 flex flex-col overflow-hidden">
