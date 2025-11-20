@@ -231,6 +231,78 @@ export default function DataAssetsExplorerPage() {
             />
           </div>
         )}
+
+        {/* Active Filter Chips */}
+        {viewMode === 'processed' && (selectedLayers.length > 0 || selectedWorkflows.length > 0 || selectedQualityStatus.length > 0 || searchQuery) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-gray-600">Active Filters:</span>
+
+            {/* Layer Chips */}
+            {selectedLayers.map(layer => (
+              <button
+                key={layer}
+                onClick={() => toggleLayer(layer)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-primary-50 border border-primary-200 text-primary-700 rounded-full text-xs font-medium hover:bg-primary-100 transition-colors"
+              >
+                <span className="capitalize">{layer}</span>
+                <X className="w-3 h-3" />
+              </button>
+            ))}
+
+            {/* Workflow Chips */}
+            {selectedWorkflows.map(workflowId => {
+              const workflow = workflows.find(w => w.id === workflowId);
+              return (
+                <button
+                  key={workflowId}
+                  onClick={() => toggleWorkflow(workflowId)}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-medium hover:bg-blue-100 transition-colors"
+                >
+                  <span className="max-w-[150px] truncate">{workflow?.name || workflowId}</span>
+                  <X className="w-3 h-3" />
+                </button>
+              );
+            })}
+
+            {/* Quality Status Chips */}
+            {selectedQualityStatus.map(status => (
+              <button
+                key={status}
+                onClick={() => toggleQualityStatus(status)}
+                className={`flex items-center gap-1.5 px-3 py-1 border rounded-full text-xs font-medium hover:opacity-80 transition-opacity ${
+                  status === 'healthy'
+                    ? 'bg-green-50 border-green-200 text-green-700'
+                    : status === 'issues'
+                    ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-700'
+                }`}
+              >
+                <span className="capitalize">{status.replace('-', ' ')}</span>
+                <X className="w-3 h-3" />
+              </button>
+            ))}
+
+            {/* Search Query Chip */}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="flex items-center gap-1.5 px-3 py-1 bg-purple-50 border border-purple-200 text-purple-700 rounded-full text-xs font-medium hover:bg-purple-100 transition-colors"
+              >
+                <Search className="w-3 h-3" />
+                <span className="max-w-[150px] truncate">"{searchQuery}"</span>
+                <X className="w-3 h-3" />
+              </button>
+            )}
+
+            {/* Clear All Button */}
+            <button
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 px-3 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              Clear All
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content - Conditional based on view mode */}
