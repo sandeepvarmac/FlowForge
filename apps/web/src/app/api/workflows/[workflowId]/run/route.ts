@@ -214,7 +214,7 @@ export async function POST(
           const { spawn } = require('child_process')
           const path = require('path')
           const prefectFlowsDir = path.join(process.cwd(), '..', '..', 'prefect-flows')
-          const pythonExecutable = path.join(prefectFlowsDir, 'venv', 'Scripts', 'python.exe')
+          const pythonExecutable = path.join(prefectFlowsDir, '.venv', 'Scripts', 'python.exe')
 
           // Use Python script to find matching files
           const s3Prefix = `landing/${workflowId}/${job.id}/`
