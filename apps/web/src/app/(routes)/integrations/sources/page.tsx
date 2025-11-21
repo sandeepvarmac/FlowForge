@@ -228,7 +228,7 @@ export default function SourcesPage() {
             className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            New Database Connection
+            {activeCategory === 'all' ? 'New Source Connection' : 'New Database Connection'}
           </Button>
         )}
       </div>
@@ -270,9 +270,13 @@ export default function SourcesPage() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-foreground">Database Connections</h2>
+              <h2 className="text-xl font-semibold text-foreground">
+                {activeCategory === 'all' ? 'Data Source Connections' : 'Database Connections'}
+              </h2>
               <p className="text-sm text-foreground-muted mt-0.5">
-                SQL Server, PostgreSQL, MySQL, and Oracle databases
+                {activeCategory === 'all'
+                  ? 'Connect to databases and other data sources to ingest data into FlowForge'
+                  : 'SQL Server, PostgreSQL, MySQL, and Oracle databases'}
               </p>
             </div>
             <Badge variant="success" className="text-xs">Available Now</Badge>
@@ -290,13 +294,17 @@ export default function SourcesPage() {
         <Card className="border-2 border-dashed">
           <CardContent className="p-12 text-center">
             <Database className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">No Database Connections</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">
+              {activeCategory === 'all' ? 'No Data Source Connections' : 'No Database Connections'}
+            </h2>
             <p className="text-foreground-muted mb-6 max-w-md mx-auto">
-              Create your first database connection to start ingesting data from SQL Server, PostgreSQL, MySQL, or Oracle databases.
+              {activeCategory === 'all'
+                ? 'Create your first connection to start ingesting data from databases and other sources into FlowForge.'
+                : 'Create your first database connection to start ingesting data from SQL Server, PostgreSQL, MySQL, or Oracle databases.'}
             </p>
             <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              Create Your First Connection
+              {activeCategory === 'all' ? 'Create Connection' : 'Create Your First Connection'}
             </Button>
           </CardContent>
         </Card>
