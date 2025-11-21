@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui'
 import {
   Database, Plus, CheckCircle, XCircle, Loader2, Trash2, RefreshCw,
   Cloud, FileText, Globe, Code, Mail, ShoppingCart, MessageSquare,
-  Calendar, Zap, FolderOpen, HardDrive, Pencil
+  Calendar, Zap, FolderOpen, HardDrive, Pencil, Eye
 } from 'lucide-react'
 import { DatabaseConnection } from '@/types/database-connection'
 import { CreateConnectionModal } from '@/components/database'
@@ -90,6 +91,7 @@ const comingSoonIntegrations = {
 }
 
 export default function SourcesPage() {
+  const router = useRouter()
   const { toasts, dismissToast, success, error: showError } = useToast()
   const [activeCategory, setActiveCategory] = useState('all')
   const [connections, setConnections] = useState<DatabaseConnection[]>([])
@@ -365,6 +367,16 @@ export default function SourcesPage() {
                     </div>
                   )}
 
+                  {/* Primary Action: Explore Source */}
+                  <Button
+                    className="w-full flex items-center justify-center gap-2"
+                    onClick={() => router.push(`/integrations/sources/${connection.id}/explore`)}
+                  >
+                    <Eye className="w-4 h-4" />
+                    Explore Source
+                  </Button>
+
+                  {/* Secondary Actions */}
                   <div className="flex gap-2 pt-2">
                     <Button
                       variant="outline"
