@@ -71,10 +71,11 @@ class AIQualityProfiler:
             col_data = df[col]
             col_type = str(col_data.dtype)
 
+            null_cnt = col_data.is_null().sum()
             stats = {
                 "data_type": col_type,
-                "null_count": col_data.null_count(),
-                "null_percentage": round((col_data.null_count() / len(df)) * 100, 2),
+                "null_count": null_cnt,
+                "null_percentage": round((null_cnt / len(df)) * 100, 2),
                 "unique_count": col_data.n_unique(),
                 "unique_percentage": round((col_data.n_unique() / len(df)) * 100, 2)
             }

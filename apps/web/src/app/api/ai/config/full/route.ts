@@ -3,15 +3,16 @@ import { spawn } from 'child_process'
 import path from 'path'
 
 /**
- * POST /api/ai/config/bronze
- * Get AI-powered configuration suggestions for Bronze layer
+ * POST /api/ai/config/full
+ * Get unified AI-powered configuration suggestions for Bronze, Silver, and Gold layers
  *
  * Request body (Option 1 - Database Source):
  * {
  *   "dbType": "postgresql" | "sql-server" | "mysql",
  *   "connection": { host, port, database, username, password },
  *   "tableName": "table_name",
- *   "connectionId": "optional_saved_connection_id"
+ *   "connectionId": "optional_saved_connection_id",
+ *   "businessContext": "optional_business_context"
  * }
  *
  * Request body (Option 2 - File/Other Sources):
@@ -19,42 +20,44 @@ import path from 'path'
  *   "sourceType": "file" | "api" | "nosql" | "streaming",
  *   "tableName": "source_name",
  *   "schema": [{ name: "col1", type: "string" }, ...],
- *   "sampleData": [[val1, val2, ...], [val1, val2, ...], ...]
+ *   "sampleData": [[val1, val2, ...], [val1, val2, ...], ...],
+ *   "businessContext": "optional_business_context"
  * }
  *
  * Response:
  * {
  *   "success": true,
- *   "suggestions": {
- *     "incremental_load": {...},
- *     "partitioning": {...},
- *     "schema_evolution": {...}
- *   }
+ *   "bronze": { incremental_load, partitioning, schema_evolution },
+ *   "silver": { primary_key, deduplication, merge_strategy, quality_rules },
+ *   "gold": { aggregations, business_keys, semantic_naming, metrics },
+ *   "analysisSummary": { status, progress, events },
+ *   "providerUsed": "anthropic" | "openai"
  * }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { dbType, connection, tableName, connectionId, sourceType, schema, sampleData } = body
+    const { dbType, connection, tableName, connectionId, sourceType, schema, sampleData, businessContext } = body
 
     // Determine if this is a database source or file/other source
     const isDatabaseSource = !!dbType
     const isFileOrOtherSource = !!sourceType
 
-    console.log('[AI API] Request received:', {
+    console.log('[AI Full API] Request received:', {
       isDatabaseSource,
       isFileOrOtherSource,
       tableName,
       sourceType,
       connectionId: connectionId ? 'provided' : 'missing',
       schemaProvided: !!schema,
-      sampleDataProvided: !!sampleData
+      sampleDataProvided: !!sampleData,
+      businessContextProvided: !!businessContext
     })
 
     // Validate required fields based on source type
     if (isDatabaseSource) {
       if (!dbType || !tableName) {
-        console.error('[AI API] Validation failed - database source missing required fields')
+        console.error('[AI Full API] Validation failed - database source missing required fields')
         return NextResponse.json(
           { success: false, message: 'Database type and table name are required' },
           { status: 400 }
@@ -62,14 +65,14 @@ export async function POST(request: NextRequest) {
       }
     } else if (isFileOrOtherSource) {
       if (!sourceType || !tableName || !schema || !sampleData) {
-        console.error('[AI API] Validation failed - file source missing required fields')
+        console.error('[AI Full API] Validation failed - file source missing required fields')
         return NextResponse.json(
           { success: false, message: 'Source type, table name, schema, and sample data are required' },
           { status: 400 }
         )
       }
     } else {
-      console.error('[AI API] Validation failed - no source type specified')
+      console.error('[AI Full API] Validation failed - no source type specified')
       return NextResponse.json(
         { success: false, message: 'Either database or file source information must be provided' },
         { status: 400 }
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (isDatabaseSource) {
       // If connectionId provided, fetch connection details from database
       if (connectionId) {
-        console.log('[AI API] Fetching connection details for ID:', connectionId)
+        console.log('[AI Full API] Fetching connection details for ID:', connectionId)
         const { getDatabase } = require('@/lib/db')
         const db = getDatabase()
 
@@ -93,20 +96,20 @@ export async function POST(request: NextRequest) {
         `).get(connectionId) as any
 
         if (!savedConnection) {
-          console.error('[AI API] Connection not found:', connectionId)
+          console.error('[AI Full API] Connection not found:', connectionId)
           return NextResponse.json(
             { success: false, message: 'Connection not found' },
             { status: 404 }
           )
         }
 
-        console.log('[AI API] Connection loaded:', { host: savedConnection.host, database: savedConnection.database })
+        console.log('[AI Full API] Connection loaded:', { host: savedConnection.host, database: savedConnection.database })
         connectionConfig = savedConnection
       }
 
       // Validate connection details
       if (!connectionConfig || !connectionConfig.host || !connectionConfig.database) {
-        console.error('[AI API] Invalid connection config:', connectionConfig ? 'incomplete' : 'missing')
+        console.error('[AI Full API] Invalid connection config:', connectionConfig ? 'incomplete' : 'missing')
         return NextResponse.json(
           { success: false, message: 'Missing connection details' },
           { status: 400 }
@@ -118,8 +121,8 @@ export async function POST(request: NextRequest) {
     const prefectFlowsPath = path.join(process.cwd(), '..', '..', 'prefect-flows')
     const pythonPath = path.join(prefectFlowsPath, '.venv', 'Scripts', 'python.exe')
 
-    console.log('[AI API] Python path:', pythonPath)
-    console.log('[AI API] Prefect flows path:', prefectFlowsPath)
+    console.log('[AI Full API] Python path:', pythonPath)
+    console.log('[AI Full API] Prefect flows path:', prefectFlowsPath)
 
     let pythonScript = ''
 
@@ -134,16 +137,21 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Debug: Print which AI provider will be used
-anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-openai_key = os.getenv("OPENAI_API_KEY")
-print(f"[DEBUG] ANTHROPIC_API_KEY: {'SET' if anthropic_key else 'NOT SET'}", file=sys.stderr)
-print(f"[DEBUG] OPENAI_API_KEY: {'SET' if openai_key else 'NOT SET'}", file=sys.stderr)
-
 sys.path.insert(0, '${prefectFlowsPath.replace(/\\/g, '\\\\')}')
 
 from tasks.database_bronze import get_sample_data
-from utils.ai_config_assistant import get_bronze_suggestions
+from utils.ai_config_assistant import analyze_full_pipeline
+
+# Emit progress event
+def emit_progress(stage, message):
+    event = {
+        'type': 'progress',
+        'stage': stage,
+        'message': message
+    }
+    print('PROGRESS:' + json.dumps(event), file=sys.stderr, flush=True)
+
+emit_progress('sampling', 'Fetching sample data from database...')
 
 # Get sample data (1000 rows)
 sample_result = get_sample_data(
@@ -166,18 +174,20 @@ if not sample_result['success']:
     }))
     sys.exit(0)
 
-# Get AI suggestions
+emit_progress('profiling', 'Analyzing data structure and patterns...')
+
+# Get unified AI suggestions
 df = sample_result['dataframe']
-suggestions = get_bronze_suggestions(
+business_context = ${businessContext ? `'''${businessContext}'''` : 'None'}
+
+result = analyze_full_pipeline(
     df=df,
     table_name='${tableName}',
-    source_type='database'
+    source_type='database',
+    business_context=business_context
 )
 
-print(json.dumps({
-    'success': True,
-    'suggestions': suggestions
-}))
+print(json.dumps(result))
 `
     } else {
       // Generate script for file/other source
@@ -194,15 +204,20 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Debug: Print which AI provider will be used
-anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-openai_key = os.getenv("OPENAI_API_KEY")
-print(f"[DEBUG] ANTHROPIC_API_KEY: {'SET' if anthropic_key else 'NOT SET'}", file=sys.stderr)
-print(f"[DEBUG] OPENAI_API_KEY: {'SET' if openai_key else 'NOT SET'}", file=sys.stderr)
-
 sys.path.insert(0, '${prefectFlowsPath.replace(/\\/g, '\\\\')}')
 
-from utils.ai_config_assistant import get_bronze_suggestions
+from utils.ai_config_assistant import analyze_full_pipeline
+
+# Emit progress event
+def emit_progress(stage, message):
+    event = {
+        'type': 'progress',
+        'stage': stage,
+        'message': message
+    }
+    print('PROGRESS:' + json.dumps(event), file=sys.stderr, flush=True)
+
+emit_progress('loading', 'Loading and preparing data...')
 
 # Create DataFrame from provided schema and sample data
 schema = ${schemaJson}
@@ -215,19 +230,20 @@ columns = [col['name'] for col in schema]
 df = pd.DataFrame(sample_data, columns=columns)
 
 print(f"[DEBUG] Created DataFrame with {len(df)} rows and {len(df.columns)} columns", file=sys.stderr)
-print(f"[DEBUG] Columns: {list(df.columns)}", file=sys.stderr)
 
-# Get AI suggestions
-suggestions = get_bronze_suggestions(
+emit_progress('profiling', 'Analyzing data structure and patterns...')
+
+# Get unified AI suggestions
+business_context = ${businessContext ? `'''${businessContext}'''` : 'None'}
+
+result = analyze_full_pipeline(
     df=df,
     table_name='${tableName}',
-    source_type='${sourceType}'
+    source_type='${sourceType}',
+    business_context=business_context
 )
 
-print(json.dumps({
-    'success': True,
-    'suggestions': suggestions
-}))
+print(json.dumps(result))
 `
     }
 
@@ -235,23 +251,39 @@ print(json.dumps({
       const python = spawn(pythonPath, ['-c', pythonScript])
       let output = ''
       let errorOutput = ''
+      const progressEvents: any[] = []
 
       python.stdout.on('data', (data) => {
         output += data.toString()
       })
 
       python.stderr.on('data', (data) => {
-        errorOutput += data.toString()
+        const text = data.toString()
+        errorOutput += text
+
+        // Extract progress events
+        const progressMatches = text.match(/PROGRESS:(\{.*?\})/g)
+        if (progressMatches) {
+          progressMatches.forEach(match => {
+            try {
+              const eventJson = match.replace('PROGRESS:', '')
+              const event = JSON.parse(eventJson)
+              progressEvents.push(event)
+              console.log('[AI Full API] Progress:', event.stage, '-', event.message)
+            } catch (e) {
+              // Ignore parse errors for progress events
+            }
+          })
+        }
       })
 
       python.on('close', (code) => {
-        console.log('[AI API] Python process closed with code:', code)
-        console.log('[AI API] Python stdout:', output)
-        console.log('[AI API] Python stderr:', errorOutput)
+        console.log('[AI Full API] Python process closed with code:', code)
+        console.log('[AI Full API] Python stdout:', output)
+        console.log('[AI Full API] Python stderr (last 500 chars):', errorOutput.slice(-500))
 
         if (code !== 0) {
-          console.error('[AI API] Python error - non-zero exit code:', code)
-          console.error('[AI API] Error output:', errorOutput)
+          console.error('[AI Full API] Python error - non-zero exit code:', code)
           resolve(NextResponse.json({
             success: false,
             message: 'Failed to generate AI suggestions',
@@ -265,19 +297,22 @@ print(json.dumps({
           const jsonMatch = output.match(/\{[^{}]*"success"[^]*\}/g)
           if (jsonMatch && jsonMatch.length > 0) {
             const result = JSON.parse(jsonMatch[jsonMatch.length - 1])
-            console.log('[AI API] Parsed result:', result)
+
+            // Add progress events to result
+            result.progressEvents = progressEvents
+
+            console.log('[AI Full API] Parsed result with provider:', result.providerUsed || 'unknown')
             resolve(NextResponse.json(result))
           } else {
-            console.error('[AI API] No valid JSON found in output')
+            console.error('[AI Full API] No valid JSON found in output')
             resolve(NextResponse.json({
               success: false,
               message: 'Invalid response from AI assistant',
-              rawOutput: output
+              rawOutput: output.slice(-500)
             }, { status: 500 }))
           }
         } catch (error) {
-          console.error('[AI API] Parse error:', error)
-          console.error('[AI API] Output:', output)
+          console.error('[AI Full API] Parse error:', error)
           resolve(NextResponse.json({
             success: false,
             message: 'Failed to parse AI response',
@@ -287,7 +322,7 @@ print(json.dumps({
       })
     })
   } catch (error) {
-    console.error('API error:', error)
+    console.error('[AI Full API] Unexpected error:', error)
     return NextResponse.json(
       {
         success: false,

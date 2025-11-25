@@ -344,3 +344,100 @@ export interface ExecutionLog {
   step: 'bronze' | 'silver' | 'gold' | 'validation'
   message: string
 }
+
+// AI Suggestion Types
+export interface AIFullAnalysisResult {
+  success: boolean
+  bronze: BronzeSuggestions
+  silver: SilverSuggestions
+  gold: GoldSuggestions
+  analysisSummary: {
+    status: 'started' | 'completed' | 'partial' | 'failed'
+    progress: number
+    events: AIAnalysisEvent[]
+    error?: string
+  }
+  providerUsed?: 'anthropic' | 'openai' | 'unknown'
+  progressEvents?: AIProgressEvent[]
+}
+
+export interface AIProgressEvent {
+  type: 'progress'
+  stage: string
+  message: string
+}
+
+export interface AIAnalysisEvent {
+  stage: string
+  status: string
+  timestamp: string
+  message?: string
+}
+
+export interface BronzeSuggestions {
+  incremental_load?: {
+    enabled: boolean
+    strategy?: string
+    watermark_column?: string
+    reasoning?: string
+  }
+  partitioning?: {
+    enabled: boolean
+    columns?: string[]
+    reasoning?: string
+  }
+  schema_evolution?: {
+    enabled: boolean
+    mode?: string
+    reasoning?: string
+  }
+}
+
+export interface SilverSuggestions {
+  primary_key?: {
+    columns: string[]
+    reasoning?: string
+  }
+  deduplication?: {
+    enabled: boolean
+    strategy?: string
+    reasoning?: string
+  }
+  merge_strategy?: {
+    type: string
+    reasoning?: string
+  }
+  quality_rules?: {
+    rules: any[]
+    reasoning?: string
+  }
+}
+
+export interface GoldSuggestions {
+  aggregations?: {
+    recommended_dimensions: string[]
+    recommended_metrics: string[]
+    reasoning?: string
+  }
+  business_keys?: {
+    keys: string[]
+    reasoning?: string
+  }
+  semantic_naming?: {
+    suggestions: Record<string, string>
+    reasoning?: string
+  }
+  metrics?: {
+    recommended: string[]
+    reasoning?: string
+  }
+}
+
+export interface AIUsageMetadata {
+  applied: boolean
+  bronze?: boolean
+  silver?: boolean
+  gold?: boolean
+  providerUsed?: 'anthropic' | 'openai'
+  timestamp?: string
+}

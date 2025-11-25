@@ -270,11 +270,13 @@ class AIConfigAssistant:
         }
 
         for col in df.columns:
+            # Get null count using is_null().sum() for Polars Series
+            null_cnt = df[col].is_null().sum()
             col_profile = {
                 "name": col,
                 "type": str(df[col].dtype),
-                "null_count": df[col].null_count(),
-                "null_percentage": round((df[col].null_count() / len(df)) * 100, 2),
+                "null_count": null_cnt,
+                "null_percentage": round((null_cnt / len(df)) * 100, 2),
                 "unique_count": df[col].n_unique(),
                 "uniqueness": round((df[col].n_unique() / len(df)) * 100, 2)
             }
@@ -325,7 +327,7 @@ class AIConfigAssistant:
 
         for col in df.columns:
             uniqueness = (df[col].n_unique() / len(df)) * 100
-            null_percentage = (df[col].null_count() / len(df)) * 100
+            null_percentage = (df[col].is_null().sum() / len(df)) * 100
 
             # Potential primary key if 100% unique and 0% nulls
             if uniqueness == 100 and null_percentage == 0:
@@ -872,3 +874,170 @@ def get_gold_suggestions(
     """
     assistant = AIConfigAssistant()
     return assistant.analyze_gold_config(df, table_name, business_context)
+
+
+def analyze_full_pipeline(
+    df: pl.DataFrame,
+    table_name: str,
+    source_type: str = "database",
+    business_context: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Unified function to get suggestions for all three layers (Bronze, Silver, Gold)
+    with automatic fallback from Anthropic to OpenAI on failures.
+
+    Args:
+        df: Polars DataFrame with sample data
+        table_name: Name of the table
+        source_type: Type of source (database, file, api)
+        business_context: Optional business context/use case for Gold layer
+
+    Returns:
+        Dictionary with unified configuration:
+        {
+            "success": True/False,
+            "bronze": { ... },
+            "silver": { ... },
+            "gold": { ... },
+            "analysisSummary": {
+                "status": "completed"/"partial"/"failed",
+                "progress": 100,
+                "events": [...]
+            },
+            "providerUsed": "anthropic"/"openai"
+        }
+    """
+    import sys
+
+    result = {
+        "success": False,
+        "bronze": {},
+        "silver": {},
+        "gold": {},
+        "analysisSummary": {
+            "status": "started",
+            "progress": 0,
+            "events": []
+        },
+        "providerUsed": "unknown"
+    }
+
+    events = []
+    provider_used = None
+
+    try:
+        # Try Anthropic first, then fallback to OpenAI
+        assistant = None
+        try:
+            print("PROGRESS:" + json.dumps({
+                "type": "progress",
+                "stage": "bronze",
+                "message": "Analyzing Bronze layer configuration..."
+            }), file=sys.stderr, flush=True)
+
+            assistant = AIConfigAssistant()
+            provider_used = assistant.provider
+
+            # Bronze Layer
+            bronze_result = assistant.analyze_bronze_config(df, table_name, source_type)
+            result["bronze"] = bronze_result
+            events.append({"stage": "bronze", "status": "completed", "timestamp": datetime.now().isoformat()})
+            result["analysisSummary"]["progress"] = 33
+
+            print("PROGRESS:" + json.dumps({
+                "type": "progress",
+                "stage": "silver",
+                "message": "Analyzing Silver layer configuration..."
+            }), file=sys.stderr, flush=True)
+
+            # Silver Layer
+            silver_result = assistant.analyze_silver_config(df, table_name, bronze_metadata=bronze_result)
+            result["silver"] = silver_result
+            events.append({"stage": "silver", "status": "completed", "timestamp": datetime.now().isoformat()})
+            result["analysisSummary"]["progress"] = 66
+
+            print("PROGRESS:" + json.dumps({
+                "type": "progress",
+                "stage": "gold",
+                "message": "Analyzing Gold layer configuration..."
+            }), file=sys.stderr, flush=True)
+
+            # Gold Layer
+            gold_result = assistant.analyze_gold_config(df, table_name, business_context)
+            result["gold"] = gold_result
+            events.append({"stage": "gold", "status": "completed", "timestamp": datetime.now().isoformat()})
+            result["analysisSummary"]["progress"] = 100
+
+            result["success"] = True
+            result["analysisSummary"]["status"] = "completed"
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[ERROR] Primary provider failed: {error_msg}", file=sys.stderr)
+
+            # Check if it's an Anthropic error and OpenAI is available
+            if "anthropic" in error_msg.lower() or "insufficient" in error_msg.lower():
+                openai_key = os.getenv("OPENAI_API_KEY")
+                if openai_key and (assistant is None or assistant.provider == "anthropic"):
+                    print("[INFO] Falling back to OpenAI...", file=sys.stderr, flush=True)
+
+                    print("PROGRESS:" + json.dumps({
+                        "type": "progress",
+                        "stage": "fallback",
+                        "message": "Switching to OpenAI provider..."
+                    }), file=sys.stderr, flush=True)
+
+                    # Retry with OpenAI
+                    assistant = AIConfigAssistant(provider="openai")
+                    provider_used = "openai"
+
+                    print("PROGRESS:" + json.dumps({
+                        "type": "progress",
+                        "stage": "bronze",
+                        "message": "Analyzing Bronze layer with OpenAI..."
+                    }), file=sys.stderr, flush=True)
+
+                    # Retry all three layers
+                    bronze_result = assistant.analyze_bronze_config(df, table_name, source_type)
+                    result["bronze"] = bronze_result
+                    result["analysisSummary"]["progress"] = 33
+
+                    print("PROGRESS:" + json.dumps({
+                        "type": "progress",
+                        "stage": "silver",
+                        "message": "Analyzing Silver layer with OpenAI..."
+                    }), file=sys.stderr, flush=True)
+
+                    silver_result = assistant.analyze_silver_config(df, table_name, bronze_metadata=bronze_result)
+                    result["silver"] = silver_result
+                    result["analysisSummary"]["progress"] = 66
+
+                    print("PROGRESS:" + json.dumps({
+                        "type": "progress",
+                        "stage": "gold",
+                        "message": "Analyzing Gold layer with OpenAI..."
+                    }), file=sys.stderr, flush=True)
+
+                    gold_result = assistant.analyze_gold_config(df, table_name, business_context)
+                    result["gold"] = gold_result
+                    result["analysisSummary"]["progress"] = 100
+
+                    result["success"] = True
+                    result["analysisSummary"]["status"] = "completed"
+                    events.append({"stage": "fallback", "status": "openai_used", "timestamp": datetime.now().isoformat()})
+                else:
+                    raise  # Re-raise if no fallback available
+            else:
+                raise  # Re-raise if not an Anthropic-specific error
+
+    except Exception as e:
+        print(f"[ERROR] All providers failed: {str(e)}", file=sys.stderr)
+        result["success"] = False
+        result["analysisSummary"]["status"] = "failed"
+        result["analysisSummary"]["error"] = str(e)
+        events.append({"stage": "error", "message": str(e), "timestamp": datetime.now().isoformat()})
+
+    result["analysisSummary"]["events"] = events
+    result["providerUsed"] = provider_used or "unknown"
+
+    return result

@@ -13,6 +13,8 @@ import { DatabaseSourceConfig } from './database-source-config'
 import { CreateConnectionModal } from '@/components/database'
 import { DatabaseConnection } from '@/types/database-connection'
 import { AISuggestionCard, AISuggestion } from '@/components/ai/ai-suggestion-card'
+import { FullAnalysisModal } from '@/components/ai'
+import { AIFullAnalysisResult } from '@/types/workflow'
 import { useToast } from '@/hooks/use-toast'
 import { ToastContainer } from '@/components/ui/toast-container'
 import { trackAISuggestionsFetched, trackAISuggestionsApplied, trackAIError, trackAISuggestionExpanded } from '@/lib/telemetry'
@@ -204,26 +206,30 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null)
   const toast = useToast()
 
-  // AI Suggestions state - Bronze Layer
+  // Unified AI Suggestions state
+  const [fullAiAnalysis, setFullAiAnalysis] = React.useState<AIFullAnalysisResult | null>(null)
+  const [isAnalyzingAI, setIsAnalyzingAI] = React.useState(false)
+  const [aiAnalysisError, setAiAnalysisError] = React.useState<string | null>(null)
+  const [showAIModal, setShowAIModal] = React.useState(false)
+  const [businessContext, setBusinessContext] = React.useState<string>('')
+
+  // Legacy AI state (kept for backward compatibility with old cards if needed)
   const [aiSuggestions, setAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
   const [isLoadingAiSuggestions, setIsLoadingAiSuggestions] = React.useState(false)
   const [aiSuggestionsError, setAiSuggestionsError] = React.useState<string | null>(null)
   const [aiSuggestionsExpanded, setAiSuggestionsExpanded] = React.useState(false)
   const [usingFallbackBronze, setUsingFallbackBronze] = React.useState(false)
 
-  // AI Suggestions state - Silver Layer
   const [silverAiSuggestions, setSilverAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
   const [isLoadingSilverAiSuggestions, setIsLoadingSilverAiSuggestions] = React.useState(false)
   const [silverAiSuggestionsError, setSilverAiSuggestionsError] = React.useState<string | null>(null)
   const [silverAiSuggestionsExpanded, setSilverAiSuggestionsExpanded] = React.useState(false)
   const [usingFallbackSilver, setUsingFallbackSilver] = React.useState(false)
 
-  // AI Suggestions state - Gold Layer
   const [goldAiSuggestions, setGoldAiSuggestions] = React.useState<Record<string, AISuggestion> | null>(null)
   const [isLoadingGoldAiSuggestions, setIsLoadingGoldAiSuggestions] = React.useState(false)
   const [goldAiSuggestionsError, setGoldAiSuggestionsError] = React.useState<string | null>(null)
   const [goldAiSuggestionsExpanded, setGoldAiSuggestionsExpanded] = React.useState(false)
-  const [businessContext, setBusinessContext] = React.useState<string>('')
   const [usingFallbackGold, setUsingFallbackGold] = React.useState(false)
 
   const resetForm = React.useCallback(() => {
@@ -341,348 +347,220 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     }))
   }
 
-  // Fetch AI suggestions for Bronze layer configuration
-  const fetchAiSuggestions = React.useCallback(async (tableName?: string, connectionId?: string, dbType?: string) => {
-    console.log('[AI] ===== fetchAiSuggestions CALLED =====')
+  // NEW: Unified Full AI Analysis Function
+  const fetchFullAIAnalysis = React.useCallback(async () => {
+    console.log('[AI Full] ===== fetchFullAIAnalysis CALLED =====')
 
-    // Determine source type: database or file
-    const isDatabaseSource = formData.type === 'database'
-    const isFileSource = formData.type === 'file-based'
-
-    console.log('[AI] Source type:', { isDatabaseSource, isFileSource })
-
-    // For database sources
-    if (isDatabaseSource) {
-      const useTableName = tableName || formData.sourceConfig.databaseConfig?.tableName
-      const useConnectionId = connectionId || selectedConnectionId
-      const useDbType = dbType || formData.sourceConfig.type
-
-      console.log('[AI] Database Parameters:', {
-        providedTableName: tableName,
-        providedConnectionId: connectionId,
-        providedDbType: dbType,
-        finalTableName: useTableName,
-        finalConnectionId: useConnectionId,
-        finalDbType: useDbType
-      })
-
-      if (!useConnectionId || !useTableName || !useDbType) {
-        console.log('[AI] Skipping AI suggestions - missing required database data:', {
-          hasConnectionId: !!useConnectionId,
-          hasTableName: !!useTableName,
-          hasType: !!useDbType
-        })
-        return
-      }
-
-      setIsLoadingAiSuggestions(true)
-      setAiSuggestionsError(null)
-
-      try {
-        const response = await fetch('/api/ai/config/bronze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dbType: useDbType,
-            connectionId: useConnectionId,
-            tableName: useTableName
-          })
-        })
-
-        console.log('[AI] Response status:', response.status)
-        const result = await response.json()
-        console.log('[AI] Response data:', result)
-
-        if (result.success && result.suggestions) {
-          console.log('[AI] Suggestions received:', Object.keys(result.suggestions))
-          // Extract fallback indicator before setting suggestions
-          const usingFallback = result.suggestions._using_fallback || false
-          setUsingFallbackBronze(usingFallback)
-          setAiSuggestions(result.suggestions)
-          setAiSuggestionsError(null)
-
-          // Track telemetry
-          const suggestionsCount = Object.keys(result.suggestions).filter(k => !k.startsWith('_')).length
-          const confidenceScores = Object.values(result.suggestions)
-            .filter((s: any) => s?.confidence)
-            .map((s: any) => s.confidence)
-          const overallConfidence = confidenceScores.length > 0
-            ? Math.round(confidenceScores.reduce((a: number, b: number) => a + b, 0) / confidenceScores.length)
-            : 0
-
-          trackAISuggestionsFetched({
-            layer: 'bronze',
-            tableName: useTableName || '',
-            suggestionsCount,
-            overallConfidence,
-            usingFallback
-          })
-        } else {
-          console.error('[AI] Failed to get suggestions:', result.message)
-
-          // Check if it's an API credit issue
-          let errorMessage = result.message || 'Failed to generate AI suggestions'
-          if (result.error && (
-            result.error.includes('credit balance is too low') ||
-            result.error.includes('insufficient credits') ||
-            result.error.includes('BadRequestError')
-          )) {
-            errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
-          }
-
-          setAiSuggestionsError(errorMessage)
-
-          // Track error telemetry
-          trackAIError({
-            layer: 'bronze',
-            errorMessage,
-            fallbackUsed: false
-          })
-        }
-      } catch (error) {
-        console.error('[AI] Exception fetching suggestions:', error)
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch AI suggestions'
-        setAiSuggestionsError(errorMessage)
-
-        trackAIError({
-          layer: 'bronze',
-          errorMessage,
-          fallbackUsed: false
-        })
-      } finally {
-        setIsLoadingAiSuggestions(false)
-      }
-    }
-    // For file sources
-    else if (isFileSource) {
-      const useTableName = tableName || formData._uploadedFile?.name || formData.name
-      const schema = formData._detectedSchema
-      const sampleData = formData._previewData
-
-      console.log('[AI] File Parameters:', {
-        tableName: useTableName,
-        schemaColumns: schema?.length || 0,
-        sampleRows: sampleData?.length || 0
-      })
-
-      if (!useTableName || !schema || !sampleData || schema.length === 0 || sampleData.length === 0) {
-        console.log('[AI] Skipping AI suggestions - missing required file data:', {
-          hasTableName: !!useTableName,
-          hasSchema: !!(schema && schema.length > 0),
-          hasSampleData: !!(sampleData && sampleData.length > 0)
-        })
-        return
-      }
-
-      setIsLoadingAiSuggestions(true)
-      setAiSuggestionsError(null)
-
-      try {
-        const response = await fetch('/api/ai/config/bronze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sourceType: 'file',
-            tableName: useTableName,
-            schema: schema,
-            sampleData: sampleData
-          })
-        })
-
-      console.log('[AI] Response status:', response.status)
-      const result = await response.json()
-      console.log('[AI] Response data:', result)
-
-      if (result.success && result.suggestions) {
-        console.log('[AI] Suggestions received:', Object.keys(result.suggestions))
-        // Extract fallback indicator before setting suggestions
-        const usingFallback = result.suggestions._using_fallback || false
-        setUsingFallbackBronze(usingFallback)
-        setAiSuggestions(result.suggestions)
-        setAiSuggestionsError(null)
-
-        // Track telemetry
-        const suggestionsCount = Object.keys(result.suggestions).filter(k => !k.startsWith('_')).length
-        const confidenceScores = Object.values(result.suggestions)
-          .filter((s: any) => s?.confidence)
-          .map((s: any) => s.confidence)
-        const overallConfidence = confidenceScores.length > 0
-          ? Math.round(confidenceScores.reduce((a: number, b: number) => a + b, 0) / confidenceScores.length)
-          : 0
-
-        trackAISuggestionsFetched({
-          layer: 'bronze',
-          tableName: useTableName || '',
-          suggestionsCount,
-          overallConfidence,
-          usingFallback
-        })
-      } else {
-        console.error('[AI] Failed to get suggestions:', result.message)
-
-        // Check if it's an API credit issue
-        let errorMessage = result.message || 'Failed to generate AI suggestions'
-        if (result.error && (
-          result.error.includes('credit balance is too low') ||
-          result.error.includes('insufficient credits') ||
-          result.error.includes('BadRequestError')
-        )) {
-          errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
-        }
-
-        setAiSuggestionsError(errorMessage)
-
-        // Track error telemetry
-        trackAIError({
-          layer: 'bronze',
-          errorMessage,
-          fallbackUsed: false
-        })
-      }
-    } catch (error) {
-      console.error('[AI] Error fetching AI suggestions:', error)
-      const errorMsg = 'Failed to generate AI suggestions. Please try again.'
-      setAiSuggestionsError(errorMsg)
-
-      // Track error telemetry
-      trackAIError({
-        layer: 'bronze',
-        errorMessage: errorMsg,
-        fallbackUsed: false
-      })
-    } finally {
-      setIsLoadingAiSuggestions(false)
-    }
-    }
-  }, [formData.type, formData.sourceConfig, formData._detectedSchema, formData._previewData, formData._uploadedFile, formData.name, selectedConnectionId])
-
-  // Auto-trigger AI suggestions when file data becomes available
-  React.useEffect(() => {
-    if (formData.type === 'file-based' && formData._detectedSchema && formData._previewData && formData._previewData.length > 0 && !aiSuggestions) {
-      console.log('[AI] File data detected, auto-triggering AI suggestions...')
-      fetchAiSuggestions()
-    }
-  }, [formData.type, formData._detectedSchema, formData._previewData, aiSuggestions, fetchAiSuggestions])
-
-  // Fetch AI suggestions for Silver layer configuration
-  const fetchSilverAiSuggestions = React.useCallback(async () => {
-    console.log('[Silver AI] ===== fetchSilverAiSuggestions CALLED =====')
-
-    // Determine if this is a database source or file/other source
+    // Determine source type
     const isDatabaseSource = formData.type === 'database'
     const isFileSource = formData.type === 'file-based' || formData.type === 'api' || formData.type === 'nosql'
 
-    console.log('[Silver AI] Source type check:', { type: formData.type, isDatabaseSource, isFileSource })
+    console.log('[AI Full] Source type check:', { type: formData.type, isDatabaseSource, isFileSource })
 
     let requestBody: any = {}
 
     if (isDatabaseSource) {
-      // Database source - use existing logic
       const useTableName = formData.sourceConfig.databaseConfig?.tableName
       const useConnectionId = selectedConnectionId
       const useDbType = formData.sourceConfig.type
 
       if (!useTableName || !useConnectionId || !useDbType) {
-        console.log('[Silver AI] Missing required database data:', { useTableName, useConnectionId, useDbType })
+        console.log('[AI Full] Missing required database data:', { useTableName, useConnectionId, useDbType })
+        toast.error('Missing source configuration', 'Please complete the source configuration before requesting AI analysis')
         return
       }
-
-      console.log('[Silver AI] Fetching suggestions for database:', { useTableName, useConnectionId, useDbType })
 
       requestBody = {
         dbType: useDbType,
         connectionId: useConnectionId,
         tableName: useTableName,
-        bronzeMetadata: formData._detectedMetadata || null
+        businessContext: businessContext || undefined
       }
     } else if (isFileSource) {
-      // File/Other source - use schema and sample data
       const schema = formData._detectedSchema
       const sampleData = formData._previewData
-      const sourceName = formData.sourceConfig.fileConfig?.filePath?.split(/[/\\]/).pop() || formData.name || 'unknown_source'
 
       if (!schema || !sampleData || sampleData.length === 0) {
-        console.log('[Silver AI] Missing required file data:', {
-          hasSchema: !!schema,
-          sampleDataRows: sampleData?.length || 0
-        })
+        console.log('[AI Full] Missing schema or sample data')
+        toast.error('No data to analyze', 'Please upload a file first')
         return
       }
 
-      console.log('[Silver AI] Fetching suggestions for file source:', {
-        sourceType: formData.type,
-        sourceName,
-        schemaColumns: schema.length,
-        sampleRows: sampleData.length
-      })
-
       requestBody = {
-        sourceType: formData.type,
-        tableName: sourceName,
+        sourceType: formData.type === 'file-based' ? 'file' : formData.type,
+        tableName: formData.sourceConfig.fileConfig?.filePath || 'uploaded_file',
         schema: schema,
         sampleData: sampleData,
-        bronzeMetadata: formData._detectedMetadata || null
+        businessContext: businessContext || undefined
       }
     } else {
-      console.log('[Silver AI] Unsupported source type:', formData.type)
+      console.log('[AI Full] Unsupported source type:', formData.type)
       return
     }
 
-    setIsLoadingSilverAiSuggestions(true)
-    setSilverAiSuggestionsError(null)
+    console.log('[AI Full] Request body prepared:', { ...requestBody, sampleData: requestBody.sampleData ? '[REDACTED]' : undefined })
 
     try {
-      const response = await fetch('/api/ai/config/silver', {
+      setIsAnalyzingAI(true)
+      setAiAnalysisError(null)
+      setShowAIModal(true)
+
+      const response = await fetch('/api/ai/config/full', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       })
 
-      const result = await response.json()
-      console.log('[Silver AI] API response:', result)
+      const data = await response.json()
 
-      if (result.success && result.suggestions) {
-        console.log('[Silver AI] Setting suggestions:', result.suggestions)
-        // Extract fallback indicator before setting suggestions
-        const usingFallback = result.suggestions._using_fallback || false
-        setUsingFallbackSilver(usingFallback)
-        setSilverAiSuggestions(result.suggestions)
-        setSilverAiSuggestionsError(null)
+      console.log('[AI Full] Response received:', { success: data.success, providerUsed: data.providerUsed })
+
+      if (data.success) {
+        setFullAiAnalysis(data)
+        trackAISuggestionsFetched('full', data.providerUsed || 'unknown')
       } else {
-        console.error('[Silver AI] API returned error:', result.message)
-        let errorMessage = result.message || 'Failed to generate Silver layer suggestions'
-
-        // Provide user-friendly error messages for common issues
-        if (result.error && (
-          result.error.includes('credit balance is too low') ||
-          result.error.includes('insufficient credits') ||
-          result.error.includes('BadRequestError')
-        )) {
-          errorMessage = 'AI service is temporarily unavailable due to API credits. Please contact your administrator or add credits to your Anthropic account.'
-        }
-
-        setSilverAiSuggestionsError(errorMessage)
+        setAiAnalysisError(data.message || 'Failed to generate AI analysis')
+        trackAIError('full', data.message || 'Unknown error')
+        toast.error('AI Analysis Failed', data.message || 'Failed to generate recommendations')
       }
     } catch (error) {
-      console.error('[Silver AI] Error fetching AI suggestions:', error)
-      setSilverAiSuggestionsError('Failed to generate Silver AI suggestions. Please try again.')
+      console.error('[AI Full] Error:', error)
+      setAiAnalysisError(error instanceof Error ? error.message : 'Network error')
+      trackAIError('full', error instanceof Error ? error.message : 'Network error')
+      toast.error('AI Analysis Failed', 'Unable to connect to AI service')
     } finally {
-      setIsLoadingSilverAiSuggestions(false)
+      setIsAnalyzingAI(false)
     }
-  }, [
-    formData.type,
-    formData.sourceConfig.databaseConfig?.tableName,
-    formData.sourceConfig.fileConfig?.filePath,
-    formData.name,
-    formData._detectedSchema,
-    formData._previewData,
-    formData._detectedMetadata,
-    selectedConnectionId
-  ])
+  }, [formData, selectedConnectionId, businessContext, toast])
+
+  // Handle Accept All AI Recommendations
+  const handleAcceptAIRecommendations = React.useCallback(() => {
+    if (!fullAiAnalysis?.success) return
+
+    console.log('[AI Full] Accepting all AI recommendations')
+
+    const { bronze, silver, gold, providerUsed } = fullAiAnalysis
+
+    // Apply Bronze suggestions
+    if (bronze) {
+      const updates: any = {}
+
+      if (bronze.incremental_load?.enabled) {
+        updates.loadStrategy = bronze.incremental_load.strategy === 'incremental' ? 'incremental' : 'append'
+        if (bronze.incremental_load.watermark_column) {
+          // Store watermark column in sourceConfig
+          setFormData(prev => ({
+            ...prev,
+            sourceConfig: {
+              ...prev.sourceConfig,
+              databaseConfig: {
+                ...prev.sourceConfig.databaseConfig,
+                isIncremental: true,
+                deltaColumn: bronze.incremental_load.watermark_column
+              }
+            }
+          }))
+        }
+      }
+
+      if (bronze.schema_evolution?.enabled) {
+        updates.schemaEvolution = bronze.schema_evolution.mode || 'additive'
+      }
+
+      updateDestinationConfig({ bronzeConfig: updates })
+    }
+
+    // Apply Silver suggestions
+    if (silver) {
+      const updates: any = {}
+
+      if (silver.primary_key?.columns && silver.primary_key.columns.length > 0) {
+        updates.primaryKey = silver.primary_key.columns.join(',')
+      }
+
+      if (silver.merge_strategy?.type) {
+        updates.mergeStrategy = silver.merge_strategy.type
+      }
+
+      if (silver.deduplication?.enabled) {
+        updates.deduplicationEnabled = true
+      }
+
+      updateDestinationConfig({ silverConfig: updates })
+    }
+
+    // Apply Gold suggestions
+    if (gold) {
+      const updates: any = {}
+
+      if (gold.aggregations?.recommended_dimensions && gold.aggregations.recommended_dimensions.length > 0) {
+        updates.aggregationEnabled = true
+        // Store aggregation metadata
+        setFormData(prev => ({
+          ...prev,
+          _goldAggregationMetrics: gold.aggregations?.recommended_metrics || []
+        }))
+      }
+
+      updateDestinationConfig({ goldConfig: updates })
+    }
+
+    // Update AI usage metadata
+    setFormData(prev => ({
+      ...prev,
+      _aiUsageMetadata: {
+        bronze: {
+          applied: true,
+          suggestionsCount: Object.keys(bronze || {}).length,
+          appliedCount: Object.keys(bronze || {}).length,
+          confidence: 0.9
+        },
+        silver: {
+          applied: true,
+          suggestionsCount: Object.keys(silver || {}).length,
+          appliedCount: Object.keys(silver || {}).length,
+          confidence: 0.9
+        },
+        gold: {
+          applied: true,
+          suggestionsCount: Object.keys(gold || {}).length,
+          appliedCount: Object.keys(gold || {}).length,
+          confidence: 0.9
+        }
+      }
+    }))
+
+    trackAISuggestionsApplied('full', Object.keys(bronze || {}).length + Object.keys(silver || {}).length + Object.keys(gold || {}).length)
+    toast.success('AI Recommendations Applied', 'All layer configurations have been pre-filled with AI suggestions')
+    setShowAIModal(false)
+  }, [fullAiAnalysis, toast, updateDestinationConfig])
+
+  // Handle Discard AI Recommendations
+  const handleDiscardAIRecommendations = React.useCallback(() => {
+    console.log('[AI Full] Discarding AI recommendations')
+    setFullAiAnalysis(null)
+    setShowAIModal(false)
+    toast.info('AI Recommendations Discarded', 'You can configure layers manually')
+  }, [toast])
+
+  // OLD: Fetch AI suggestions for Bronze layer configuration (no longer used)
+
+  const fetchAiSuggestions = React.useCallback(async (_tableName?: string, _connectionId?: string, _dbType?: string) => {
+
+    console.log('[AI] Legacy Bronze fetch disabled - unified AI analysis handles suggestions now')
+
+  }, [])
 
   // Fetch Gold AI Suggestions
   const fetchGoldAiSuggestions = React.useCallback(async () => {
     console.log('[Gold AI] ===== fetchGoldAiSuggestions CALLED =====')
+
+    // DEPRECATED: This function is replaced by unified fetchFullAIAnalysis
+    // If unified analysis already exists, skip legacy Gold-only fetch
+    if (fullAiAnalysis) {
+      console.log('[Gold AI] Skipping legacy Gold fetch - unified analysis already available')
+      return
+    }
 
     // Determine if this is a database source or file/other source
     const isDatabaseSource = formData.type === 'database'
@@ -794,7 +672,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     formData._detectedSchema,
     formData._previewData,
     selectedConnectionId,
-    businessContext
+    businessContext,
+    fullAiAnalysis
   ])
 
   // Apply AI suggestions to Bronze config
@@ -1167,17 +1046,26 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       const nextStepNumber = currentStep + 1
       setCurrentStep(prev => Math.min(prev + 1, 5))
 
+      // NEW: Trigger unified AI analysis after Step 1 completion
+      if (currentStep === 1 && !fullAiAnalysis) {
+        console.log('[Step Navigation] Completed Step 1 - triggering unified AI analysis')
+        setTimeout(() => {
+          fetchFullAIAnalysis()
+        }, 300)
+      }
+
+      // OLD: Legacy per-layer triggers (DEPRECATED - will be removed)
       // Trigger Silver AI suggestions when moving to Step 3
-      if (nextStepNumber === 3 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName) {
-        console.log('[Step Navigation] Moving to Step 3 - triggering Silver AI suggestions')
+      if (nextStepNumber === 3 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && !fullAiAnalysis) {
+        console.log('[Step Navigation] Moving to Step 3 - triggering Silver AI suggestions (legacy)')
         setTimeout(() => {
           fetchSilverAiSuggestions()
         }, 500)
       }
 
       // Trigger Gold AI suggestions when moving to Step 4
-      if (nextStepNumber === 4 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName) {
-        console.log('[Step Navigation] Moving to Step 4 - triggering Gold AI suggestions')
+      if (nextStepNumber === 4 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && !fullAiAnalysis) {
+        console.log('[Step Navigation] Moving to Step 4 - triggering Gold AI suggestions (legacy)')
         setTimeout(() => {
           fetchGoldAiSuggestions()
         }, 500)
@@ -3513,6 +3401,17 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         fetchConnections()
         handleConnectionSelect(connection.id)
       }}
+    />
+
+    {/* Unified AI Analysis Modal */}
+    <FullAnalysisModal
+      isOpen={showAIModal}
+      isAnalyzing={isAnalyzingAI}
+      result={fullAiAnalysis}
+      error={aiAnalysisError}
+      onAccept={handleAcceptAIRecommendations}
+      onDiscard={handleDiscardAIRecommendations}
+      onClose={() => setShowAIModal(false)}
     />
 
     <ToastContainer toasts={toast.toasts} onDismiss={toast.dismissToast} />
