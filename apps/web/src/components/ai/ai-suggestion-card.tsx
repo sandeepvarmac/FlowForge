@@ -23,6 +23,10 @@ export interface AISuggestionCardProps {
   isExpanded?: boolean
   onToggleExpand?: () => void
   usingFallback?: boolean
+  /** When true, hides action buttons and shows as read-only display */
+  staticDisplay?: boolean
+  /** Override confidence value (0-100) */
+  confidenceOverride?: number
 }
 
 export function AISuggestionCard({
@@ -35,7 +39,9 @@ export function AISuggestionCard({
   onAdjust,
   isExpanded = false,
   onToggleExpand,
-  usingFallback = false
+  usingFallback = false,
+  staticDisplay = false,
+  confidenceOverride
 }: AISuggestionCardProps) {
   const [localExpanded, setLocalExpanded] = React.useState(isExpanded)
 
@@ -49,14 +55,15 @@ export function AISuggestionCard({
 
   const expanded = onToggleExpand ? isExpanded : localExpanded
 
-  // Calculate overall confidence
+  // Calculate overall confidence (use override if provided)
   const confidenceScores = Object.values(suggestions)
-    .filter((s) => s.enabled)
-    .map((s) => s.confidence)
-  const overallConfidence =
+    .filter((s) => s && typeof s === 'object' && s.enabled)
+    .map((s) => s.confidence || 0)
+  const calculatedConfidence =
     confidenceScores.length > 0
       ? Math.round(confidenceScores.reduce((a, b) => a + b, 0) / confidenceScores.length)
       : 0
+  const overallConfidence = confidenceOverride !== undefined ? confidenceOverride : calculatedConfidence
 
   const getConfidenceBadge = (confidence: number) => {
     if (confidence >= 90) {
@@ -125,47 +132,79 @@ export function AISuggestionCard({
               </Badge>
             )}
             {getConfidenceBadge(overallConfidence)}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleExpand}
-              className="text-purple-600 hover:text-purple-700 hover:bg-purple-100"
-            >
-              {expanded ? (
-                <>
-                  <ChevronUp className="w-4 h-4 mr-1" />
-                  Collapse
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-4 h-4 mr-1" />
-                  Review
-                </>
-              )}
-            </Button>
+            {/* Hide Review/Collapse button in static mode */}
+            {!staticDisplay && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleExpand}
+                className="text-purple-600 hover:text-purple-700 hover:bg-purple-100"
+              >
+                {expanded ? (
+                  <>
+                    <ChevronUp className="w-4 h-4 mr-1" />
+                    Collapse
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="w-4 h-4 mr-1" />
+                    Review
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Summary view (collapsed) */}
+        {/* Summary view (collapsed) - show actual values in static mode */}
         {!expanded && (
           <div className="space-y-2">
-            {Object.entries(suggestions).map(([key, suggestion]) => (
-              suggestion.enabled && (
+            {Object.entries(suggestions).map(([key, suggestion]) => {
+              if (!suggestion || typeof suggestion !== 'object') return null
+
+              // For static display, show more details
+              const getSuggestionSummary = () => {
+                if (!suggestion.enabled && suggestion.enabled !== undefined) {
+                  return <span className="text-muted-foreground">Disabled</span>
+                }
+
+                // Extract meaningful values to display
+                const details: string[] = []
+                Object.entries(suggestion).forEach(([k, v]) => {
+                  if (['confidence', 'reasoning', 'enabled'].includes(k)) return
+                  if (v === null || v === undefined) return
+
+                  if (typeof v === 'string' && v.length > 0) {
+                    details.push(v)
+                  } else if (typeof v === 'boolean' && v) {
+                    details.push(k.replace(/_/g, ' '))
+                  } else if (Array.isArray(v) && v.length > 0) {
+                    details.push(v.slice(0, 3).join(', ') + (v.length > 3 ? '...' : ''))
+                  }
+                })
+
+                if (details.length > 0) {
+                  return <span className="text-muted-foreground">{details.slice(0, 2).join(' • ')}</span>
+                }
+                return <span className="text-muted-foreground">Enabled</span>
+              }
+
+              const isEnabled = suggestion.enabled !== false
+
+              return (
                 <div key={key} className="flex items-start gap-2 text-sm">
-                  <span className="text-green-600 font-bold">✓</span>
+                  <span className={isEnabled ? "text-green-600 font-bold" : "text-gray-400"}>
+                    {isEnabled ? '✓' : '○'}
+                  </span>
                   <span className="font-medium capitalize">
                     {key.replace(/_/g, ' ')}:
                   </span>
-                  <span className="text-muted-foreground">
-                    {typeof suggestion === 'object' && Object.keys(suggestion).length > 3
-                      ? 'Configured'
-                      : 'Enabled'}
-                  </span>
+                  {getSuggestionSummary()}
                 </div>
               )
-            ))}
+            })}
           </div>
         )}
 
@@ -217,24 +256,36 @@ export function AISuggestionCard({
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex gap-3 pt-3 border-t">
-          <Button
-            onClick={onAccept}
-            disabled={!onAccept}
-            className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            ✓ Accept & Apply
-          </Button>
-          <Button
-            onClick={onAdjust}
-            disabled={!onAdjust}
-            variant="outline"
-            className="flex-1 border-purple-200 text-purple-600 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {expanded ? '✕ Close Details' : '⚙ Review & Adjust'}
-          </Button>
-        </div>
+        {/* Action buttons - hidden in static display mode */}
+        {!staticDisplay && (
+          <div className="flex gap-3 pt-3 border-t">
+            <Button
+              onClick={onAccept}
+              disabled={!onAccept}
+              className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ✓ Accept & Apply
+            </Button>
+            <Button
+              onClick={onAdjust}
+              disabled={!onAdjust}
+              variant="outline"
+              className="flex-1 border-purple-200 text-purple-600 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {expanded ? '✕ Close Details' : '⚙ Review & Adjust'}
+            </Button>
+          </div>
+        )}
+
+        {/* Static display indicator */}
+        {staticDisplay && (
+          <div className="pt-3 border-t">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Sparkles className="w-4 h-4 text-purple-500" />
+              <span>AI recommendations applied from Data Architect analysis</span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

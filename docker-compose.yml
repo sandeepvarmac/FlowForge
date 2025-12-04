@@ -83,6 +83,8 @@ services:
   prefect-worker:
     image: prefecthq/prefect:2.20.23-python3.11
     container_name: flowforge-prefect-worker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
       S3_ENDPOINT_URL: http://minio:9000
@@ -91,6 +93,12 @@ services:
       S3_BUCKET_NAME: flowforge-data
       DATABASE_URL: postgresql://flowforge:flowforge123@postgres:5432/flowforge
       FLOWFORGE_DB_PATH: /opt/apps/web/data/flowforge.db
+      # API URL for quality rules - use host.docker.internal to reach Next.js on host
+      FLOWFORGE_API_URL: http://host.docker.internal:3000
+      # AI API Keys - Set these in .env file or pass directly
+      # These enable AI Quality Profiler with automatic fallback (Anthropic -> OpenAI)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./prefect-flows:/opt/prefect
       - ./apps/web/data:/opt/apps/web/data

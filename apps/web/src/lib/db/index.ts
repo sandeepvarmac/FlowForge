@@ -14,6 +14,9 @@ if (!fs.existsSync(dataDir)) {
 // Create or open database
 let db: Database.Database | null = null
 
+// Alias for backward compatibility
+export const getDb = () => getDatabase()
+
 export function getDatabase(): Database.Database {
   if (!db) {
     console.log('???  Initializing SQLite database at:', DB_PATH)
@@ -192,7 +195,17 @@ function runMigrations(database: Database.Database) {
       console.log('✓ Migration: workflow_triggers table created via schema')
     }
 
-    // Migration 6: Add environment and team columns to workflows
+    // Migration 6: Add quarantined_records column to job_executions
+    const jobExecColsForQuarantine = database.prepare('PRAGMA table_info(job_executions)').all() as Array<{ name: string }>
+    const hasQuarantinedRecords = jobExecColsForQuarantine.some(column => column.name === 'quarantined_records')
+
+    if (!hasQuarantinedRecords) {
+      console.log('⚙️  Running migration: Add quarantined_records column to job_executions...')
+      database.exec('ALTER TABLE job_executions ADD COLUMN quarantined_records INTEGER DEFAULT 0')
+      console.log('✓ Migration: Added quarantined_records to job_executions')
+    }
+
+    // Migration 7: Add environment and team columns to workflows
     const workflowCols = database.prepare('PRAGMA table_info(workflows)').all() as Array<{ name: string }>
     const hasEnvironmentCol = workflowCols.some(column => column.name === 'environment')
     const hasTeamCol = workflowCols.some(column => column.name === 'team')

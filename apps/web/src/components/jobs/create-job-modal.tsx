@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FormField, FormLabel, FormError, Select, Textarea } from '@/components/ui/form'
 import { Input } from '@/components/ui'
 import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, TransformationConfig, ValidationConfig } from '@/types/workflow'
-import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe } from 'lucide-react'
+import { StorageConnection, StorageFile } from '@/types/storage-connection'
+import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe, RefreshCw, Layers, FolderOpen, Server, Folder } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
 import { DatabaseSourceConfig } from './database-source-config'
@@ -145,11 +146,12 @@ const initialFormData: JobFormData = {
 }
 
 const steps = [
-  { id: 1, title: 'Job Basics & Source', description: 'Select job type and upload data', icon: Upload },
-  { id: 2, title: 'Bronze Layer', description: 'Configure raw data ingestion', icon: Database },
-  { id: 3, title: 'Silver Layer', description: 'Configure cleaned & validated data', icon: Shield },
-  { id: 4, title: 'Gold Layer', description: 'Configure analytics-ready data', icon: Sparkles },
-  { id: 5, title: 'Review & Create', description: 'Review configuration and create job', icon: CheckCircle }
+  { id: 1, title: 'Select Source', description: 'Choose data source and configure connection', icon: Upload },
+  { id: 2, title: 'Load Strategy', description: 'Define extraction mode and incremental settings', icon: RefreshCw },
+  { id: 3, title: 'Bronze Layer', description: 'Configure raw data landing zone', icon: Layers },
+  { id: 4, title: 'Silver Layer', description: 'Configure cleaned & validated data', icon: Shield },
+  { id: 5, title: 'Gold Layer', description: 'Configure analytics-ready data', icon: Sparkles },
+  { id: 6, title: 'Review & Create', description: 'Review configuration and create job', icon: CheckCircle }
 ]
 
 const jobTypes = [
@@ -206,6 +208,18 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null)
   const toast = useToast()
 
+  // Storage connection state for file-based jobs
+  const [storageConnections, setStorageConnections] = React.useState<StorageConnection[]>([])
+  const [selectedStorageConnectionId, setSelectedStorageConnectionId] = React.useState<string | null>(null)
+  const [fileSourceMode, setFileSourceMode] = React.useState<'upload' | 'storage'>('upload')
+  const [storageFiles, setStorageFiles] = React.useState<StorageFile[]>([])
+  const [isLoadingStorageFiles, setIsLoadingStorageFiles] = React.useState(false)
+  const [selectedStorageFile, setSelectedStorageFile] = React.useState<StorageFile | null>(null)
+  const [storageFilesPrefix, setStorageFilesPrefix] = React.useState('')
+  const [isLoadingStoragePreview, setIsLoadingStoragePreview] = React.useState(false)
+  const [showStoragePreview, setShowStoragePreview] = React.useState(false)
+  const prevStorageConnectionIdRef = React.useRef<string | null>(null)
+
   // Unified AI Suggestions state
   const [fullAiAnalysis, setFullAiAnalysis] = React.useState<AIFullAnalysisResult | null>(null)
   const [isAnalyzingAI, setIsAnalyzingAI] = React.useState(false)
@@ -237,6 +251,26 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     setCurrentStep(1)
     setErrors({})
     csvUploadRef.current?.reset()
+
+    // Reset AI analysis state
+    setFullAiAnalysis(null)
+    setIsAnalyzingAI(false)
+    setAiAnalysisError(null)
+    setShowAIModal(false)
+    setBusinessContext('')
+
+    // Reset legacy AI state
+    setAiSuggestions(null)
+    setSilverAiSuggestions(null)
+    setGoldAiSuggestions(null)
+    setSelectedConnectionId(null)
+
+    // Reset storage connection state
+    setSelectedStorageConnectionId(null)
+    setFileSourceMode('upload')
+    setStorageFiles([])
+    setSelectedStorageFile(null)
+    setStorageFilesPrefix('')
   }, [])
 
   // Populate form data when editing or cloning
@@ -244,7 +278,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     if (mode === 'edit' && editingJob && open) {
       setFormData({
         name: editingJob.name,
-        description: editingJob.description,
+        description: editingJob.description || '',
         type: editingJob.type,
         order: editingJob.order,
         sourceConfig: editingJob.sourceConfig,
@@ -258,7 +292,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       const clonedName = `${cloningJob.name} (Copy)`
       setFormData({
         name: clonedName,
-        description: cloningJob.description,
+        description: cloningJob.description || '',
         type: cloningJob.type,
         order: cloningJob.order + 1, // Increment order for the clone
         sourceConfig: cloningJob.sourceConfig,
@@ -294,6 +328,147 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       console.error('Failed to fetch connections:', error)
     }
   }
+
+  // Reset storage state when modal opens in create mode
+  React.useEffect(() => {
+    if (open && mode === 'create' && !cloningJob) {
+      // Ensure storage state is fully reset
+      setSelectedStorageConnectionId(null)
+      setFileSourceMode('upload')
+      setStorageFiles([])
+      setSelectedStorageFile(null)
+      setStorageFilesPrefix('')
+      prevStorageConnectionIdRef.current = null
+    }
+  }, [open, mode, cloningJob])
+
+  // Fetch storage connections when modal opens and job type is file-based
+  React.useEffect(() => {
+    if (open && formData.type === 'file-based') {
+      fetchStorageConnections()
+    }
+  }, [open, formData.type])
+
+  const fetchStorageConnections = async () => {
+    try {
+      const response = await fetch('/api/storage-connections')
+      const data = await response.json()
+      if (data.success) {
+        setStorageConnections(data.connections)
+      }
+    } catch (error) {
+      console.error('Failed to fetch storage connections:', error)
+    }
+  }
+
+  // Fetch files from selected storage connection
+  const fetchStorageFiles = async (connectionId: string, prefix: string = '') => {
+    setIsLoadingStorageFiles(true)
+    try {
+      const params = new URLSearchParams()
+      if (prefix) params.append('prefix', prefix)
+      params.append('pattern', '*.csv,*.json,*.parquet,*.xlsx')
+
+      const response = await fetch(`/api/storage-connections/${connectionId}/files?${params.toString()}`)
+      const data = await response.json()
+      if (data.success) {
+        setStorageFiles(data.files)
+      } else {
+        toast.error(`Failed to list files: ${data.error || 'Unknown error'}`)
+        setStorageFiles([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch storage files:', error)
+      toast.error('Failed to list files: Could not connect to storage')
+      setStorageFiles([])
+    } finally {
+      setIsLoadingStorageFiles(false)
+    }
+  }
+
+  // Fetch file preview (schema + sample data) from storage connection
+  const fetchStorageFilePreview = async (connectionId: string, filePath: string, file: StorageFile) => {
+    setIsLoadingStoragePreview(true)
+    try {
+      const response = await fetch(`/api/storage-connections/${connectionId}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath, maxRows: 100 })
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // Auto-generate table names from filename
+        const cleanName = file.name
+          .replace(/\.[^/.]+$/, '') // Remove extension
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '_') // Replace special chars with underscore
+
+        // Update form data with schema, preview, and metadata (same as CSV upload)
+        setFormData(prev => ({
+          ...prev,
+          name: prev.name || file.name.replace(/\.[^/.]+$/, ''),
+          _detectedSchema: data.schema,
+          _previewData: data.preview,
+          _detectedMetadata: data.metadata,
+          sourceConfig: {
+            ...prev.sourceConfig,
+            fileConfig: {
+              ...prev.sourceConfig.fileConfig!,
+              filePath: filePath,
+              storageConnectionId: connectionId,
+              hasHeader: data.metadata?.hasHeader ?? true
+            }
+          },
+          // Auto-populate destination table names
+          destinationConfig: {
+            ...prev.destinationConfig,
+            bronzeConfig: {
+              ...prev.destinationConfig.bronzeConfig!,
+              tableName: prev.destinationConfig.bronzeConfig?.tableName || `${cleanName}_bronze`
+            },
+            silverConfig: {
+              ...prev.destinationConfig.silverConfig!,
+              tableName: prev.destinationConfig.silverConfig?.tableName || `${cleanName}_silver`
+            },
+            goldConfig: {
+              ...prev.destinationConfig.goldConfig!,
+              tableName: prev.destinationConfig.goldConfig?.tableName || `${cleanName}_gold`
+            }
+          }
+        } as any))
+
+        toast.success(`File loaded - Schema detected with ${data.schema?.length || 0} columns`)
+      } else {
+        toast.error(`Failed to load file: ${data.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Failed to fetch storage file preview:', error)
+      toast.error('Failed to load file: Could not read file from storage')
+    } finally {
+      setIsLoadingStoragePreview(false)
+    }
+  }
+
+  // Reset storage files and prefix when connection changes
+  React.useEffect(() => {
+    if (selectedStorageConnectionId !== prevStorageConnectionIdRef.current) {
+      // Connection changed - reset the prefix to root
+      if (prevStorageConnectionIdRef.current !== null) {
+        setStorageFilesPrefix('')
+        setStorageFiles([])
+        setSelectedStorageFile(null)
+      }
+      prevStorageConnectionIdRef.current = selectedStorageConnectionId
+    }
+  }, [selectedStorageConnectionId])
+
+  // When storage connection is selected or prefix changes, fetch files
+  React.useEffect(() => {
+    if (selectedStorageConnectionId && fileSourceMode === 'storage') {
+      fetchStorageFiles(selectedStorageConnectionId, storageFilesPrefix)
+    }
+  }, [selectedStorageConnectionId, fileSourceMode, storageFilesPrefix])
 
   const fetchNextOrder = React.useCallback(async () => {
     if (mode === 'edit') return
@@ -366,7 +541,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (!useTableName || !useConnectionId || !useDbType) {
         console.log('[AI Full] Missing required database data:', { useTableName, useConnectionId, useDbType })
-        toast.error('Missing source configuration', 'Please complete the source configuration before requesting AI analysis')
+        toast.error('Missing source configuration - Please complete the source configuration before requesting AI analysis')
         return
       }
 
@@ -382,7 +557,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (!schema || !sampleData || sampleData.length === 0) {
         console.log('[AI Full] Missing schema or sample data')
-        toast.error('No data to analyze', 'Please upload a file first')
+        toast.error('No data to analyze - Please upload a file or select one from storage first')
         return
       }
 
@@ -398,12 +573,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       return
     }
 
-    console.log('[AI Full] Request body prepared:', { ...requestBody, sampleData: requestBody.sampleData ? '[REDACTED]' : undefined })
+    console.log('[AI Full] Request body prepared:', { ...requestBody, sampleData: requestBody.sampleData ? `[${requestBody.sampleData.length} rows]` : undefined })
 
     try {
+      console.log('[AI Full] Opening modal and starting analysis...')
       setIsAnalyzingAI(true)
       setAiAnalysisError(null)
       setShowAIModal(true)
+      console.log('[AI Full] Modal state set to open, isAnalyzing: true')
 
       const response = await fetch('/api/ai/config/full', {
         method: 'POST',
@@ -417,17 +594,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
       if (data.success) {
         setFullAiAnalysis(data)
-        trackAISuggestionsFetched('full', data.providerUsed || 'unknown')
+        trackAISuggestionsFetched({
+          layer: 'bronze',
+          tableName: formData.sourceConfig.databaseConfig?.tableName || formData._uploadedFile?.name || 'unknown',
+          suggestionsCount: Object.keys(data.bronze || {}).length + Object.keys(data.silver || {}).length + Object.keys(data.gold || {}).length,
+          usingFallback: data.providerUsed === 'openai'
+        })
       } else {
         setAiAnalysisError(data.message || 'Failed to generate AI analysis')
-        trackAIError('full', data.message || 'Unknown error')
-        toast.error('AI Analysis Failed', data.message || 'Failed to generate recommendations')
+        trackAIError({
+          layer: 'bronze',
+          errorMessage: data.message || 'Unknown error'
+        })
+        toast.error(`AI Analysis Failed - ${data.message || 'Failed to generate recommendations'}`)
       }
     } catch (error) {
       console.error('[AI Full] Error:', error)
       setAiAnalysisError(error instanceof Error ? error.message : 'Network error')
-      trackAIError('full', error instanceof Error ? error.message : 'Network error')
-      toast.error('AI Analysis Failed', 'Unable to connect to AI service')
+      trackAIError({
+        layer: 'bronze',
+        errorMessage: error instanceof Error ? error.message : 'Network error'
+      })
+      toast.error('AI Analysis Failed - Unable to connect to AI service')
     } finally {
       setIsAnalyzingAI(false)
     }
@@ -441,69 +629,77 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
     const { bronze, silver, gold, providerUsed } = fullAiAnalysis
 
-    // Apply Bronze suggestions
-    if (bronze) {
-      const updates: any = {}
+    // Apply all AI suggestions in a single setFormData to preserve existing values
+    setFormData(prev => {
+      const bronzeUpdates: any = {}
+      const silverUpdates: any = {}
+      const goldUpdates: any = {}
+      let sourceConfigUpdates: any = null
+      let goldAggregationMetrics: any[] = []
 
-      if (bronze.incremental_load?.enabled) {
-        updates.loadStrategy = bronze.incremental_load.strategy === 'incremental' ? 'incremental' : 'append'
-        if (bronze.incremental_load.watermark_column) {
-          // Store watermark column in sourceConfig
-          setFormData(prev => ({
-            ...prev,
-            sourceConfig: {
-              ...prev.sourceConfig,
+      // Build Bronze updates
+      if (bronze) {
+        if (bronze.incremental_load?.enabled) {
+          bronzeUpdates.loadStrategy = bronze.incremental_load.strategy === 'incremental' ? 'incremental' : 'append'
+          if (bronze.incremental_load.watermark_column) {
+            sourceConfigUpdates = {
               databaseConfig: {
                 ...prev.sourceConfig.databaseConfig,
                 isIncremental: true,
                 deltaColumn: bronze.incremental_load.watermark_column
               }
             }
-          }))
+          }
+        }
+        if (bronze.schema_evolution?.enabled) {
+          bronzeUpdates.schemaEvolution = bronze.schema_evolution.mode || 'additive'
         }
       }
 
-      if (bronze.schema_evolution?.enabled) {
-        updates.schemaEvolution = bronze.schema_evolution.mode || 'additive'
+      // Build Silver updates
+      if (silver) {
+        if (silver.primary_key?.columns && silver.primary_key.columns.length > 0) {
+          silverUpdates.primaryKey = silver.primary_key.columns.join(',')
+        }
+        if (silver.merge_strategy?.type) {
+          silverUpdates.mergeStrategy = silver.merge_strategy.type
+        }
+        if (silver.deduplication?.enabled) {
+          silverUpdates.deduplicationEnabled = true
+        }
       }
 
-      updateDestinationConfig({ bronzeConfig: updates })
-    }
-
-    // Apply Silver suggestions
-    if (silver) {
-      const updates: any = {}
-
-      if (silver.primary_key?.columns && silver.primary_key.columns.length > 0) {
-        updates.primaryKey = silver.primary_key.columns.join(',')
+      // Build Gold updates
+      if (gold) {
+        if (gold.aggregations?.recommended_dimensions && gold.aggregations.recommended_dimensions.length > 0) {
+          goldUpdates.aggregationEnabled = true
+          goldAggregationMetrics = gold.aggregations?.recommended_metrics || []
+        }
       }
 
-      if (silver.merge_strategy?.type) {
-        updates.mergeStrategy = silver.merge_strategy.type
-      }
-
-      if (silver.deduplication?.enabled) {
-        updates.deduplicationEnabled = true
-      }
-
-      updateDestinationConfig({ silverConfig: updates })
-    }
-
-    // Apply Gold suggestions
-    if (gold) {
-      const updates: any = {}
-
-      if (gold.aggregations?.recommended_dimensions && gold.aggregations.recommended_dimensions.length > 0) {
-        updates.aggregationEnabled = true
-        // Store aggregation metadata
-        setFormData(prev => ({
-          ...prev,
-          _goldAggregationMetrics: gold.aggregations?.recommended_metrics || []
-        }))
-      }
-
-      updateDestinationConfig({ goldConfig: updates })
-    }
+      return {
+        ...prev,
+        sourceConfig: sourceConfigUpdates
+          ? { ...prev.sourceConfig, ...sourceConfigUpdates }
+          : prev.sourceConfig,
+        destinationConfig: {
+          ...prev.destinationConfig,
+          bronzeConfig: {
+            ...prev.destinationConfig.bronzeConfig,
+            ...bronzeUpdates
+          },
+          silverConfig: {
+            ...prev.destinationConfig.silverConfig,
+            ...silverUpdates
+          },
+          goldConfig: {
+            ...prev.destinationConfig.goldConfig,
+            ...goldUpdates
+          }
+        },
+        _goldAggregationMetrics: goldAggregationMetrics.length > 0 ? goldAggregationMetrics : prev._goldAggregationMetrics
+      } as any
+    })
 
     // Update AI usage metadata
     setFormData(prev => ({
@@ -530,8 +726,12 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       }
     }))
 
-    trackAISuggestionsApplied('full', Object.keys(bronze || {}).length + Object.keys(silver || {}).length + Object.keys(gold || {}).length)
-    toast.success('AI Recommendations Applied', 'All layer configurations have been pre-filled with AI suggestions')
+    trackAISuggestionsApplied({
+      layer: 'bronze',
+      suggestionsAccepted: Object.keys(bronze || {}).length + Object.keys(silver || {}).length + Object.keys(gold || {}).length,
+      suggestionsTotal: Object.keys(bronze || {}).length + Object.keys(silver || {}).length + Object.keys(gold || {}).length
+    })
+    toast.success('AI Recommendations Applied - All layer configurations have been pre-filled with AI suggestions', 4000)
     setShowAIModal(false)
   }, [fullAiAnalysis, toast, updateDestinationConfig])
 
@@ -540,7 +740,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     console.log('[AI Full] Discarding AI recommendations')
     setFullAiAnalysis(null)
     setShowAIModal(false)
-    toast.info('AI Recommendations Discarded', 'You can configure layers manually')
+    toast.info('AI Recommendations Discarded - You can configure layers manually', 3000)
   }, [toast])
 
   // OLD: Fetch AI suggestions for Bronze layer configuration (no longer used)
@@ -961,12 +1161,16 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
   const isStepValid = (step: number): boolean => {
     switch (step) {
-      case 1:
+      case 1: // Select Source
         if (!formData.name.trim()) return false
 
-        // For file-based jobs, require file upload in create mode
-        if (formData.type === 'file-based' && mode === 'create' && !formData._uploadedFile) {
-          return false
+        // For file-based jobs, require file upload OR storage file selection in create mode
+        if (formData.type === 'file-based' && mode === 'create') {
+          const hasManualUpload = fileSourceMode === 'upload' && formData._uploadedFile
+          const hasStorageFile = fileSourceMode === 'storage' && selectedStorageFile
+          if (!hasManualUpload && !hasStorageFile) {
+            return false
+          }
         }
 
         // For database jobs, require connection, table selection, AND schema detection
@@ -976,18 +1180,22 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           if (!formData._detectedSchema || formData._detectedSchema.length === 0) return false
         }
         return true
-      case 2:
+      case 2: // Load Strategy - always valid (has defaults)
+        return true
+      case 3: // Bronze Layer
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) return false
         return true
-      case 3:
+      case 4: // Silver Layer
         if (formData.destinationConfig.silverConfig?.enabled !== false) {
           if (!formData.destinationConfig.silverConfig?.tableName?.trim()) return false
         }
         return true
-      case 4:
+      case 5: // Gold Layer
         if (formData.destinationConfig.goldConfig?.enabled !== false) {
           if (!formData.destinationConfig.goldConfig?.tableName?.trim()) return false
         }
+        return true
+      case 6: // Review & Create
         return true
       default:
         return true
@@ -998,12 +1206,18 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     const newErrors: Record<string, string> = {}
 
     switch (step) {
-      case 1:
+      case 1: // Select Source
         if (!formData.name.trim()) newErrors.name = 'Job name is required'
 
-        // For file-based jobs, require file upload in create mode
-        if (formData.type === 'file-based' && mode === 'create' && !formData._uploadedFile) {
-          newErrors.file = 'File upload is required'
+        // For file-based jobs, require file upload OR storage file selection in create mode
+        if (formData.type === 'file-based' && mode === 'create') {
+          const hasManualUpload = fileSourceMode === 'upload' && formData._uploadedFile
+          const hasStorageFile = fileSourceMode === 'storage' && selectedStorageFile
+          if (!hasManualUpload && !hasStorageFile) {
+            newErrors.file = fileSourceMode === 'upload'
+              ? 'File upload is required'
+              : 'Please select a file from storage'
+          }
         }
 
         // For database jobs, require connection and table selection
@@ -1016,24 +1230,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           }
         }
         break
-      case 2:
+      case 2: // Load Strategy - no required fields (has defaults)
+        break
+      case 3: // Bronze Layer
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) {
           newErrors.bronzeTable = 'Bronze table name is required'
         }
         break
-      case 3:
+      case 4: // Silver Layer
         if (formData.destinationConfig.silverConfig?.enabled !== false) {
           if (!formData.destinationConfig.silverConfig?.tableName?.trim()) {
             newErrors.silverTable = 'Silver table name is required'
           }
         }
         break
-      case 4:
+      case 5: // Gold Layer
         if (formData.destinationConfig.goldConfig?.enabled !== false) {
           if (!formData.destinationConfig.goldConfig?.tableName?.trim()) {
             newErrors.goldTable = 'Gold table name is required'
           }
         }
+        break
+      case 6: // Review & Create - validation happens in handleSubmit
         break
     }
 
@@ -1043,33 +1261,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      const nextStepNumber = currentStep + 1
-      setCurrentStep(prev => Math.min(prev + 1, 5))
+      setCurrentStep(prev => Math.min(prev + 1, 6))
 
-      // NEW: Trigger unified AI analysis after Step 1 completion
-      if (currentStep === 1 && !fullAiAnalysis) {
-        console.log('[Step Navigation] Completed Step 1 - triggering unified AI analysis')
-        setTimeout(() => {
-          fetchFullAIAnalysis()
-        }, 300)
-      }
-
-      // OLD: Legacy per-layer triggers (DEPRECATED - will be removed)
-      // Trigger Silver AI suggestions when moving to Step 3
-      if (nextStepNumber === 3 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && !fullAiAnalysis) {
-        console.log('[Step Navigation] Moving to Step 3 - triggering Silver AI suggestions (legacy)')
-        setTimeout(() => {
-          fetchSilverAiSuggestions()
-        }, 500)
-      }
-
-      // Trigger Gold AI suggestions when moving to Step 4
-      if (nextStepNumber === 4 && formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && !fullAiAnalysis) {
-        console.log('[Step Navigation] Moving to Step 4 - triggering Gold AI suggestions (legacy)')
-        setTimeout(() => {
-          fetchGoldAiSuggestions()
-        }, 500)
-      }
+      // NOTE: AI Data Architect is now manually triggered via button in Step 2
+      // Auto-trigger removed - user can click "Run AI Data Architect" when ready
 
       // Scroll to top of modal content
       setTimeout(() => {
@@ -1230,11 +1425,27 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => {/* Manual upload is default */}}
-                      className="p-4 border border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50 rounded-lg text-left transition-all"
+                      onClick={() => {
+                        setFileSourceMode('upload')
+                        setSelectedStorageConnectionId(null)
+                        setSelectedStorageFile(null)
+                        // Clear detected schema when switching modes
+                        setFormData(prev => ({
+                          ...prev,
+                          _detectedSchema: undefined,
+                          _previewData: undefined,
+                          _detectedMetadata: undefined
+                        }))
+                      }}
+                      className={cn(
+                        "p-4 border rounded-lg text-left transition-all",
+                        fileSourceMode === 'upload'
+                          ? "border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50"
+                          : "border-border hover:border-primary/50"
+                      )}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <Upload className="w-4 h-4 text-primary" />
+                        <Upload className={cn("w-4 h-4", fileSourceMode === 'upload' ? "text-primary" : "text-foreground-muted")} />
                         <span className="font-semibold text-sm">Manual Upload</span>
                       </div>
                       <p className="text-xs text-foreground-muted leading-relaxed">
@@ -1244,61 +1455,387 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
                     <button
                       type="button"
-                      disabled
-                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
+                      onClick={() => {
+                        setFileSourceMode('storage')
+                        // Clear manual upload if switching
+                        if (formData._uploadedFile) {
+                          setFormData(prev => ({ ...prev, _uploadedFile: undefined, _detectedSchema: undefined, _previewData: undefined }))
+                        }
+                      }}
+                      disabled={storageConnections.length === 0}
+                      className={cn(
+                        "p-4 border rounded-lg text-left transition-all relative",
+                        fileSourceMode === 'storage'
+                          ? "border-primary bg-primary-50 shadow-md ring-2 ring-primary ring-opacity-50"
+                          : storageConnections.length === 0
+                            ? "border-border opacity-60 cursor-not-allowed bg-gray-50"
+                            : "border-border hover:border-primary/50"
+                      )}
                     >
-                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
-                        Coming Soon
-                      </Badge>
+                      {storageConnections.length === 0 && (
+                        <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
+                          No Connections
+                        </Badge>
+                      )}
                       <div className="flex items-center gap-2 mb-2">
-                        <Cloud className="w-4 h-4 text-foreground-muted" />
-                        <span className="font-semibold text-sm">Cloud Storage</span>
+                        <Server className={cn("w-4 h-4", fileSourceMode === 'storage' ? "text-primary" : "text-foreground-muted")} />
+                        <span className="font-semibold text-sm">Storage Connection</span>
                       </div>
                       <p className="text-xs text-foreground-muted leading-relaxed">
-                        S3, Azure Blob, GCS buckets
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled
-                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
-                    >
-                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
-                        Coming Soon
-                      </Badge>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Database className="w-4 h-4 text-foreground-muted" />
-                        <span className="font-semibold text-sm">SFTP/FTP Server</span>
-                      </div>
-                      <p className="text-xs text-foreground-muted leading-relaxed">
-                        Secure file transfer protocols
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled
-                      className="p-4 border border-border rounded-lg text-left opacity-50 cursor-not-allowed bg-gray-50 relative"
-                    >
-                      <Badge className="absolute top-2 right-2 text-[10px]" variant="secondary">
-                        Coming Soon
-                      </Badge>
-                      <div className="flex items-center gap-2 mb-2">
-                        <HardDrive className="w-4 h-4 text-foreground-muted" />
-                        <span className="font-semibold text-sm">Network Share</span>
-                      </div>
-                      <p className="text-xs text-foreground-muted leading-relaxed">
-                        On-premise file servers
+                        {storageConnections.length > 0
+                          ? `${storageConnections.length} connection${storageConnections.length !== 1 ? 's' : ''} available`
+                          : 'Configure in Integrations → Sources'}
                       </p>
                     </button>
                   </div>
                   <p className="text-xs text-foreground-muted mt-2">
-                    Select where your source files are located. File format will be auto-detected when you upload.
+                    {fileSourceMode === 'upload'
+                      ? 'Select where your source files are located. File format will be auto-detected when you upload.'
+                      : 'Browse files from your configured storage connections (Local Path, S3/MinIO).'}
                   </p>
                 </FormField>
 
-                <FormField>
+                {/* Storage Connection Selection - Only shown when storage mode is selected */}
+                {fileSourceMode === 'storage' && storageConnections.length > 0 && (
+                  <div className="space-y-4 p-4 border border-border rounded-lg bg-background-secondary/30">
+                    <FormField>
+                      <FormLabel required>Select Storage Connection</FormLabel>
+                      <Select
+                        value={selectedStorageConnectionId || ''}
+                        onChange={(e) => {
+                          setSelectedStorageConnectionId(e.target.value || null)
+                          setSelectedStorageFile(null)
+                          setStorageFilesPrefix('')
+                        }}
+                      >
+                        <option value="">Choose a connection...</option>
+                        {storageConnections.map((conn) => (
+                          <option key={conn.id} value={conn.id}>
+                            {conn.name} ({conn.type === 'local' ? 'Local Path' : conn.type === 's3' ? 'S3/MinIO' : conn.type})
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+
+                    {/* File Browser */}
+                    {selectedStorageConnectionId && (
+                      <FormField>
+                        <FormLabel required>Select File</FormLabel>
+                        <div className="border border-border rounded-lg bg-white">
+                          {/* Breadcrumb / Path */}
+                          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-gray-50">
+                            <Folder className="w-4 h-4 text-foreground-muted" />
+                            <button
+                              type="button"
+                              className="text-sm text-primary hover:underline"
+                              onClick={() => setStorageFilesPrefix('')}
+                            >
+                              Root
+                            </button>
+                            {storageFilesPrefix && storageFilesPrefix.split('/').filter(Boolean).map((part, idx, arr) => (
+                              <React.Fragment key={idx}>
+                                <span className="text-foreground-muted">/</span>
+                                <button
+                                  type="button"
+                                  className="text-sm text-primary hover:underline"
+                                  onClick={() => setStorageFilesPrefix(arr.slice(0, idx + 1).join('/') + '/')}
+                                >
+                                  {part}
+                                </button>
+                              </React.Fragment>
+                            ))}
+                            <div className="flex-1" />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => fetchStorageFiles(selectedStorageConnectionId, storageFilesPrefix)}
+                              disabled={isLoadingStorageFiles}
+                            >
+                              <RefreshCw className={cn("w-4 h-4", isLoadingStorageFiles && "animate-spin")} />
+                            </Button>
+                          </div>
+
+                          {/* File List */}
+                          <div className="max-h-64 overflow-y-auto">
+                            {isLoadingStorageFiles ? (
+                              <div className="flex items-center justify-center py-8">
+                                <RefreshCw className="w-5 h-5 text-foreground-muted animate-spin mr-2" />
+                                <span className="text-sm text-foreground-muted">Loading files...</span>
+                              </div>
+                            ) : storageFiles.length === 0 ? (
+                              <div className="flex flex-col items-center justify-center py-8 text-foreground-muted">
+                                <FolderOpen className="w-8 h-8 mb-2" />
+                                <span className="text-sm">No supported files found</span>
+                                <span className="text-xs mt-1">Supported: CSV, JSON, Parquet, Excel</span>
+                              </div>
+                            ) : (
+                              <div className="divide-y divide-border">
+                                {storageFiles.map((file, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    className={cn(
+                                      "w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 transition-colors",
+                                      selectedStorageFile?.path === file.path && "bg-primary-50 border-l-2 border-primary"
+                                    )}
+                                    onClick={() => {
+                                      if (file.isDirectory) {
+                                        setStorageFilesPrefix(file.path + '/')
+                                      } else {
+                                        setSelectedStorageFile(file)
+                                        // Fetch file preview (schema + sample data) for AI analysis
+                                        if (selectedStorageConnectionId) {
+                                          fetchStorageFilePreview(selectedStorageConnectionId, file.path, file)
+                                        }
+                                      }
+                                    }}
+                                  >
+                                    {file.isDirectory ? (
+                                      <Folder className="w-4 h-4 text-amber-500" />
+                                    ) : (
+                                      <FileText className="w-4 h-4 text-blue-500" />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-medium truncate">{file.name}</div>
+                                      {!file.isDirectory && file.size !== undefined && (
+                                        <div className="text-xs text-foreground-muted">
+                                          {file.size < 1024
+                                            ? `${file.size} B`
+                                            : file.size < 1024 * 1024
+                                              ? `${(file.size / 1024).toFixed(1)} KB`
+                                              : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}
+                                          {file.lastModified && ` • ${new Date(file.lastModified).toLocaleDateString()}`}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {selectedStorageFile?.path === file.path && (
+                                      <CheckCircle className="w-4 h-4 text-primary" />
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Selected file info */}
+                        {selectedStorageFile && (
+                          <div className={cn(
+                            "mt-2 p-3 rounded-md border",
+                            isLoadingStoragePreview
+                              ? "bg-blue-50 border-blue-200"
+                              : formData._detectedSchema
+                                ? "bg-green-50 border-green-200"
+                                : "bg-yellow-50 border-yellow-200"
+                          )}>
+                            <div className="flex items-center gap-2">
+                              {isLoadingStoragePreview ? (
+                                <>
+                                  <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
+                                  <span className="text-sm font-medium text-blue-800">Loading file schema...</span>
+                                </>
+                              ) : formData._detectedSchema ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4 text-green-600" />
+                                  <span className="text-sm font-medium text-green-800">Selected: {selectedStorageFile.name}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="w-4 h-4 text-yellow-600" />
+                                  <span className="text-sm font-medium text-yellow-800">Selected: {selectedStorageFile.name}</span>
+                                </>
+                              )}
+                            </div>
+                            <p className={cn(
+                              "text-xs mt-1",
+                              isLoadingStoragePreview ? "text-blue-700" : formData._detectedSchema ? "text-green-700" : "text-yellow-700"
+                            )}>
+                              Path: {selectedStorageFile.path}
+                              {formData._detectedSchema && !isLoadingStoragePreview && (
+                                <span className="ml-2">• {formData._detectedSchema.length} columns detected</span>
+                              )}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Schema Analysis for Storage File - similar to CSV upload */}
+                        {fileSourceMode === 'storage' && formData._detectedSchema && formData._detectedSchema.length > 0 && !isLoadingStoragePreview && (
+                          <div className="mt-4 space-y-4">
+                            {/* Summary Stats */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                                <div className="text-xl font-bold text-blue-700">{formData._detectedSchema.length}</div>
+                                <div className="text-xs text-blue-600 font-medium">Columns</div>
+                              </div>
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                                <div className="text-xl font-bold text-green-700">{formData._previewData?.length || 0}</div>
+                                <div className="text-xs text-green-600 font-medium">Sample Rows</div>
+                              </div>
+                              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                                <div className="text-xl font-bold text-purple-700">
+                                  {formData._detectedSchema.filter((col: any) => col.type !== 'object' && col.type !== 'string').length}
+                                </div>
+                                <div className="text-xs text-purple-600 font-medium">Typed Columns</div>
+                              </div>
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                                <div className="text-xl font-bold text-amber-700">
+                                  {formData._detectedSchema.filter((col: any) => col.nullable).length}
+                                </div>
+                                <div className="text-xs text-amber-600 font-medium">Nullable Columns</div>
+                              </div>
+                            </div>
+
+                            {/* Column Schema Table */}
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-base flex items-center justify-between">
+                                  <span>Column Schema Analysis</span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowStoragePreview(!showStoragePreview)}
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    {showStoragePreview ? 'Hide' : 'Show'} Data Preview
+                                  </Button>
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="pt-0">
+                                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                                  <table className="w-full text-sm">
+                                    <thead className="sticky top-0 bg-white">
+                                      <tr className="border-b border-border">
+                                        <th className="text-left p-2 font-semibold text-foreground-muted">#</th>
+                                        <th className="text-left p-2 font-semibold text-foreground-muted">Column Name</th>
+                                        <th className="text-left p-2 font-semibold text-foreground-muted">Data Type</th>
+                                        <th className="text-left p-2 font-semibold text-foreground-muted">Sample Value</th>
+                                        <th className="text-left p-2 font-semibold text-foreground-muted">Nullable</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {formData._detectedSchema.map((col: any, index: number) => (
+                                        <tr key={index} className="border-b border-border hover:bg-background-secondary transition-colors">
+                                          <td className="p-2 text-foreground-muted font-mono text-xs">{index + 1}</td>
+                                          <td className="p-2">
+                                            <div className="font-medium text-foreground font-mono text-xs">{col.name}</div>
+                                          </td>
+                                          <td className="p-2">
+                                            <Badge
+                                              variant="secondary"
+                                              className={cn(
+                                                "text-xs",
+                                                col.type === 'int64' || col.type === 'integer' ? 'bg-blue-100 text-blue-800' :
+                                                col.type === 'float64' || col.type === 'decimal' ? 'bg-green-100 text-green-800' :
+                                                col.type === 'datetime64[ns]' || col.type === 'date' ? 'bg-purple-100 text-purple-800' :
+                                                col.type === 'bool' ? 'bg-orange-100 text-orange-800' :
+                                                'bg-gray-100 text-gray-800'
+                                              )}
+                                            >
+                                              {col.type}
+                                            </Badge>
+                                          </td>
+                                          <td className="p-2 max-w-xs">
+                                            <div className="truncate font-mono text-xs bg-gray-50 px-2 py-1 rounded border">
+                                              {col.sample || '—'}
+                                            </div>
+                                          </td>
+                                          <td className="p-2">
+                                            {col.nullable ? (
+                                              <span className="text-amber-600 text-xs">Yes</span>
+                                            ) : (
+                                              <span className="text-green-600 text-xs">No</span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            {/* Data Preview */}
+                            {showStoragePreview && formData._previewData && formData._previewData.length > 0 && (
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <div className="flex items-center justify-between">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                      <FileText className="w-5 h-5 text-primary" />
+                                      Data Preview - First {formData._previewData.length} Rows
+                                    </CardTitle>
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="pt-0">
+                                  <div className="border border-border rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                                      <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 border-b border-border sticky top-0">
+                                          <tr>
+                                            <th className="text-left p-2 font-semibold text-foreground-muted border-r border-border bg-gray-100 sticky left-0 z-10">
+                                              #
+                                            </th>
+                                            {formData._detectedSchema?.map((col: any, index: number) => (
+                                              <th key={index} className="text-left p-2 font-semibold text-foreground-muted min-w-28 border-r border-border last:border-r-0">
+                                                <div className="flex flex-col gap-1">
+                                                  <span className="font-mono text-xs truncate max-w-24" title={col.name}>{col.name}</span>
+                                                  <Badge
+                                                    variant="outline"
+                                                    className={cn(
+                                                      "text-xs w-fit",
+                                                      col.type === 'int64' || col.type === 'integer' ? 'border-blue-300 text-blue-700' :
+                                                      col.type === 'float64' || col.type === 'decimal' ? 'border-green-300 text-green-700' :
+                                                      col.type === 'datetime64[ns]' || col.type === 'date' ? 'border-purple-300 text-purple-700' :
+                                                      'border-gray-300 text-gray-700'
+                                                    )}
+                                                  >
+                                                    {col.type}
+                                                  </Badge>
+                                                </div>
+                                              </th>
+                                            ))}
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {formData._previewData.slice(0, 20).map((row: any, rowIndex: number) => (
+                                            <tr key={rowIndex} className="border-b border-border hover:bg-blue-50 transition-colors">
+                                              <td className="p-2 font-mono text-xs text-foreground-muted font-semibold border-r border-border bg-gray-50 sticky left-0 z-10">
+                                                {rowIndex + 1}
+                                              </td>
+                                              {formData._detectedSchema?.map((col: any, colIndex: number) => {
+                                                const value = row[col.name]
+                                                const isEmpty = value === null || value === undefined || value === ''
+                                                return (
+                                                  <td key={colIndex} className="p-2 border-r border-border last:border-r-0">
+                                                    <div className={cn(
+                                                      "font-mono text-xs truncate max-w-32",
+                                                      isEmpty ? 'text-gray-400 italic' : 'text-foreground'
+                                                    )} title={isEmpty ? 'null' : String(value)}>
+                                                      {isEmpty ? 'null' : String(value)}
+                                                    </div>
+                                                  </td>
+                                                )
+                                              })}
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </div>
+                        )}
+                      </FormField>
+                    )}
+                  </div>
+                )}
+
+                {/* Manual Upload Mode - Only shown when upload mode is selected */}
+                {fileSourceMode === 'upload' && (
+                  <>
+                    <FormField>
                     <FormLabel>Upload Mode</FormLabel>
                     <Select
                       value={formData.sourceConfig.fileConfig?.uploadMode || 'single'}
@@ -1418,10 +1955,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                           }
                         : undefined
 
-                      // Check if we have temporal columns for auto-configuration
-                      const hasTemporalColumn = metadata?.temporal_columns && metadata.temporal_columns.length > 0
-
-                      console.log('[CSV Upload] Has temporal columns:', hasTemporalColumn, metadata?.temporal_columns)
+                      // Store metadata for Step 2 Load Strategy configuration
+                      console.log('[CSV Upload] Temporal columns detected:', metadata?.temporal_columns)
+                      console.log('[CSV Upload] PK candidates detected:', metadata?.pk_candidates)
 
                       setFormData(prev => ({
                         ...prev,
@@ -1429,20 +1965,16 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                         _uploadedFile: file,
                         _detectedSchema: schema,
                         _previewData: preview,
-                        _detectedMetadata: metadata, // Store metadata for UI display
+                        _detectedMetadata: metadata, // Store metadata for Step 2 Load Strategy
                         transformationConfig: transformationConfig,
-                        // Update source config with hasHeader flag
+                        // Update source config with hasHeader flag (incremental settings configured in Step 2)
                         sourceConfig: {
                           ...prev.sourceConfig,
                           fileConfig: {
                             ...prev.sourceConfig.fileConfig!,
                             filePath: file.name,
                             filePattern: file.name,
-                            hasHeader: !columnMappings || columnMappings.length === 0,
-                            // Auto-configure incremental loading if temporal column detected
-                            isIncremental: hasTemporalColumn,
-                            deltaColumn: hasTemporalColumn ? metadata!.temporal_columns![0] : undefined,
-                            lastWatermark: hasTemporalColumn ? '' : undefined
+                            hasHeader: !columnMappings || columnMappings.length === 0
                           }
                         },
                         // Auto-populate destination table names
@@ -1478,8 +2010,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       initialPreview={formData._previewData}
                     />
                   )}
-                  {errors.file && <FormError>{errors.file}</FormError>}
-                </FormField>
+                    {errors.file && <FormError>{errors.file}</FormError>}
+                  </FormField>
+                  </>
+                )}
 
                 {/* AI Schema Intelligence Display */}
                 {formData._detectedSchema && formData._detectedSchema.length > 0 && (
@@ -1533,12 +2067,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                   </Badge>
                                 ))}
                               </div>
-                              {formData.sourceConfig.fileConfig?.isIncremental && (
-                                <p className="text-xs text-green-700 mt-2 flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" />
-                                  Auto-configured for incremental loading using: <code className="font-mono bg-green-100 px-1 rounded">{formData.sourceConfig.fileConfig.deltaColumn}</code>
-                                </p>
-                              )}
+                              <p className="text-xs text-green-700 mt-2 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Can be used for incremental loading in the Load Strategy step
+                              </p>
                             </div>
                           )}
 
@@ -1597,7 +2129,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
                       <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
-                        Table names have been auto-generated based on your file. You can customize them in the next step.
+                        Schema detected. Configure Load Strategy in the next step to set up extraction mode.
                       </p>
                     </CardContent>
                   </Card>
@@ -1740,26 +2272,24 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                             }
                           })
 
-                          // Auto-configure incremental settings
-                          if (hasTemporalColumn) {
-                            updateSourceConfig({
-                              databaseConfig: {
-                                ...formData.sourceConfig.databaseConfig,
-                                tableName,
-                                isIncremental: true,
-                                deltaColumn: metadata!.temporal_columns![0], // Use first temporal column
-                                lastWatermark: ''
-                              }
-                            })
-                          } else {
-                            updateSourceConfig({
-                              databaseConfig: {
-                                ...formData.sourceConfig.databaseConfig,
-                                tableName,
-                                isIncremental: false
-                              }
-                            })
-                          }
+                          // Store metadata for Step 2 Load Strategy configuration
+                          // Don't auto-configure incremental settings - let user choose in Load Strategy step
+                          setFormData(prev => ({
+                            ...prev,
+                            _detectedMetadata: {
+                              temporal_columns: metadata?.temporal_columns || [],
+                              pk_candidates: metadata?.pk_candidates || []
+                            }
+                          }))
+
+                          // Update source config with table name only (incremental settings configured in Step 2)
+                          updateSourceConfig({
+                            databaseConfig: {
+                              ...formData.sourceConfig.databaseConfig,
+                              tableName,
+                              isIncremental: false // Default to full load, configured in Step 2
+                            }
+                          })
 
                           // Fetch AI suggestions for Bronze layer
                           console.log('[Step1] Scheduling AI suggestions fetch in 500ms...')
@@ -1784,7 +2314,426 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 2:
+      case 2: // Load Strategy Step (NEW)
+        return (
+          <div className="space-y-6">
+            {/* Step Header */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <RefreshCw className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-blue-900 mb-1">Load Strategy Configuration</h4>
+                  <p className="text-sm text-blue-800">
+                    Define how data should be extracted from your source. Choose between full loads (replace all data) or incremental loads (only new/changed records).
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Data Architect Card */}
+            <Card className={cn(
+              "border-2 transition-all",
+              fullAiAnalysis?.success
+                ? "border-green-300 bg-green-50/30"
+                : "border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50"
+            )}>
+              <CardContent className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
+                    fullAiAnalysis?.success ? "bg-green-100" : "bg-purple-100"
+                  )}>
+                    <Sparkles className={cn(
+                      "w-6 h-6",
+                      fullAiAnalysis?.success ? "text-green-600" : "text-purple-600"
+                    )} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-foreground">AI Data Architect</h3>
+                      {fullAiAnalysis?.success && (
+                        <Badge variant="success" className="text-xs">Analysis Complete</Badge>
+                      )}
+                      {isAnalyzingAI && (
+                        <Badge variant="secondary" className="text-xs animate-pulse">Analyzing...</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-foreground-muted mb-3">
+                      {fullAiAnalysis?.success
+                        ? `AI has analyzed your data and provided recommendations for all layers. Provider: ${fullAiAnalysis.providerUsed || 'AI'}`
+                        : "Let AI analyze your data and recommend optimal configurations for Load Strategy, Bronze, Silver, and Gold layers."
+                      }
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {!fullAiAnalysis?.success ? (
+                        <Button
+                          onClick={() => {
+                            console.log('[AI Data Architect] Manual trigger clicked')
+                            fetchFullAIAnalysis()
+                          }}
+                          disabled={isAnalyzingAI}
+                          className="bg-purple-600 hover:bg-purple-700 text-white"
+                        >
+                          {isAnalyzingAI ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Analyzing...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              Run AI Data Architect
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => setShowAIModal(true)}
+                            className="border-green-300 text-green-700 hover:bg-green-50"
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Recommendations
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              console.log('[AI Data Architect] Re-run clicked')
+                              fetchFullAIAnalysis()
+                            }}
+                            disabled={isAnalyzingAI}
+                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                          >
+                            <RefreshCw className={cn("w-4 h-4 mr-2", isAnalyzingAI && "animate-spin")} />
+                            Re-analyze
+                          </Button>
+                        </>
+                      )}
+                      <span className="text-xs text-foreground-muted">
+                        or configure manually below
+                      </span>
+                    </div>
+                    {aiAnalysisError && (
+                      <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {aiAnalysisError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Load Strategy Selection */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <RefreshCw className="w-4 h-4 text-blue-600" />
+                  Extraction Mode
+                </CardTitle>
+                <p className="text-xs text-foreground-muted mt-1">
+                  Choose how data will be loaded from the source
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Load Strategy Type Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Full Load Option */}
+                  {(() => {
+                    const aiRecommendsFullLoad = fullAiAnalysis?.bronze?.incremental_load?.enabled === false
+                    const isSelected = formData.type === 'file-based'
+                      ? !formData.sourceConfig.fileConfig?.isIncremental
+                      : !formData.sourceConfig.databaseConfig?.isIncremental
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (formData.type === 'file-based') {
+                            updateSourceConfig({
+                              fileConfig: {
+                                ...formData.sourceConfig.fileConfig!,
+                                isIncremental: false,
+                                deltaColumn: ''
+                              }
+                            })
+                          } else {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig!,
+                                isIncremental: false,
+                                deltaColumn: ''
+                              }
+                            })
+                          }
+                        }}
+                        className={cn(
+                          'p-4 border-2 rounded-lg text-left transition-all',
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                            : 'border-border hover:border-blue-300 hover:bg-blue-50/50'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Database className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-foreground">Full Load</h4>
+                              {aiRecommendsFullLoad ? (
+                                <Badge className="text-xs bg-purple-100 text-purple-700 border-purple-300">AI Recommended</Badge>
+                              ) : !fullAiAnalysis?.success ? (
+                                <Badge variant="default" className="text-xs">Default</Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-foreground-muted leading-relaxed">
+                              Replace all data on each run. Best for small to medium datasets or when complete refresh is needed.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })()}
+
+                  {/* Incremental Load Option */}
+                  {(() => {
+                    const aiRecommendsIncremental = fullAiAnalysis?.bronze?.incremental_load?.enabled === true
+                    const aiWatermarkColumn = fullAiAnalysis?.bronze?.incremental_load?.watermark_column
+                    const hasTemporalColumns = formData._detectedMetadata?.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0
+                    const isSelected = formData.type === 'file-based'
+                      ? formData.sourceConfig.fileConfig?.isIncremental
+                      : formData.sourceConfig.databaseConfig?.isIncremental
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Use AI-recommended watermark column if available, otherwise first temporal column
+                          const defaultDeltaColumn = aiWatermarkColumn || (formData._detectedMetadata?.temporal_columns?.[0] || '')
+
+                          if (formData.type === 'file-based') {
+                            updateSourceConfig({
+                              fileConfig: {
+                                ...formData.sourceConfig.fileConfig!,
+                                isIncremental: true,
+                                deltaColumn: defaultDeltaColumn
+                              }
+                            })
+                          } else {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig!,
+                                isIncremental: true,
+                                deltaColumn: defaultDeltaColumn
+                              }
+                            })
+                          }
+                        }}
+                        className={cn(
+                          'p-4 border-2 rounded-lg text-left transition-all',
+                          isSelected
+                            ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+                            : 'border-border hover:border-green-300 hover:bg-green-50/50'
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                            <Clock className="w-5 h-5 text-green-600" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h4 className="font-semibold text-foreground">Incremental Load</h4>
+                              {aiRecommendsIncremental ? (
+                                <Badge className="text-xs bg-purple-100 text-purple-700 border-purple-300">AI Recommended</Badge>
+                              ) : hasTemporalColumns ? (
+                                <Badge variant="success" className="text-xs">Temporal Detected</Badge>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-foreground-muted leading-relaxed">
+                              Only load new or changed records based on a timestamp column. Best for large datasets with frequent updates.
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })()}
+                </div>
+
+                {/* Incremental Configuration - Show when incremental is selected */}
+                {((formData.type === 'file-based' && formData.sourceConfig.fileConfig?.isIncremental) ||
+                  (formData.type === 'database' && formData.sourceConfig.databaseConfig?.isIncremental)) && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-semibold text-green-900">Incremental Load Settings</span>
+                    </div>
+
+                    {/* Delta Column Selection */}
+                    <FormField>
+                      <FormLabel required>Delta/Watermark Column</FormLabel>
+                      <Select
+                        value={formData.type === 'file-based'
+                          ? formData.sourceConfig.fileConfig?.deltaColumn || ''
+                          : formData.sourceConfig.databaseConfig?.deltaColumn || ''
+                        }
+                        onChange={(e) => {
+                          if (formData.type === 'file-based') {
+                            updateSourceConfig({
+                              fileConfig: {
+                                ...formData.sourceConfig.fileConfig!,
+                                deltaColumn: e.target.value
+                              }
+                            })
+                          } else {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig!,
+                                deltaColumn: e.target.value
+                              }
+                            })
+                          }
+                        }}
+                      >
+                        <option value="">Select a column...</option>
+                        {/* Show AI-detected temporal columns first */}
+                        {formData._detectedMetadata?.temporal_columns?.map((col: string) => (
+                          <option key={col} value={col}>
+                            {col} (AI Detected - Temporal)
+                          </option>
+                        ))}
+                        {/* Show other columns that aren't temporal */}
+                        {formData._detectedSchema?.filter(col =>
+                          !formData._detectedMetadata?.temporal_columns?.includes(col.name)
+                        ).map((col) => (
+                          <option key={col.name} value={col.name}>
+                            {col.name} ({col.type})
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-xs text-foreground-muted mt-1">
+                        This column will be used to track which records have been processed. Typically a timestamp or auto-incrementing ID.
+                      </p>
+                    </FormField>
+
+                    {/* Initial Watermark Value */}
+                    <FormField>
+                      <FormLabel>Initial Watermark Value</FormLabel>
+                      <Input
+                        value={formData.type === 'file-based'
+                          ? (typeof formData.sourceConfig.fileConfig?.lastWatermark === 'string' ? formData.sourceConfig.fileConfig.lastWatermark : '') || ''
+                          : (typeof formData.sourceConfig.databaseConfig?.lastWatermark === 'string' ? formData.sourceConfig.databaseConfig.lastWatermark : '') || ''
+                        }
+                        onChange={(e) => {
+                          if (formData.type === 'file-based') {
+                            updateSourceConfig({
+                              fileConfig: {
+                                ...formData.sourceConfig.fileConfig!,
+                                lastWatermark: e.target.value
+                              }
+                            })
+                          } else {
+                            updateSourceConfig({
+                              databaseConfig: {
+                                ...formData.sourceConfig.databaseConfig!,
+                                lastWatermark: e.target.value
+                              }
+                            })
+                          }
+                        }}
+                        placeholder="e.g., 2024-01-01 or 0"
+                      />
+                      <p className="text-xs text-foreground-muted mt-1">
+                        Leave empty to load all historical data on first run, or specify a starting point.
+                      </p>
+                    </FormField>
+                  </div>
+                )}
+
+                {/* CDC Option - Coming Soon */}
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full p-4 border-2 border-dashed border-border rounded-lg text-left opacity-60 cursor-not-allowed"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                        <Activity className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-foreground">Change Data Capture (CDC)</h4>
+                          <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        </div>
+                        <p className="text-xs text-foreground-muted leading-relaxed">
+                          Real-time capture of inserts, updates, and deletes from the source system using database logs.
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Recommendations Preview */}
+            {formData._detectedMetadata && (
+              <Card className="border-green-200 bg-green-50/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Sparkles className="w-4 h-4 text-green-600" />
+                    AI Analysis Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {formData._detectedMetadata.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-green-900 font-medium">
+                          {formData._detectedMetadata.temporal_columns.length} temporal column(s) detected
+                        </p>
+                        <p className="text-xs text-green-700">
+                          Suitable for incremental loading: {formData._detectedMetadata.temporal_columns.join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {formData._detectedMetadata.pk_candidates && formData._detectedMetadata.pk_candidates.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-green-900 font-medium">
+                          {formData._detectedMetadata.pk_candidates.length} primary key candidate(s) detected
+                        </p>
+                        <p className="text-xs text-green-700">
+                          Can be used for deduplication: {formData._detectedMetadata.pk_candidates.join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {(!formData._detectedMetadata.temporal_columns || formData._detectedMetadata.temporal_columns.length === 0) &&
+                   (!formData._detectedMetadata.pk_candidates || formData._detectedMetadata.pk_candidates.length === 0) && (
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-amber-900 font-medium">
+                          No temporal columns or primary keys detected
+                        </p>
+                        <p className="text-xs text-amber-700">
+                          Full load is recommended for this data source.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )
+
+      case 3: // Bronze Layer (was case 2)
         return (
           <div className="space-y-6">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -1809,32 +2758,73 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 return null
               }
 
-              const hasSuggestions = !!(aiSuggestions && Object.keys(aiSuggestions).length > 0)
-              console.log('[Step2] Rendering AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions)
+              // Show as static display if AI recommendations have been applied
+              const aiApplied = formData._aiUsageMetadata?.bronze?.applied === true
+
+              // Use fullAiAnalysis.bronze data when AI has been applied
+              const bronzeSuggestions: Record<string, AISuggestion> = aiApplied && fullAiAnalysis?.bronze
+                ? {
+                    ...(fullAiAnalysis.bronze.incremental_load && {
+                      incremental_load: {
+                        enabled: fullAiAnalysis.bronze.incremental_load.enabled,
+                        confidence: 85,
+                        reasoning: fullAiAnalysis.bronze.incremental_load.reasoning || 'AI analyzed your data patterns',
+                        strategy: fullAiAnalysis.bronze.incremental_load.strategy,
+                        watermark_column: fullAiAnalysis.bronze.incremental_load.watermark_column
+                      }
+                    }),
+                    ...(fullAiAnalysis.bronze.schema_evolution && {
+                      schema_evolution: {
+                        enabled: fullAiAnalysis.bronze.schema_evolution.enabled,
+                        confidence: 80,
+                        reasoning: fullAiAnalysis.bronze.schema_evolution.reasoning || 'Recommended for evolving data sources',
+                        mode: fullAiAnalysis.bronze.schema_evolution.mode
+                      }
+                    }),
+                    ...(fullAiAnalysis.bronze.partitioning && {
+                      partitioning: {
+                        enabled: fullAiAnalysis.bronze.partitioning.enabled,
+                        confidence: 75,
+                        reasoning: fullAiAnalysis.bronze.partitioning.reasoning || 'Optimizes query performance',
+                        columns: fullAiAnalysis.bronze.partitioning.columns
+                      }
+                    })
+                  }
+                : (aiSuggestions || {})
+
+              const hasSuggestions = Object.keys(bronzeSuggestions).length > 0
+              console.log('[Step2] Rendering AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions, 'aiApplied:', aiApplied)
 
               // Get source name for description
               const sourceName = isDatabaseSource
                 ? formData.sourceConfig.databaseConfig?.tableName
                 : formData._uploadedFile?.name || formData.name
 
+              // Get confidence from metadata
+              const confidence = formData._aiUsageMetadata?.bronze?.confidence
+                ? Math.round(formData._aiUsageMetadata.bronze.confidence * 100)
+                : undefined
+
               return (
                 <AISuggestionCard
                   title="AI Data Architect Suggestions"
                   description={`Based on analyzing ${sourceName}`}
-                  suggestions={aiSuggestions || {}}
+                  suggestions={bronzeSuggestions}
                   loading={isLoadingAiSuggestions}
                   error={aiSuggestionsError}
-                  onAccept={hasSuggestions ? applyAiSuggestions : undefined}
-                  onAdjust={hasSuggestions ? () => {
+                  onAccept={hasSuggestions && !aiApplied ? applyAiSuggestions : undefined}
+                  onAdjust={hasSuggestions && !aiApplied ? () => {
                     console.log('[AI] Toggle expanded from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
                     setAiSuggestionsExpanded(!aiSuggestionsExpanded)
                   } : undefined}
                   isExpanded={hasSuggestions && aiSuggestionsExpanded}
-                  onToggleExpand={hasSuggestions ? () => {
+                  onToggleExpand={hasSuggestions && !aiApplied ? () => {
                     console.log('[AI] onToggleExpand from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
                     setAiSuggestionsExpanded(!aiSuggestionsExpanded)
                   } : undefined}
                   usingFallback={usingFallbackBronze}
+                  staticDisplay={aiApplied}
+                  confidenceOverride={confidence}
                 />
               )
             })()}
@@ -1876,41 +2866,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   />
                   {errors.bronzeTable && <FormError>{errors.bronzeTable}</FormError>}
                 </FormField>
-
-                {/* Load Strategy - NEW */}
-                <FormField>
-                  <FormLabel>Load Strategy</FormLabel>
-                  <Select
-                    value={formData.destinationConfig.bronzeConfig?.loadStrategy || 'append'}
-                    onChange={(e) => updateDestinationConfig({
-                      bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadStrategy: e.target.value as any }
-                    })}
-                  >
-                    <option value="append">Append (Add all rows - Recommended)</option>
-                    <option value="full_refresh">Full Refresh (Truncate and reload)</option>
-                    <option value="incremental" disabled>Incremental (Coming Soon)</option>
-                  </Select>
-                  <p className="text-xs text-foreground-muted mt-1">
-                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'append' && 'New data is added to existing records without removing old data'}
-                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'full_refresh' && 'All existing data is deleted before loading new data'}
-                    {formData.destinationConfig.bronzeConfig?.loadStrategy === 'incremental' && 'Only new/changed records are loaded based on watermark column'}
-                  </p>
-                </FormField>
-
-                {/* Incremental Load Configuration - Coming Soon */}
-                {formData.destinationConfig.bronzeConfig?.loadStrategy === 'incremental' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                      <span className="text-sm font-medium text-blue-900">Incremental Load Configuration</span>
-                    </div>
-                    <div className="space-y-2 text-xs text-blue-700">
-                      <div>• Watermark column selection (timestamp/date/integer)</div>
-                      <div>• Lookback window configuration</div>
-                      <div>• Change data capture (CDC) support</div>
-                    </div>
-                  </div>
-                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField>
@@ -2018,6 +2973,48 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                               <code className="font-mono bg-white px-1 py-0.5 rounded">_file_modified_at</code> - File last modified timestamp
                             </span>
                           </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsIngestionId || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsIngestionId: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_ingestion_id</code> - Unique ingestion job identifier
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsLoadType || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsLoadType: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_load_type</code> - Load type (full/incremental/cdc)
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.bronzeConfig?.auditColumnsSchemaVersion || false}
+                              onChange={(e) => updateDestinationConfig({
+                                bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, auditColumnsSchemaVersion: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_schema_version</code> - Schema version at ingestion time
+                            </span>
+                          </label>
                         </div>
                       </div>
                     </div>
@@ -2106,15 +3103,21 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       <Sparkles className="w-3 h-3 mr-1" />
                       Save Rules for Quality Module
                     </Button>
+                    <p className="text-xs text-purple-600 mt-2 text-center">
+                      For comprehensive validation rules, configure them in the Data Quality tab after job creation.
+                    </p>
                   </div>
                 ) : (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="text-xs">AI Available</Badge>
-                      <span className="text-sm font-medium text-gray-900">Data Quality Checks</span>
+                      <Badge variant="secondary" className="text-xs">Basic Validation</Badge>
+                      <span className="text-sm font-medium text-gray-900">Bronze Quality Checks</span>
                     </div>
                     <p className="text-xs text-gray-700 mb-2">
-                      Apply AI suggestions above to see recommended quality validation rules
+                      Bronze layer performs minimal validation: schema conformance, required field checks, and row count monitoring.
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      For comprehensive data quality rules (null handling, type validation, deduplication), configure them in the <strong>Data Quality</strong> tab after job creation.
                     </p>
                   </div>
                 )}
@@ -2123,7 +3126,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 3:
+      case 4: // Silver Layer (was case 3)
         return (
           <div className="space-y-6">
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
@@ -2148,32 +3151,72 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 return null
               }
 
-              const hasSilverSuggestions = !!(silverAiSuggestions && Object.keys(silverAiSuggestions).length > 0)
-              console.log('[Step3] Rendering Silver AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions)
+              // Show as static display if AI recommendations have been applied
+              const aiApplied = formData._aiUsageMetadata?.silver?.applied === true
+
+              // Use fullAiAnalysis.silver data when AI has been applied
+              const silverSuggestions: Record<string, AISuggestion> = aiApplied && fullAiAnalysis?.silver
+                ? {
+                    ...(fullAiAnalysis.silver.primary_key && {
+                      primary_key: {
+                        enabled: true,
+                        confidence: 90,
+                        reasoning: fullAiAnalysis.silver.primary_key.reasoning || 'Identified unique key columns',
+                        columns: fullAiAnalysis.silver.primary_key.columns?.join(', ')
+                      }
+                    }),
+                    ...(fullAiAnalysis.silver.deduplication && {
+                      deduplication: {
+                        enabled: fullAiAnalysis.silver.deduplication.enabled,
+                        confidence: 85,
+                        reasoning: fullAiAnalysis.silver.deduplication.reasoning || 'Remove duplicate records',
+                        strategy: fullAiAnalysis.silver.deduplication.strategy
+                      }
+                    }),
+                    ...(fullAiAnalysis.silver.merge_strategy && {
+                      merge_strategy: {
+                        enabled: true,
+                        confidence: 80,
+                        reasoning: fullAiAnalysis.silver.merge_strategy.reasoning || 'Optimal merge approach',
+                        type: fullAiAnalysis.silver.merge_strategy.type
+                      }
+                    })
+                  }
+                : (silverAiSuggestions || {})
+
+              const hasSilverSuggestions = Object.keys(silverSuggestions).length > 0
+              console.log('[Step3] Rendering Silver AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions, 'aiApplied:', aiApplied)
 
               // Get source name for description
               const sourceName = isDatabaseSource
                 ? formData.sourceConfig.databaseConfig?.tableName
                 : formData._uploadedFile?.name || formData.name
 
+              // Get confidence from metadata
+              const confidence = formData._aiUsageMetadata?.silver?.confidence
+                ? Math.round(formData._aiUsageMetadata.silver.confidence * 100)
+                : undefined
+
               return (
                 <AISuggestionCard
                   title="AI Data Quality Architect Suggestions"
                   description={`Based on analyzing ${sourceName}`}
-                  suggestions={silverAiSuggestions || {}}
+                  suggestions={silverSuggestions}
                   loading={isLoadingSilverAiSuggestions}
                   error={silverAiSuggestionsError}
-                  onAccept={hasSilverSuggestions ? applySilverAiSuggestions : undefined}
-                  onAdjust={hasSilverSuggestions ? () => {
+                  onAccept={hasSilverSuggestions && !aiApplied ? applySilverAiSuggestions : undefined}
+                  onAdjust={hasSilverSuggestions && !aiApplied ? () => {
                     console.log('[Silver AI] Toggle expanded from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
                     setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
                   } : undefined}
                   isExpanded={hasSilverSuggestions && silverAiSuggestionsExpanded}
-                  onToggleExpand={hasSilverSuggestions ? () => {
+                  onToggleExpand={hasSilverSuggestions && !aiApplied ? () => {
                     console.log('[Silver AI] onToggleExpand from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
                     setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
                   } : undefined}
                   usingFallback={usingFallbackSilver}
+                  staticDisplay={aiApplied}
+                  confidenceOverride={confidence}
                 />
               )
             })()}
@@ -2594,26 +3637,210 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 )}
 
-                {/* Column Transformations - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Column Transformations</span>
+                {/* Column Transformations - Basic Active */}
+                <FormField>
+                  <div className="flex items-center justify-between mb-2">
+                    <FormLabel>Column Transformations</FormLabel>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.destinationConfig.silverConfig?.transformationsEnabled || false}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, transformationsEnabled: e.target.checked }
+                        })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                      />
+                      <span className="text-sm text-foreground">Enable</span>
+                    </label>
                   </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Apply transformations to clean and standardize data
+                  <p className="text-xs text-foreground-muted mb-3">
+                    Apply automatic transformations to clean and standardize data
                   </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Trim whitespace, uppercase/lowercase</div>
-                    <div>• Date parsing with auto-format detection</div>
-                    <div>• Email validation and normalization</div>
-                    <div>• Phone number formatting (international support)</div>
-                    <div>• Remove special characters</div>
-                    <div>• Type casting with error handling</div>
-                    <div>• Derived columns with SQL expressions</div>
-                    <div>• Column renaming and reordering</div>
+
+                  {formData.destinationConfig.silverConfig?.transformationsEnabled && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
+                      <div className="text-xs font-medium text-foreground mb-2">Standard Transformations (Auto-Applied):</div>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?.trimWhitespace !== false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, trimWhitespace: e.target.checked }
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-foreground">
+                          <strong>Trim Whitespace</strong> - Remove leading/trailing spaces from text columns
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?.normalizeNulls !== false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, normalizeNulls: e.target.checked }
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-foreground">
+                          <strong>Normalize Nulls</strong> - Convert empty strings, "NULL", "None" to proper NULL
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?.standardizeDates || false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, standardizeDates: e.target.checked }
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-foreground">
+                          <strong>Standardize Dates</strong> - Parse dates to ISO 8601 format (YYYY-MM-DD)
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?.lowercaseEmails || false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, lowercaseEmails: e.target.checked }
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-foreground">
+                          <strong>Lowercase Emails</strong> - Normalize email addresses to lowercase
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.destinationConfig.silverConfig?.standardizeBooleans || false}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, standardizeBooleans: e.target.checked }
+                          })}
+                          className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-foreground">
+                          <strong>Standardize Booleans</strong> - Convert yes/no/1/0/true/false to boolean
+                        </span>
+                      </label>
+
+                      <div className="border-t border-gray-200 pt-3 mt-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                          <span className="text-xs font-medium text-gray-700">Advanced Transformations</span>
+                        </div>
+                        <div className="space-y-1 text-xs text-gray-500 ml-2">
+                          <div>• Phone number formatting (international)</div>
+                          <div>• Currency rounding to 2 decimals</div>
+                          <div>• Custom regex replacements</div>
+                          <div>• Derived columns with SQL expressions</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </FormField>
+
+                {/* Silver Audit Columns */}
+                <FormField>
+                  <div className="flex items-center justify-between mb-2">
+                    <FormLabel>Silver Audit Columns</FormLabel>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.destinationConfig.silverConfig?.auditColumnsEnabled !== false}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, auditColumnsEnabled: e.target.checked }
+                        })}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                      />
+                      <span className="text-sm text-foreground">Enable</span>
+                    </label>
                   </div>
-                </div>
+                  <p className="text-xs text-foreground-muted mb-3">
+                    Track record lineage and changes in the Silver layer
+                  </p>
+
+                  {formData.destinationConfig.silverConfig?.auditColumnsEnabled !== false && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                      <div className="text-xs font-medium text-foreground mb-2">Standard Audit Columns (Always Added):</div>
+                      <div className="space-y-1 text-xs text-foreground-muted ml-2">
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_created_at</code> - When record was first created in Silver</div>
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_updated_at</code> - When record was last updated</div>
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_load_id</code> - Ingestion job identifier</div>
+                      </div>
+
+                      <div className="border-t border-gray-200 pt-2 mt-3">
+                        <div className="text-xs font-medium text-foreground mb-2">Additional Audit Columns:</div>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.silverConfig?.auditSourceSystem || false}
+                              onChange={(e) => updateDestinationConfig({
+                                silverConfig: { ...formData.destinationConfig.silverConfig!, auditSourceSystem: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_source_system</code> - Origin system name
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.silverConfig?.auditChangeType || false}
+                              onChange={(e) => updateDestinationConfig({
+                                silverConfig: { ...formData.destinationConfig.silverConfig!, auditChangeType: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_change_type</code> - INSERT/UPDATE/DELETE indicator
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.silverConfig?.auditRecordHash || false}
+                              onChange={(e) => updateDestinationConfig({
+                                silverConfig: { ...formData.destinationConfig.silverConfig!, auditRecordHash: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_record_hash</code> - Hash of record for change detection
+                            </span>
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.destinationConfig.silverConfig?.auditIsCurrent || false}
+                              onChange={(e) => updateDestinationConfig({
+                                silverConfig: { ...formData.destinationConfig.silverConfig!, auditIsCurrent: e.target.checked }
+                              })}
+                              className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-foreground">
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_is_current</code> - Flag for current version (for SCD)
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </FormField>
 
                 {/* PII Masking - Coming Soon */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -2651,12 +3878,87 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <div>• Automatic statistics collection</div>
                   </div>
                 </div>
+
+                {/* Reference Data Enrichment - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Reference Data Enrichment (Lookup Joins)</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Improve data quality by enriching records with lookup/reference data
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• <strong>Purpose:</strong> Add missing descriptive data for completeness</div>
+                    <div>• Lookup joins to small reference tables (countries, states, categories)</div>
+                    <div>• Example: country_code "US" → country_name "United States"</div>
+                    <div>• Left outer join with configurable null handling</div>
+                    <div>• Caching for frequently used lookups</div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    Note: For analytics-ready wide tables with multi-table joins, use Gold Layer Denormalization
+                  </p>
+                </div>
+
+                {/* Schema Drift Handling - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Schema Drift Handling</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Handle schema changes automatically when source structure evolves
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Detect new columns from source</div>
+                    <div>• Track removed/deprecated columns</div>
+                    <div>• Handle type changes with warnings</div>
+                    <div>• Schema version tracking</div>
+                    <div>• Breaking change alerts</div>
+                  </div>
+                </div>
+
+                {/* Error Handling & Quarantine - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Error Handling & Quarantine</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Capture and manage invalid records for review
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Quarantine zone for invalid records</div>
+                    <div>• Error categorization (invalid email, null key, duplicate)</div>
+                    <div>• Manual fix and reprocess workflow</div>
+                    <div>• Suggested remediation actions</div>
+                  </div>
+                </div>
+
+                {/* Data Quality Gate - Coming Soon */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                    <span className="text-sm font-medium text-blue-900">Data Quality Gate</span>
+                  </div>
+                  <p className="text-xs text-blue-700 mb-2">
+                    Validate data before promotion to Gold layer
+                  </p>
+                  <div className="space-y-1 text-xs text-blue-700 ml-2">
+                    <div>• Mandatory fields populated check</div>
+                    <div>• Referential integrity validation</div>
+                    <div>• Null spike detection</div>
+                    <div>• Value range checks</div>
+                    <div>• Record count variance threshold</div>
+                    <div>• Block promotion on failure with alerts</div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
         )
 
-      case 4:
+      case 5: // Gold Layer (was case 4)
         return (
           <div className="space-y-6">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
@@ -2681,64 +3983,134 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 return null
               }
 
-              const hasGoldSuggestions = !!(goldAiSuggestions && Object.keys(goldAiSuggestions).length > 0)
-              console.log('[Step4] Rendering Gold AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions)
+              // Show as static display if AI recommendations have been applied
+              const aiApplied = formData._aiUsageMetadata?.gold?.applied === true
+
+              // Use fullAiAnalysis.gold data when AI has been applied
+              // Backend returns: aggregation (not aggregations), dimensions, indexing, materialization, schedule
+              const goldData = fullAiAnalysis?.gold as any
+              const goldSuggestions: Record<string, AISuggestion> = aiApplied && goldData
+                ? {
+                    // Aggregation config (backend uses 'aggregation' not 'aggregations')
+                    ...(goldData.aggregation && {
+                      aggregation: {
+                        enabled: goldData.aggregation.enabled !== false,
+                        confidence: goldData.aggregation.confidence || 85,
+                        reasoning: goldData.aggregation.reasoning || 'Recommended analytics aggregations',
+                        level: goldData.aggregation.level,
+                        metrics: goldData.aggregation.metrics?.map((m: any) => m.name || m).join(', ') || ''
+                      }
+                    }),
+                    // Dimensions (top-level in backend response)
+                    ...(goldData.dimensions && goldData.dimensions.length > 0 && {
+                      dimensions: {
+                        enabled: true,
+                        confidence: 80,
+                        reasoning: 'Key dimensions for analytics grouping',
+                        columns: goldData.dimensions.join(', ')
+                      }
+                    }),
+                    // Indexing strategy
+                    ...(goldData.indexing && goldData.indexing.enabled && {
+                      indexing: {
+                        enabled: true,
+                        confidence: goldData.indexing.confidence || 75,
+                        reasoning: goldData.indexing.reasoning || 'Recommended indexing for query performance',
+                        strategy: goldData.indexing.strategy,
+                        columns: goldData.indexing.columns?.join(', ') || ''
+                      }
+                    }),
+                    // Materialization strategy
+                    ...(goldData.materialization && goldData.materialization.enabled && {
+                      materialization: {
+                        enabled: true,
+                        confidence: goldData.materialization.confidence || 80,
+                        reasoning: goldData.materialization.reasoning || 'Recommended materialization strategy',
+                        refresh_strategy: goldData.materialization.refresh_strategy
+                      }
+                    }),
+                    // Schedule config
+                    ...(goldData.schedule && {
+                      schedule: {
+                        enabled: true,
+                        confidence: goldData.schedule.confidence || 75,
+                        reasoning: goldData.schedule.reasoning || goldData.schedule.recommended_time || 'Recommended refresh schedule',
+                        frequency: goldData.schedule.frequency,
+                        cron: goldData.schedule.cron_expression
+                      }
+                    })
+                  }
+                : (goldAiSuggestions || {})
+
+              const hasGoldSuggestions = Object.keys(goldSuggestions).length > 0
+              console.log('[Step4] Rendering Gold AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions, 'aiApplied:', aiApplied)
+              console.log('[Step4] Gold data from backend:', goldData)
+              console.log('[Step4] Mapped goldSuggestions:', goldSuggestions)
 
               // Get source name for description
               const sourceName = isDatabaseSource
                 ? formData.sourceConfig.databaseConfig?.tableName
                 : formData._uploadedFile?.name || formData.name
 
+              // Get confidence from metadata
+              const confidence = formData._aiUsageMetadata?.gold?.confidence
+                ? Math.round(formData._aiUsageMetadata.gold.confidence * 100)
+                : undefined
+
               return (
                 <div className="mb-4 space-y-3">
-                  {/* Business Context Input */}
-                  <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span className="text-sm font-semibold text-amber-900">Business Context (Optional)</span>
+                  {/* Business Context Input - only show if AI not yet applied */}
+                  {!aiApplied && (
+                    <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-900">Business Context (Optional)</span>
+                      </div>
+                      <p className="text-xs text-amber-700 mb-3">
+                        Provide business context to help AI suggest better metrics and aggregations (e.g., "Customer transaction analytics for monthly revenue reporting")
+                      </p>
+                      <textarea
+                        value={businessContext}
+                        onChange={(e) => setBusinessContext(e.target.value)}
+                        placeholder="Describe the business use case for this Gold layer..."
+                        className="w-full text-xs p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        rows={2}
+                      />
+                      {businessContext && businessContext.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBusinessContext('')
+                            fetchGoldAiSuggestions()
+                          }}
+                          className="mt-2 text-xs text-amber-700 hover:text-amber-900 underline"
+                        >
+                          Clear & Refresh AI Suggestions
+                        </button>
+                      )}
                     </div>
-                    <p className="text-xs text-amber-700 mb-3">
-                      Provide business context to help AI suggest better metrics and aggregations (e.g., "Customer transaction analytics for monthly revenue reporting")
-                    </p>
-                    <textarea
-                      value={businessContext}
-                      onChange={(e) => setBusinessContext(e.target.value)}
-                      placeholder="Describe the business use case for this Gold layer..."
-                      className="w-full text-xs p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                      rows={2}
-                    />
-                    {businessContext && businessContext.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBusinessContext('')
-                          fetchGoldAiSuggestions()
-                        }}
-                        className="mt-2 text-xs text-amber-700 hover:text-amber-900 underline"
-                      >
-                        Clear & Refresh AI Suggestions
-                      </button>
-                    )}
-                  </div>
+                  )}
 
                   {/* AI Suggestions Card */}
                   <AISuggestionCard
                     title="AI Analytics Architect Suggestions"
                     description={`Based on analyzing ${sourceName}${businessContext ? ' with business context' : ''}`}
-                    suggestions={goldAiSuggestions || {}}
+                    suggestions={goldSuggestions}
                     loading={isLoadingGoldAiSuggestions}
                     error={goldAiSuggestionsError}
-                    onAccept={hasGoldSuggestions ? applyGoldAiSuggestions : undefined}
-                    onAdjust={hasGoldSuggestions ? () => {
+                    onAccept={hasGoldSuggestions && !aiApplied ? applyGoldAiSuggestions : undefined}
+                    onAdjust={hasGoldSuggestions && !aiApplied ? () => {
                       console.log('[Gold AI] Toggle expanded from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
                       setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
                     } : undefined}
                     isExpanded={hasGoldSuggestions && goldAiSuggestionsExpanded}
-                    onToggleExpand={hasGoldSuggestions ? () => {
+                    onToggleExpand={hasGoldSuggestions && !aiApplied ? () => {
                       console.log('[Gold AI] onToggleExpand from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
                       setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
                     } : undefined}
                     usingFallback={usingFallbackGold}
+                    staticDisplay={aiApplied}
+                    confidenceOverride={confidence}
                   />
                 </div>
               )
@@ -2913,18 +4285,21 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Denormalization (Joins)</span>
+                    <span className="text-sm font-medium text-blue-900">Denormalization (Multi-Table Joins)</span>
                   </div>
                   <p className="text-xs text-blue-700 mb-2">
-                    Join with other Silver tables to create wide, analytics-friendly tables
+                    Create wide, analytics-ready tables optimized for BI and reporting
                   </p>
                   <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Join with other Silver tables</div>
+                    <div>• <strong>Purpose:</strong> Pre-join tables to eliminate runtime joins in BI tools</div>
+                    <div>• Join multiple Silver tables (orders + customers + products → fct_sales)</div>
+                    <div>• Star/snowflake schema creation with fact and dimension tables</div>
                     <div>• Join types: INNER, LEFT, RIGHT, FULL OUTER</div>
-                    <div>• Multi-table joins (star schema support)</div>
-                    <div>• Column selection from joined tables</div>
-                    <div>• Automatic dimension flattening</div>
+                    <div>• Column selection and automatic dimension flattening</div>
                   </div>
+                  <p className="text-xs text-blue-600 mt-2 italic">
+                    Note: For simple lookup enrichment (e.g., adding country names), use Silver Layer Reference Data Enrichment
+                  </p>
                 </div>
 
                 {/* Business Logic - Coming Soon */}
@@ -3004,7 +4379,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 5:
+      case 6: // Review & Create (was case 5)
         return (
           <div className="space-y-6">
             <div className="text-sm font-medium text-foreground mb-2">
@@ -3088,7 +4463,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 5:
+      case 6: // Review & Create - Alternate version (was case 5)
         return (
           <div className="space-y-6">
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-6">
@@ -3378,7 +4753,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               <Button variant="ghost" onClick={() => handleModalClose(false)}>
                 Cancel
               </Button>
-              {currentStep < 5 ? (
+              {currentStep < 6 ? (
                 <Button onClick={nextStep} disabled={!isStepValid(currentStep)}>
                   Next
                   <ArrowRight className="w-4 h-4 ml-2" />

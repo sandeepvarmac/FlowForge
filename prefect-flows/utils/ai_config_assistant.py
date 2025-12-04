@@ -876,6 +876,21 @@ def get_gold_suggestions(
     return assistant.analyze_gold_config(df, table_name, business_context)
 
 
+def _emit_progress(stage: str, message: str, detail: str = None, finding: Dict = None):
+    """Helper function to emit progress events to stderr"""
+    import sys
+    event = {
+        "type": "progress",
+        "stage": stage,
+        "message": message
+    }
+    if detail:
+        event["detail"] = detail
+    if finding:
+        event["finding"] = finding
+    print("PROGRESS:" + json.dumps(event), file=sys.stderr, flush=True)
+
+
 def analyze_full_pipeline(
     df: pl.DataFrame,
     table_name: str,
@@ -925,42 +940,117 @@ def analyze_full_pipeline(
     events = []
     provider_used = None
 
+    # Helper to emit findings
+    def emit_finding(stage: str, finding_type: str, text: str, icon: str = None):
+        finding = {"type": finding_type, "text": text}
+        if icon:
+            finding["icon"] = icon
+        _emit_progress(stage, f"Found: {text}", finding=finding)
+
     try:
+        # --- SAMPLING STAGE ---
+        _emit_progress("sampling", "Loading data sample...",
+                      detail=f"Preparing {len(df)} rows for analysis")
+
+        row_count = len(df)
+        col_count = len(df.columns)
+
+        _emit_progress("sampling", f"Loaded {row_count:,} rows with {col_count} columns",
+                      finding={"type": "info", "text": f"Dataset: {row_count:,} rows × {col_count} columns", "icon": "table"})
+
+        # --- PROFILING STAGE ---
+        _emit_progress("profiling", "Analyzing column data types...",
+                      detail="Detecting column types and patterns")
+
+        # Detect column types
+        string_cols = [c for c in df.columns if df[c].dtype == pl.Utf8]
+        numeric_cols = [c for c in df.columns if df[c].dtype in [pl.Int64, pl.Int32, pl.Float64, pl.Float32]]
+        date_cols = [c for c in df.columns if df[c].dtype in [pl.Date, pl.Datetime]]
+
+        if string_cols:
+            _emit_progress("profiling", f"Found {len(string_cols)} text columns",
+                          finding={"type": "column", "text": f"Text columns: {', '.join(string_cols[:3])}{'...' if len(string_cols) > 3 else ''}", "icon": "type"})
+
+        if numeric_cols:
+            _emit_progress("profiling", f"Found {len(numeric_cols)} numeric columns",
+                          finding={"type": "column", "text": f"Numeric columns: {', '.join(numeric_cols[:3])}{'...' if len(numeric_cols) > 3 else ''}", "icon": "hash"})
+
+        if date_cols:
+            _emit_progress("profiling", f"Found {len(date_cols)} date/time columns",
+                          finding={"type": "column", "text": f"Date columns: {', '.join(date_cols[:3])}{'...' if len(date_cols) > 3 else ''}", "icon": "calendar"})
+
+        # Look for potential ID columns
+        id_candidates = [c for c in df.columns if any(kw in c.lower() for kw in ['id', 'key', 'code', 'num', 'no'])]
+        if id_candidates:
+            _emit_progress("profiling", "Detected potential identifier columns",
+                          finding={"type": "pattern", "text": f"Potential IDs: {', '.join(id_candidates[:3])}", "icon": "key"})
+
         # Try Anthropic first, then fallback to OpenAI
         assistant = None
         try:
-            print("PROGRESS:" + json.dumps({
-                "type": "progress",
-                "stage": "bronze",
-                "message": "Analyzing Bronze layer configuration..."
-            }), file=sys.stderr, flush=True)
+            # --- BRONZE STAGE ---
+            _emit_progress("bronze", "Initializing AI analysis for Bronze layer...",
+                          detail="Connecting to AI provider")
 
             assistant = AIConfigAssistant()
             provider_used = assistant.provider
+
+            provider_name = "Claude" if provider_used == "anthropic" else "GPT"
+            _emit_progress("bronze", f"Connected to {provider_name} AI",
+                          finding={"type": "info", "text": f"Using {provider_name} for intelligent analysis", "icon": "sparkles"})
+
+            _emit_progress("bronze", "Analyzing ingestion strategy...",
+                          detail="Determining optimal load patterns")
 
             # Bronze Layer
             bronze_result = assistant.analyze_bronze_config(df, table_name, source_type)
             result["bronze"] = bronze_result
             events.append({"stage": "bronze", "status": "completed", "timestamp": datetime.now().isoformat()})
-            result["analysisSummary"]["progress"] = 33
+            result["analysisSummary"]["progress"] = 50
 
-            print("PROGRESS:" + json.dumps({
-                "type": "progress",
-                "stage": "silver",
-                "message": "Analyzing Silver layer configuration..."
-            }), file=sys.stderr, flush=True)
+            # Emit Bronze findings
+            if bronze_result.get("incremental_load", {}).get("enabled"):
+                watermark = bronze_result["incremental_load"].get("watermark_column", "timestamp")
+                _emit_progress("bronze", "Incremental load strategy recommended",
+                              finding={"type": "recommendation", "text": f"Use incremental loading with '{watermark}' as watermark", "icon": "clock"})
+            else:
+                _emit_progress("bronze", "Full load strategy recommended",
+                              finding={"type": "recommendation", "text": "Full snapshot load recommended for this dataset", "icon": "database"})
+
+            if bronze_result.get("partitioning", {}).get("enabled"):
+                part_col = bronze_result["partitioning"].get("column", "date")
+                _emit_progress("bronze", "Partitioning strategy identified",
+                              finding={"type": "recommendation", "text": f"Partition by '{part_col}' for optimal performance", "icon": "filter"})
+
+            # --- SILVER STAGE ---
+            _emit_progress("silver", "Analyzing data cleansing requirements...",
+                          detail="Identifying quality rules and transformations")
 
             # Silver Layer
             silver_result = assistant.analyze_silver_config(df, table_name, bronze_metadata=bronze_result)
             result["silver"] = silver_result
             events.append({"stage": "silver", "status": "completed", "timestamp": datetime.now().isoformat()})
-            result["analysisSummary"]["progress"] = 66
+            result["analysisSummary"]["progress"] = 75
 
-            print("PROGRESS:" + json.dumps({
-                "type": "progress",
-                "stage": "gold",
-                "message": "Analyzing Gold layer configuration..."
-            }), file=sys.stderr, flush=True)
+            # Emit Silver findings
+            if silver_result.get("primary_key", {}).get("columns"):
+                pk_cols = silver_result["primary_key"]["columns"]
+                _emit_progress("silver", "Primary key identified",
+                              finding={"type": "recommendation", "text": f"Primary key: {', '.join(pk_cols[:3])}", "icon": "key"})
+
+            if silver_result.get("deduplication", {}).get("enabled"):
+                strategy = silver_result["deduplication"].get("strategy", "latest")
+                _emit_progress("silver", "Deduplication strategy configured",
+                              finding={"type": "recommendation", "text": f"Dedup strategy: keep {strategy} record", "icon": "filter"})
+
+            if silver_result.get("quality_rules"):
+                rule_count = len(silver_result["quality_rules"])
+                _emit_progress("silver", f"Generated {rule_count} data quality rules",
+                              finding={"type": "recommendation", "text": f"{rule_count} quality rules will be applied", "icon": "toggle"})
+
+            # --- GOLD STAGE ---
+            _emit_progress("gold", "Designing analytics layer...",
+                          detail="Building aggregations and metrics")
 
             # Gold Layer
             gold_result = assistant.analyze_gold_config(df, table_name, business_context)
@@ -968,55 +1058,73 @@ def analyze_full_pipeline(
             events.append({"stage": "gold", "status": "completed", "timestamp": datetime.now().isoformat()})
             result["analysisSummary"]["progress"] = 100
 
+            # Emit Gold findings
+            if gold_result.get("aggregation", {}).get("enabled"):
+                metrics = gold_result["aggregation"].get("metrics", [])
+                if metrics:
+                    _emit_progress("gold", f"Configured {len(metrics)} aggregation metrics",
+                                  finding={"type": "recommendation", "text": f"Metrics: {', '.join([m.get('name', 'metric') for m in metrics[:3]])}", "icon": "chart"})
+
+            if gold_result.get("dimensions"):
+                dims = gold_result["dimensions"]
+                if dims:
+                    _emit_progress("gold", "Dimension columns identified",
+                                  finding={"type": "recommendation", "text": f"Dimensions: {', '.join(dims[:3])}", "icon": "table"})
+
+            if gold_result.get("schedule", {}).get("frequency"):
+                freq = gold_result["schedule"]["frequency"]
+                _emit_progress("gold", "Refresh schedule configured",
+                              finding={"type": "recommendation", "text": f"Recommended refresh: {freq}", "icon": "clock"})
+
             result["success"] = True
             result["analysisSummary"]["status"] = "completed"
+
+            _emit_progress("gold", "Analysis complete!",
+                          finding={"type": "info", "text": "All layer configurations ready for review", "icon": "sparkles"})
 
         except Exception as e:
             error_msg = str(e)
             print(f"[ERROR] Primary provider failed: {error_msg}", file=sys.stderr)
 
             # Check if it's an Anthropic error and OpenAI is available
-            if "anthropic" in error_msg.lower() or "insufficient" in error_msg.lower():
+            if "anthropic" in error_msg.lower() or "insufficient" in error_msg.lower() or "credit" in error_msg.lower():
                 openai_key = os.getenv("OPENAI_API_KEY")
                 if openai_key and (assistant is None or assistant.provider == "anthropic"):
                     print("[INFO] Falling back to OpenAI...", file=sys.stderr, flush=True)
 
-                    print("PROGRESS:" + json.dumps({
-                        "type": "progress",
-                        "stage": "fallback",
-                        "message": "Switching to OpenAI provider..."
-                    }), file=sys.stderr, flush=True)
+                    _emit_progress("bronze", "Switching to backup AI provider...",
+                                  finding={"type": "warning", "text": "Primary AI unavailable, using OpenAI fallback", "icon": "sparkles"})
 
                     # Retry with OpenAI
                     assistant = AIConfigAssistant(provider="openai")
                     provider_used = "openai"
 
-                    print("PROGRESS:" + json.dumps({
-                        "type": "progress",
-                        "stage": "bronze",
-                        "message": "Analyzing Bronze layer with OpenAI..."
-                    }), file=sys.stderr, flush=True)
+                    _emit_progress("bronze", "Analyzing with GPT...",
+                                  detail="Restarting Bronze layer analysis")
 
                     # Retry all three layers
                     bronze_result = assistant.analyze_bronze_config(df, table_name, source_type)
                     result["bronze"] = bronze_result
-                    result["analysisSummary"]["progress"] = 33
+                    result["analysisSummary"]["progress"] = 50
 
-                    print("PROGRESS:" + json.dumps({
-                        "type": "progress",
-                        "stage": "silver",
-                        "message": "Analyzing Silver layer with OpenAI..."
-                    }), file=sys.stderr, flush=True)
+                    if bronze_result.get("incremental_load", {}).get("enabled"):
+                        watermark = bronze_result["incremental_load"].get("watermark_column", "timestamp")
+                        _emit_progress("bronze", "Bronze configuration complete",
+                                      finding={"type": "recommendation", "text": f"Incremental load using '{watermark}'", "icon": "clock"})
+
+                    _emit_progress("silver", "Analyzing Silver layer with GPT...",
+                                  detail="Configuring data cleansing rules")
 
                     silver_result = assistant.analyze_silver_config(df, table_name, bronze_metadata=bronze_result)
                     result["silver"] = silver_result
-                    result["analysisSummary"]["progress"] = 66
+                    result["analysisSummary"]["progress"] = 75
 
-                    print("PROGRESS:" + json.dumps({
-                        "type": "progress",
-                        "stage": "gold",
-                        "message": "Analyzing Gold layer with OpenAI..."
-                    }), file=sys.stderr, flush=True)
+                    if silver_result.get("primary_key", {}).get("columns"):
+                        _emit_progress("silver", "Silver configuration complete",
+                                      finding={"type": "recommendation", "text": f"PK: {', '.join(silver_result['primary_key']['columns'][:2])}", "icon": "key"})
+
+                    _emit_progress("gold", "Analyzing Gold layer with GPT...",
+                                  detail="Building analytics configuration")
 
                     gold_result = assistant.analyze_gold_config(df, table_name, business_context)
                     result["gold"] = gold_result
@@ -1025,6 +1133,9 @@ def analyze_full_pipeline(
                     result["success"] = True
                     result["analysisSummary"]["status"] = "completed"
                     events.append({"stage": "fallback", "status": "openai_used", "timestamp": datetime.now().isoformat()})
+
+                    _emit_progress("gold", "Analysis complete (via fallback)!",
+                                  finding={"type": "info", "text": "All configurations ready using GPT", "icon": "sparkles"})
                 else:
                     raise  # Re-raise if no fallback available
             else:
@@ -1036,6 +1147,9 @@ def analyze_full_pipeline(
         result["analysisSummary"]["status"] = "failed"
         result["analysisSummary"]["error"] = str(e)
         events.append({"stage": "error", "message": str(e), "timestamp": datetime.now().isoformat()})
+
+        _emit_progress("gold", "Analysis failed",
+                      finding={"type": "warning", "text": f"Error: {str(e)[:100]}", "icon": "sparkles"})
 
     result["analysisSummary"]["events"] = events
     result["providerUsed"] = provider_used or "unknown"

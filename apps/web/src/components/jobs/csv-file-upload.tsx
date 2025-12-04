@@ -72,18 +72,24 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
     initialPreview,
     onReset
   }, ref) {
-  const [state, setState] = React.useState<UploadState>({
-    isDragging: false,
-    isProcessing: false,
+  const [state, setState] = React.useState<UploadState>({
+    isDragging: false,
+    isProcessing: false,
     file: initialFile || null,
     error: null,
     schema: initialSchema || null,
     preview: initialPreview || null,
     showPreview: !!(initialFile && initialSchema && initialPreview),
     aiValidation: null,
-    showColumnNamingModal: false,
-    pendingFileData: undefined
-  })
+    showColumnNamingModal: false,
+    pendingFileData: undefined
+  })
+
+  const [isMounted, setIsMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -837,7 +843,7 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
       )}
 
       {/* Schema Analysis */}
-      {state.schema && (
+      {state.schema && isMounted && (
         <div className="space-y-4">
           {/* Summary Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -949,7 +955,7 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
       )}
 
       {/* Data Preview */}
-      {state.showPreview && state.preview && (
+      {state.showPreview && state.preview && isMounted && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">

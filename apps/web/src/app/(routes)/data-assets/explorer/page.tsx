@@ -12,6 +12,7 @@ import { Search, ChevronRight, ChevronDown, Database, Layers, CheckCircle2, Aler
 import { LayerBadge } from '@/components/data-assets/LayerBadge';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
+import { DataAssetsLayout } from '@/components/data-assets';
 
 type Layer = 'bronze' | 'silver' | 'gold';
 type Environment = 'dev' | 'qa' | 'uat' | 'prod';
@@ -221,12 +222,10 @@ export default function DataAssetsExplorerPage() {
     </div>
   );
 
-  // Main layout structure (same for both browse and detail views)
-  const renderMainHeader = () => (
+  // Filters bar (replaces the old main header)
+  const renderFiltersBar = () => (
     <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold text-gray-900">Data Assets Explorer</h1>
-
         {/* Environment & Layer Filters */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -276,210 +275,214 @@ export default function DataAssetsExplorerPage() {
   // If asset is selected, show detail view
   if (selectedAsset) {
     return (
-      <div className="h-screen flex flex-col bg-gray-50">
-        {/* Top Header - Same as browse view */}
-        {renderMainHeader()}
+      <DataAssetsLayout>
+        <div className="h-full flex flex-col bg-gray-50">
+          {/* Filters Bar */}
+          {renderFiltersBar()}
 
-        {/* Main Content: Sidebar + Detail Panel */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar */}
-          {renderSidebar()}
+          {/* Main Content: Sidebar + Detail Panel */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Sidebar */}
+            {renderSidebar()}
 
-          {/* Detail Panel with its own header and tabs */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Detail Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-              <div className="flex items-center gap-4 mb-4">
-                <button
-                  onClick={() => setSelectedAsset(null)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Back to asset list"
-                >
-                  <ArrowLeft className="w-5 h-5 text-gray-600" />
-                </button>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h2>
-                    <LayerBadge layer={selectedAsset.layer} />
+            {/* Detail Panel with its own header and tabs */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Detail Header */}
+              <div className="bg-white border-b border-gray-200 px-6 py-4">
+                <div className="flex items-center gap-4 mb-4">
+                  <button
+                    onClick={() => setSelectedAsset(null)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Back to asset list"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-gray-600" />
+                  </button>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-xl font-semibold text-gray-900">{selectedAsset.table_name}</h2>
+                      <LayerBadge layer={selectedAsset.layer} />
+                    </div>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                      <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
+                      <span>•</span>
+                      <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
+                      {selectedAsset.file_size && (
+                        <>
+                          <span>•</span>
+                          <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
-                    <span>Updated {formatDistanceToNow(new Date(selectedAsset.updated_at), { addSuffix: true })}</span>
-                    <span>•</span>
-                    <span>{selectedAsset.row_count?.toLocaleString()} rows</span>
-                    {selectedAsset.file_size && (
-                      <>
-                        <span>•</span>
-                        <span>{(selectedAsset.file_size / 1024 / 1024).toFixed(2)} MB</span>
-                      </>
-                    )}
-                  </div>
+                </div>
+
+                {/* Detail Tabs */}
+                <div className="flex items-center gap-1">
+                  {[
+                    { id: 'overview', label: 'Overview', icon: Database },
+                    { id: 'schema', label: 'Schema', icon: Table },
+                    { id: 'preview', label: 'Preview', icon: FileText },
+                    { id: 'quality', label: 'Quality', icon: CheckCircle2 },
+                    { id: 'lineage', label: 'Lineage', icon: GitBranch },
+                    { id: 'jobs', label: 'Jobs', icon: Briefcase },
+                  ].map(tab => {
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as DetailTab)}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === tab.id
+                            ? 'border-primary-600 text-primary-600'
+                            : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Detail Tabs */}
-              <div className="flex items-center gap-1">
-                {[
-                  { id: 'overview', label: 'Overview', icon: Database },
-                  { id: 'schema', label: 'Schema', icon: Table },
-                  { id: 'preview', label: 'Preview', icon: FileText },
-                  { id: 'quality', label: 'Quality', icon: CheckCircle2 },
-                  { id: 'lineage', label: 'Lineage', icon: GitBranch },
-                  { id: 'jobs', label: 'Jobs', icon: Briefcase },
-                ].map(tab => {
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as DetailTab)}
-                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                        activeTab === tab.id
-                          ? 'border-primary-600 text-primary-600'
-                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {tab.label}
-                    </button>
-                  );
-                })}
+              {/* Detail Content */}
+              <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+                {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
+                {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
+                {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
+                {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
+                {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
+                {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
               </div>
-            </div>
-
-            {/* Detail Content */}
-            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-              {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
-              {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
-              {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
-              {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
-              {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
-              {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
             </div>
           </div>
         </div>
-      </div>
+      </DataAssetsLayout>
     );
   }
 
   // Browse view with Sidebar + Main Panel
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Top Header - Same as detail view */}
-      {renderMainHeader()}
+    <DataAssetsLayout>
+      <div className="h-full flex flex-col bg-gray-50">
+        {/* Filters Bar */}
+        {renderFiltersBar()}
 
-      {/* Main Content Area: Sidebar + Assets Panel */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Reuse same component */}
-        {renderSidebar()}
+        {/* Main Content Area: Sidebar + Assets Panel */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar - Reuse same component */}
+          {renderSidebar()}
 
-        {/* Main Panel: Asset Cards with Pagination */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Panel Header */}
-          <div className="px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                {selectedJobId
-                  ? workflowGroups
-                      .find(w => w.workflowId === selectedWorkflowId)
-                      ?.jobs.find((j: any) => j.jobId === selectedJobId)?.jobName
-                  : workflowGroups.find(w => w.workflowId === selectedWorkflowId)?.workflowName || 'All Assets'}
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                {displayAssets.length} asset{displayAssets.length !== 1 ? 's' : ''} found
-                {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
-              </p>
+          {/* Main Panel: Asset Cards with Pagination */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Panel Header */}
+            <div className="px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {selectedJobId
+                    ? workflowGroups
+                        .find(w => w.workflowId === selectedWorkflowId)
+                        ?.jobs.find((j: any) => j.jobId === selectedJobId)?.jobName
+                    : workflowGroups.find(w => w.workflowId === selectedWorkflowId)?.workflowName || 'All Assets'}
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {displayAssets.length} asset{displayAssets.length !== 1 ? 's' : ''} found
+                  {totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
+                </p>
+              </div>
             </div>
-          </div>
 
-          {/* Assets Grid */}
-          <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-            {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center text-gray-500">Loading assets...</div>
-              </div>
-            ) : displayAssets.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center py-12 bg-white rounded-lg border border-gray-200 px-8">
-                  <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-600">No assets found</p>
-                  <p className="text-sm text-gray-500 mt-2">Try selecting a different workflow or adjusting filters</p>
+            {/* Assets Grid */}
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center text-gray-500">Loading assets...</div>
                 </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {paginatedAssets.map(asset => (
+              ) : displayAssets.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center py-12 bg-white rounded-lg border border-gray-200 px-8">
+                    <Database className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p className="text-gray-600">No assets found</p>
+                    <p className="text-sm text-gray-500 mt-2">Try selecting a different workflow or adjusting filters</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {paginatedAssets.map(asset => (
+                    <button
+                      key={asset.id}
+                      onClick={() => setSelectedAsset(asset)}
+                      className="bg-white rounded-lg border border-gray-200 p-4 hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Database className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
+                          <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
+                            {asset.table_name}
+                          </h3>
+                        </div>
+                        <LayerBadge layer={asset.layer} size="sm" />
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
+                        <div className="flex items-center gap-1">
+                          <Table className="w-3.5 h-3.5" />
+                          <span>{asset.row_count?.toLocaleString() || 0} rows</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}</span>
+                        </div>
+                      </div>
+
+                      {asset.quality_score !== undefined && (
+                        <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
+                          {asset.quality_score >= 90 ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          ) : asset.quality_score >= 70 ? (
+                            <AlertCircle className="w-4 h-4 text-yellow-600" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-red-600" />
+                          )}
+                          <span className="text-xs font-medium text-gray-600">
+                            Quality: {asset.quality_score}%
+                          </span>
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, displayAssets.length)} of {displayAssets.length} assets
+                </div>
+                <div className="flex gap-2">
                   <button
-                    key={asset.id}
-                    onClick={() => setSelectedAsset(asset)}
-                    className="bg-white rounded-lg border border-gray-200 p-4 hover:border-primary-500 hover:shadow-md transition-all text-left group"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Database className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors" />
-                        <h3 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                          {asset.table_name}
-                        </h3>
-                      </div>
-                      <LayerBadge layer={asset.layer} size="sm" />
-                    </div>
-
-                    <div className="flex items-center gap-4 text-xs text-gray-500 mb-3">
-                      <div className="flex items-center gap-1">
-                        <Table className="w-3.5 h-3.5" />
-                        <span>{asset.row_count?.toLocaleString() || 0} rows</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}</span>
-                      </div>
-                    </div>
-
-                    {asset.quality_score !== undefined && (
-                      <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
-                        {asset.quality_score >= 90 ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        ) : asset.quality_score >= 70 ? (
-                          <AlertCircle className="w-4 h-4 text-yellow-600" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-red-600" />
-                        )}
-                        <span className="text-xs font-medium text-gray-600">
-                          Quality: {asset.quality_score}%
-                        </span>
-                      </div>
-                    )}
+                    Previous
                   </button>
-                ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, displayAssets.length)} of {displayAssets.length} assets
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
-    </div>
+    </DataAssetsLayout>
   );
 }
 

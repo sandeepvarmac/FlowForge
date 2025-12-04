@@ -166,6 +166,8 @@ export interface FileSourceConfig {
   skipRows?: number
   skipFooterRows?: number
   compressionType?: 'none' | 'zip' | 'gzip'
+  // Storage connection reference (for file sources from storage connections)
+  storageConnectionId?: string
   // Incremental loading support (for temporal columns in CSV)
   isIncremental?: boolean
   deltaColumn?: string

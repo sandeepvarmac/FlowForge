@@ -31,6 +31,25 @@ CREATE TABLE IF NOT EXISTS database_connections (
   updated_at INTEGER NOT NULL
 );
 
+-- Storage Connections table (for file & storage source connections: S3, MinIO, Local, SFTP)
+CREATE TABLE IF NOT EXISTS storage_connections (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  type TEXT NOT NULL CHECK(type IN ('local', 's3', 'azure-blob', 'sftp', 'gcs')),
+
+  -- Configuration stored as JSON (varies by type)
+  config TEXT NOT NULL,
+
+  -- Metadata
+  last_tested_at INTEGER,
+  last_test_status TEXT CHECK(last_test_status IN ('success', 'failed')),
+  last_test_message TEXT,
+
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 -- Workflows table
 CREATE TABLE IF NOT EXISTS workflows (
   id TEXT PRIMARY KEY,
@@ -132,6 +151,7 @@ CREATE TABLE IF NOT EXISTS job_executions (
   bronze_records INTEGER DEFAULT 0,
   silver_records INTEGER DEFAULT 0,
   gold_records INTEGER DEFAULT 0,
+  quarantined_records INTEGER DEFAULT 0,
 
   -- File paths
   source_file_path TEXT,

@@ -1,110 +1,143 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui'
+import { Input } from '@/components/ui'
 import {
   Database, Plus, CheckCircle, XCircle, Loader2, Trash2, RefreshCw,
-  Cloud, FileText, Globe, Code, Mail, ShoppingCart, MessageSquare,
-  Calendar, Zap, FolderOpen, HardDrive, Pencil, Eye
+  Cloud, FileText, Globe, Code, MessageSquare, Search,
+  Zap, FolderOpen, HardDrive, Pencil, Server
 } from 'lucide-react'
 import { DatabaseConnection } from '@/types/database-connection'
+import { StorageConnection } from '@/types/storage-connection'
 import { CreateConnectionModal } from '@/components/database'
+import { CreateStorageConnectionModal } from '@/components/storage'
 import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
 import { ToastContainer } from '@/components/ui/toast-container'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+
+// Unified connection type for the list
+type UnifiedConnection = {
+  id: string
+  name: string
+  description?: string
+  category: 'database' | 'storage' | 'api' | 'streaming'
+  type: string
+  status: 'connected' | 'failed' | 'untested'
+  lastTestedAt?: number
+  lastTestMessage?: string
+  details: Record<string, string>
+  original: DatabaseConnection | StorageConnection
+}
 
 // Source categories for tabbed navigation
 const sourceCategories = [
-  { id: 'all', label: 'All Sources', icon: Globe },
-  { id: 'databases', label: 'Databases', icon: Database, count: 0 },
-  { id: 'files', label: 'Files & Storage', icon: FolderOpen, count: 0 },
-  { id: 'apis', label: 'APIs & Services', icon: Code, count: 0 },
-  { id: 'streaming', label: 'Streaming', icon: Zap, count: 0 }
+  { id: 'all', label: 'All', icon: Globe },
+  { id: 'database', label: 'Databases', icon: Database },
+  { id: 'storage', label: 'Storage', icon: FolderOpen },
+  { id: 'api', label: 'APIs', icon: Code },
+  { id: 'streaming', label: 'Streaming', icon: Zap }
 ]
 
-// Coming Soon Integrations organized by category
-const comingSoonIntegrations = {
-  files: [
-    {
-      id: 'file-shares',
-      name: 'Network File Shares',
-      description: 'Windows shares, NFS, SMB/CIFS mounted drives',
-      icon: HardDrive,
-      color: 'purple',
-      status: 'planned'
-    },
-    {
-      id: 'ftp-sftp',
-      name: 'FTP/SFTP',
-      description: 'File transfer protocol servers',
-      icon: FileText,
-      color: 'blue',
-      status: 'planned'
-    },
-    {
-      id: 'cloud-storage',
-      name: 'Cloud Storage',
-      description: 'Amazon S3, Azure Blob, Google Cloud Storage',
-      icon: Cloud,
-      color: 'blue',
-      status: 'planned'
-    }
+// Source type options for the "New Source" modal
+const sourceTypeOptions = [
+  {
+    id: 'database',
+    label: 'Database',
+    description: 'SQL Server, PostgreSQL, MySQL, Oracle',
+    icon: Database,
+    color: 'bg-blue-50 text-blue-600',
+    available: true
+  },
+  {
+    id: 'storage',
+    label: 'Storage',
+    description: 'Local paths, S3/MinIO buckets',
+    icon: FolderOpen,
+    color: 'bg-purple-50 text-purple-600',
+    available: true
+  },
+  {
+    id: 'api',
+    label: 'API',
+    description: 'REST APIs, webhooks, SaaS connectors',
+    icon: Code,
+    color: 'bg-green-50 text-green-600',
+    available: false
+  },
+  {
+    id: 'streaming',
+    label: 'Streaming',
+    description: 'Kafka, RabbitMQ, event streams',
+    icon: Zap,
+    color: 'bg-orange-50 text-orange-600',
+    available: false
+  }
+]
+
+// Coming Soon placeholders for each category
+const comingSoonPlaceholders = {
+  database: [
+    { id: 'snowflake', name: 'Snowflake', description: 'Cloud data warehouse', icon: Database, color: 'blue' },
+    { id: 'bigquery', name: 'Google BigQuery', description: 'Serverless data warehouse', icon: Database, color: 'green' },
+    { id: 'redshift', name: 'Amazon Redshift', description: 'Cloud data warehouse', icon: Database, color: 'orange' },
+    { id: 'databricks', name: 'Databricks', description: 'Unified analytics platform', icon: Database, color: 'red' }
   ],
-  apis: [
-    {
-      id: 'rest-api',
-      name: 'REST APIs',
-      description: 'HTTP/REST API endpoints with authentication',
-      icon: Globe,
-      color: 'green',
-      status: 'planned'
-    },
-    {
-      id: 'crm',
-      name: 'CRM Systems',
-      description: 'Salesforce, HubSpot, Dynamics 365',
-      icon: ShoppingCart,
-      color: 'orange',
-      status: 'planned'
-    },
-    {
-      id: 'analytics',
-      name: 'Analytics Platforms',
-      description: 'Google Analytics, Adobe Analytics',
-      icon: Zap,
-      color: 'pink',
-      status: 'planned'
-    }
+  storage: [
+    { id: 'azure-blob', name: 'Azure Blob Storage', description: 'Microsoft Azure cloud storage', icon: Cloud, color: 'blue' },
+    { id: 'gcs', name: 'Google Cloud Storage', description: 'GCP storage buckets', icon: Cloud, color: 'green' },
+    { id: 'sftp', name: 'SFTP / FTP', description: 'Secure file transfer servers', icon: FileText, color: 'purple' },
+    { id: 'sharepoint', name: 'SharePoint', description: 'Microsoft SharePoint documents', icon: FolderOpen, color: 'blue' }
+  ],
+  api: [
+    { id: 'rest-api', name: 'REST APIs', description: 'HTTP/REST API endpoints with authentication', icon: Globe, color: 'green' },
+    { id: 'salesforce', name: 'Salesforce', description: 'CRM and Sales Cloud data', icon: Cloud, color: 'blue' },
+    { id: 'hubspot', name: 'HubSpot', description: 'Marketing and CRM data', icon: Code, color: 'orange' }
   ],
   streaming: [
-    {
-      id: 'messaging',
-      name: 'Message Queues',
-      description: 'Kafka, RabbitMQ, Azure Service Bus',
-      icon: MessageSquare,
-      color: 'yellow',
-      status: 'planned'
-    }
+    { id: 'kafka', name: 'Apache Kafka', description: 'Distributed event streaming platform', icon: Zap, color: 'yellow' },
+    { id: 'rabbitmq', name: 'RabbitMQ', description: 'Message broker', icon: MessageSquare, color: 'orange' },
+    { id: 'kinesis', name: 'AWS Kinesis', description: 'Real-time data streaming', icon: Cloud, color: 'blue' }
   ]
 }
 
 export default function SourcesPage() {
   const router = useRouter()
   const { toasts, dismissToast, success, error: showError } = useToast()
+
+  // Filter state
   const [activeCategory, setActiveCategory] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Database connections state
   const [connections, setConnections] = useState<DatabaseConnection[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isCreating, setIsCreating] = useState(false)
   const [editingConnection, setEditingConnection] = useState<DatabaseConnection | null>(null)
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
   const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null)
+
+  // Storage connections state
+  const [storageConnections, setStorageConnections] = useState<StorageConnection[]>([])
+  const [isLoadingStorage, setIsLoadingStorage] = useState(true)
+  const [editingStorageConnection, setEditingStorageConnection] = useState<StorageConnection | null>(null)
+  const [testingStorageId, setTestingStorageId] = useState<string | null>(null)
+  const [deletingStorageId, setDeletingStorageId] = useState<string | null>(null)
+
+  // New Source modal state
+  const [showNewSourceModal, setShowNewSourceModal] = useState(false)
+  const [isCreatingDb, setIsCreatingDb] = useState(false)
+  const [isCreatingStorage, setIsCreatingStorage] = useState(false)
+
+  // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [connectionToDelete, setConnectionToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [connectionToDelete, setConnectionToDelete] = useState<{ id: string; name: string; type: 'database' | 'storage' } | null>(null)
 
   useEffect(() => {
     fetchConnections()
+    fetchStorageConnections()
   }, [])
 
   const fetchConnections = async () => {
@@ -117,10 +150,83 @@ export default function SourcesPage() {
         setConnections(data.connections)
       }
     } catch (error) {
-      console.error('Failed to fetch connections:', error)
+      console.error('Failed to fetch database connections:', error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const fetchStorageConnections = async () => {
+    try {
+      setIsLoadingStorage(true)
+      const response = await fetch('/api/storage-connections')
+      const data = await response.json()
+
+      if (data.success) {
+        setStorageConnections(data.connections)
+      }
+    } catch (error) {
+      console.error('Failed to fetch storage connections:', error)
+    } finally {
+      setIsLoadingStorage(false)
+    }
+  }
+
+  // Convert to unified connection list
+  const unifiedConnections = useMemo((): UnifiedConnection[] => {
+    const dbConnections: UnifiedConnection[] = connections.map(conn => ({
+      id: conn.id,
+      name: conn.name,
+      description: conn.description,
+      category: 'database' as const,
+      type: conn.type,
+      status: !conn.lastTestedAt ? 'untested' : conn.lastTestStatus === 'success' ? 'connected' : 'failed',
+      lastTestedAt: conn.lastTestedAt,
+      lastTestMessage: conn.lastTestMessage,
+      details: {
+        'Host': `${conn.host}:${conn.port}`,
+        'Database': conn.database
+      },
+      original: conn
+    }))
+
+    const storageConns: UnifiedConnection[] = storageConnections.map(conn => {
+      const config = conn.config as any
+      const details: Record<string, string> = conn.type === 'local'
+        ? { 'Path': config.basePath || '' }
+        : { 'Bucket': config.bucket || '', 'Endpoint': config.endpointUrl || '' }
+      return {
+        id: conn.id,
+        name: conn.name,
+        description: conn.description,
+        category: 'storage' as const,
+        type: conn.type as string,
+        status: !conn.lastTestedAt ? 'untested' : conn.lastTestStatus === 'success' ? 'connected' : 'failed',
+        lastTestedAt: conn.lastTestedAt,
+        lastTestMessage: conn.lastTestMessage,
+        details,
+        original: conn
+      }
+    })
+
+    return [...dbConnections, ...storageConns]
+  }, [connections, storageConnections])
+
+  // Filter connections based on active category and search
+  const filteredConnections = useMemo(() => {
+    return unifiedConnections.filter(conn => {
+      const matchesCategory = activeCategory === 'all' || conn.category === activeCategory
+      const matchesSearch = !searchQuery ||
+        conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        conn.type.toLowerCase().includes(searchQuery.toLowerCase())
+      return matchesCategory && matchesSearch
+    })
+  }, [unifiedConnections, activeCategory, searchQuery])
+
+  // Get counts for tabs
+  const getCategoryCount = (categoryId: string) => {
+    if (categoryId === 'all') return unifiedConnections.length
+    return unifiedConnections.filter(c => c.category === categoryId).length
   }
 
   const testConnection = async (connectionId: string) => {
@@ -132,18 +238,45 @@ export default function SourcesPage() {
       const data = await response.json()
 
       if (data.success) {
-        // Refresh connections to show updated test status
+        await fetchConnections()
+        success('Connection test successful')
+      } else {
+        showError(data.message || 'Connection test failed')
         await fetchConnections()
       }
     } catch (error) {
       console.error('Failed to test connection:', error)
+      showError('Failed to test connection')
     } finally {
       setTestingConnectionId(null)
     }
   }
 
-  const openDeleteModal = (connectionId: string, name: string) => {
-    setConnectionToDelete({ id: connectionId, name })
+  const testStorageConnection = async (connectionId: string) => {
+    try {
+      setTestingStorageId(connectionId)
+      const response = await fetch(`/api/storage-connections/${connectionId}/test`, {
+        method: 'POST'
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        await fetchStorageConnections()
+        success('Storage connection test successful')
+      } else {
+        showError(data.message || 'Storage connection test failed')
+        await fetchStorageConnections()
+      }
+    } catch (error) {
+      console.error('Failed to test storage connection:', error)
+      showError('Failed to test storage connection')
+    } finally {
+      setTestingStorageId(null)
+    }
+  }
+
+  const openDeleteModal = (connectionId: string, name: string, type: 'database' | 'storage') => {
+    setConnectionToDelete({ id: connectionId, name, type })
     setDeleteModalOpen(true)
   }
 
@@ -151,34 +284,84 @@ export default function SourcesPage() {
     if (!connectionToDelete) return
 
     try {
-      setDeletingConnectionId(connectionToDelete.id)
-      const response = await fetch(`/api/database-connections/${connectionToDelete.id}`, {
-        method: 'DELETE'
-      })
+      if (connectionToDelete.type === 'database') {
+        setDeletingConnectionId(connectionToDelete.id)
+        const response = await fetch(`/api/database-connections/${connectionToDelete.id}`, {
+          method: 'DELETE'
+        })
 
-      if (response.ok) {
-        await fetchConnections()
-        setDeleteModalOpen(false)
-        setConnectionToDelete(null)
+        if (response.ok) {
+          await fetchConnections()
+          success('Database connection deleted')
+        }
+      } else {
+        setDeletingStorageId(connectionToDelete.id)
+        const response = await fetch(`/api/storage-connections/${connectionToDelete.id}`, {
+          method: 'DELETE'
+        })
+
+        if (response.ok) {
+          await fetchStorageConnections()
+          success('Storage connection deleted')
+        }
       }
+
+      setDeleteModalOpen(false)
+      setConnectionToDelete(null)
     } catch (error) {
       console.error('Failed to delete connection:', error)
-      throw error
+      showError('Failed to delete connection')
     } finally {
       setDeletingConnectionId(null)
+      setDeletingStorageId(null)
     }
   }
 
-  const getDatabaseIcon = (type: string) => {
-    return Database
+  const handleNewSourceSelect = (sourceType: string) => {
+    setShowNewSourceModal(false)
+    if (sourceType === 'database') {
+      setIsCreatingDb(true)
+    } else if (sourceType === 'storage') {
+      setIsCreatingStorage(true)
+    }
   }
 
-  const getStatusBadge = (connection: DatabaseConnection) => {
-    if (!connection.lastTestedAt) {
-      return <Badge variant="secondary" className="text-xs">Not Tested</Badge>
+  const getConnectionIcon = (conn: UnifiedConnection) => {
+    if (conn.category === 'database') return Database
+    if (conn.category === 'storage') {
+      return conn.type === 's3' ? Cloud : FolderOpen
     }
+    if (conn.category === 'api') return Code
+    return Zap
+  }
 
-    if (connection.lastTestStatus === 'success') {
+  const getConnectionIconColor = (conn: UnifiedConnection) => {
+    if (conn.category === 'database') return 'bg-blue-50 text-blue-600'
+    if (conn.category === 'storage') {
+      return conn.type === 's3' ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'
+    }
+    if (conn.category === 'api') return 'bg-green-50 text-green-600'
+    return 'bg-yellow-50 text-yellow-600'
+  }
+
+  const getTypeLabel = (conn: UnifiedConnection) => {
+    if (conn.category === 'database') {
+      const labels: Record<string, string> = {
+        'sql-server': 'SQL Server',
+        'postgresql': 'PostgreSQL',
+        'mysql': 'MySQL',
+        'oracle': 'Oracle'
+      }
+      return labels[conn.type] || conn.type
+    }
+    if (conn.category === 'storage') {
+      return conn.type === 's3' ? 'S3 / MinIO' : 'Local Path'
+    }
+    return conn.type
+  }
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'connected') {
       return (
         <Badge variant="success" className="text-xs flex items-center gap-1">
           <CheckCircle className="w-3 h-3" />
@@ -186,13 +369,15 @@ export default function SourcesPage() {
         </Badge>
       )
     }
-
-    return (
-      <Badge variant="destructive" className="text-xs flex items-center gap-1">
-        <XCircle className="w-3 h-3" />
-        Failed
-      </Badge>
-    )
+    if (status === 'failed') {
+      return (
+        <Badge variant="destructive" className="text-xs flex items-center gap-1">
+          <XCircle className="w-3 h-3" />
+          Failed
+        </Badge>
+      )
+    }
+    return <Badge variant="secondary" className="text-xs">Not Tested</Badge>
   }
 
   const formatTimestamp = (timestamp?: number) => {
@@ -200,19 +385,11 @@ export default function SourcesPage() {
     return new Date(timestamp).toLocaleString()
   }
 
-  // Filter coming soon integrations based on active category
-  const getFilteredComingSoon = () => {
-    if (activeCategory === 'all') {
-      return [...comingSoonIntegrations.files, ...comingSoonIntegrations.apis, ...comingSoonIntegrations.streaming]
-    }
-    if (activeCategory === 'databases') {
-      return []
-    }
-    return comingSoonIntegrations[activeCategory as keyof typeof comingSoonIntegrations] || []
-  }
+  const isLoadingAny = isLoading || isLoadingStorage
 
-  const showDatabases = activeCategory === 'all' || activeCategory === 'databases'
-  const showComingSoon = activeCategory === 'all' || activeCategory !== 'databases'
+  // Check if we should show coming soon placeholders (for specific category tabs, not "all")
+  const showComingSoonPlaceholders = activeCategory !== 'all' &&
+    comingSoonPlaceholders[activeCategory as keyof typeof comingSoonPlaceholders]?.length > 0
 
   return (
     <div className="space-y-6 p-6">
@@ -221,18 +398,16 @@ export default function SourcesPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Data Sources</h1>
           <p className="text-foreground-muted mt-1">
-            Connect to databases, cloud storage, APIs, and more to ingest data into FlowForge
+            Connect to databases, storage, APIs, and more to ingest data into FlowForge
           </p>
         </div>
-        {showDatabases && (
-          <Button
-            onClick={() => setIsCreating(true)}
-            className="flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            {activeCategory === 'all' ? 'New Source Connection' : 'New Database Connection'}
-          </Button>
-        )}
+        <Button
+          onClick={() => setShowNewSourceModal(true)}
+          className="flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          New Source
+        </Button>
       </div>
 
       {/* Category Tabs */}
@@ -241,7 +416,7 @@ export default function SourcesPage() {
           {sourceCategories.map((category) => {
             const Icon = category.icon
             const isActive = activeCategory === category.id
-            const count = category.id === 'databases' ? connections.length : 0
+            const count = getCategoryCount(category.id)
 
             return (
               <button
@@ -256,293 +431,342 @@ export default function SourcesPage() {
               >
                 <Icon className="w-4 h-4" />
                 {category.label}
-                {count > 0 && (
-                  <Badge variant="secondary" className="text-xs ml-1">
-                    {count}
-                  </Badge>
-                )}
+                <span
+                  className={cn(
+                    "text-xs ml-1 px-1.5 py-0.5 rounded-full font-medium",
+                    isActive
+                      ? "bg-primary text-white"
+                      : "bg-gray-100 text-gray-600"
+                  )}
+                >
+                  {count}
+                </span>
               </button>
             )
           })}
         </div>
       </div>
 
-      {/* Database Connections Section */}
-      {showDatabases && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">
-                {activeCategory === 'all' ? 'Data Source Connections' : 'Database Connections'}
-              </h2>
-              <p className="text-sm text-foreground-muted mt-0.5">
-                {activeCategory === 'all'
-                  ? 'Connect to databases and other data sources to ingest data into FlowForge'
-                  : 'SQL Server, PostgreSQL, MySQL, and Oracle databases'}
-              </p>
-            </div>
-            <Badge variant="success" className="text-xs">Available Now</Badge>
-          </div>
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
+        <Input
+          placeholder="Search connections..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
       {/* Loading State */}
-      {isLoading && (
+      {isLoadingAny && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
       )}
 
-      {/* Empty State */}
-      {!isLoading && connections.length === 0 && (
-        <Card className="border-2 border-dashed">
-          <CardContent className="p-12 text-center">
-            <Database className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">
-              {activeCategory === 'all' ? 'No Data Source Connections' : 'No Database Connections'}
-            </h2>
-            <p className="text-foreground-muted mb-6 max-w-md mx-auto">
-              {activeCategory === 'all'
-                ? 'Create your first connection to start ingesting data from databases and other sources into FlowForge.'
-                : 'Create your first database connection to start ingesting data from SQL Server, PostgreSQL, MySQL, or Oracle databases.'}
-            </p>
-            <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              {activeCategory === 'all' ? 'Create Connection' : 'Create Your First Connection'}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Connections Grid */}
-      {!isLoading && connections.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {connections.map((connection) => {
-            const Icon = getDatabaseIcon(connection.type)
-            const isTesting = testingConnectionId === connection.id
-            const isDeleting = deletingConnectionId === connection.id
-
-            return (
-              <Card key={connection.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary-50">
-                        <Icon className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{connection.name}</CardTitle>
-                        <p className="text-xs text-foreground-muted mt-0.5">
-                          {connection.type === 'sql-server' ? 'SQL Server' :
-                           connection.type === 'postgresql' ? 'PostgreSQL' :
-                           connection.type === 'mysql' ? 'MySQL' :
-                           'Oracle'}
-                        </p>
-                      </div>
-                    </div>
-                    {getStatusBadge(connection)}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {connection.description && (
-                    <p className="text-sm text-foreground-muted">{connection.description}</p>
-                  )}
-
-                  <div className="text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-foreground-muted">Host:</span>
-                      <span className="font-mono text-foreground">{connection.host}:{connection.port}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-foreground-muted">Database:</span>
-                      <span className="font-mono text-foreground">{connection.database}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-foreground-muted">Last Tested:</span>
-                      <span className="text-foreground">{formatTimestamp(connection.lastTestedAt)}</span>
-                    </div>
-                  </div>
-
-                  {connection.lastTestStatus === 'failed' && connection.lastTestMessage && (
-                    <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                      {connection.lastTestMessage}
-                    </div>
-                  )}
-
-                  {/* Primary Action: Explore Source */}
-                  <Button
-                    className="w-full flex items-center justify-center gap-2"
-                    onClick={() => router.push(`/integrations/sources/${connection.id}/explore`)}
-                  >
-                    <Eye className="w-4 h-4" />
-                    Explore Source
-                  </Button>
-
-                  {/* Secondary Actions */}
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-xs"
-                      onClick={() => testConnection(connection.id)}
-                      disabled={isTesting}
-                    >
-                      {isTesting ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="w-3 h-3 mr-1" />
-                          Test
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditingConnection(connection)}
-                      title="Edit connection"
-                    >
-                      <Pencil className="w-3 h-3 text-primary" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openDeleteModal(connection.id, connection.name)}
-                      disabled={isDeleting}
-                      title="Delete connection"
-                    >
-                      {isDeleting ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3 h-3 text-destructive" />
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Stats Card */}
-      {!isLoading && connections.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Connection Statistics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <div className="text-2xl font-bold text-foreground">{connections.length}</div>
-                <div className="text-xs text-foreground-muted">Total Connections</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-green-600">
-                  {connections.filter(c => c.lastTestStatus === 'success').length}
-                </div>
-                <div className="text-xs text-foreground-muted">Active</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-red-600">
-                  {connections.filter(c => c.lastTestStatus === 'failed').length}
-                </div>
-                <div className="text-xs text-foreground-muted">Failed</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-600">
-                  {connections.filter(c => !c.lastTestedAt).length}
-                </div>
-                <div className="text-xs text-foreground-muted">Not Tested</div>
+      {/* Connection List */}
+      {!isLoadingAny && (
+        <div className="space-y-3">
+          {/* Empty state when no connections and no coming soon */}
+          {filteredConnections.length === 0 && !showComingSoonPlaceholders && (
+            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+              <div className="flex flex-col items-center">
+                {activeCategory === 'all' ? (
+                  <Server className="w-10 h-10 text-muted-foreground mb-3" />
+                ) : activeCategory === 'database' ? (
+                  <Database className="w-10 h-10 text-muted-foreground mb-3" />
+                ) : activeCategory === 'storage' ? (
+                  <FolderOpen className="w-10 h-10 text-muted-foreground mb-3" />
+                ) : activeCategory === 'api' ? (
+                  <Code className="w-10 h-10 text-muted-foreground mb-3" />
+                ) : (
+                  <Zap className="w-10 h-10 text-muted-foreground mb-3" />
+                )}
+                <p className="text-foreground-muted text-sm mb-3">
+                  {searchQuery
+                    ? `No connections matching "${searchQuery}"`
+                    : `No ${activeCategory === 'all' ? '' : activeCategory + ' '}connections yet`}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNewSourceModal(true)}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add Connection
+                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-        )}
-        </div>
-      )}
+          )}
 
-      {/* Coming Soon Integrations */}
-      {showComingSoon && getFilteredComingSoon().length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-foreground">
-                {activeCategory === 'all' ? 'More Integrations' :
-                 activeCategory === 'files' ? 'File & Storage Connectors' :
-                 activeCategory === 'apis' ? 'API & Service Connectors' :
-                 'Streaming Connectors'}
-              </h2>
-              <p className="text-sm text-foreground-muted mt-0.5">
-                {activeCategory === 'all'
-                  ? 'Additional data source connectors coming soon'
-                  : 'These connectors are planned for future releases'}
-              </p>
-            </div>
-            <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {getFilteredComingSoon().map((integration) => {
-              const Icon = integration.icon
-
-              // Color mapping for proper Tailwind classes
-              const colorClasses = {
-                blue: 'bg-blue-50 text-blue-600',
-                green: 'bg-green-50 text-green-600',
-                purple: 'bg-purple-50 text-purple-600',
-                yellow: 'bg-yellow-50 text-yellow-600',
-                orange: 'bg-orange-50 text-orange-600',
-                pink: 'bg-pink-50 text-pink-600'
-              }[integration.color] || 'bg-gray-50 text-gray-600'
-
-              const [bgClass, textClass] = colorClasses.split(' ')
+          {/* Connection cards */}
+          {filteredConnections.map((conn) => {
+              const Icon = getConnectionIcon(conn)
+              const iconColor = getConnectionIconColor(conn)
+              const [bgClass, textClass] = iconColor.split(' ')
+              const isTesting = testingConnectionId === conn.id || testingStorageId === conn.id
+              const isDeleting = deletingConnectionId === conn.id || deletingStorageId === conn.id
 
               return (
-                <Card key={integration.id} className="border-2 border-dashed opacity-75 hover:opacity-100 transition-opacity">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${bgClass}`}>
-                          <Icon className={`w-5 h-5 ${textClass}`} />
+                <Card key={conn.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-4">
+                      {/* Icon */}
+                      <div className={cn('p-2.5 rounded-lg', bgClass)}>
+                        <Icon className={cn('w-5 h-5', textClass)} />
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-foreground truncate">{conn.name}</h3>
+                          {getStatusBadge(conn.status)}
                         </div>
-                        <div>
-                          <CardTitle className="text-base">{integration.name}</CardTitle>
-                          <p className="text-xs text-foreground-muted mt-0.5">
-                            {integration.description}
-                          </p>
+                        <div className="flex items-center gap-3 mt-1 text-sm text-foreground-muted">
+                          <span>{getTypeLabel(conn)}</span>
+                          <span className="text-border">•</span>
+                          {Object.entries(conn.details).slice(0, 2).map(([key, value], idx) => (
+                            <span key={key} className="font-mono text-xs truncate max-w-[200px]" title={value}>
+                              {value}
+                            </span>
+                          ))}
                         </div>
                       </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => conn.category === 'database'
+                            ? testConnection(conn.id)
+                            : testStorageConnection(conn.id)}
+                          disabled={isTesting}
+                          className="text-xs"
+                        >
+                          {isTesting ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <RefreshCw className="w-3 h-3 mr-1" />
+                              Test
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (conn.category === 'database') {
+                              setEditingConnection(conn.original as DatabaseConnection)
+                            } else {
+                              setEditingStorageConnection(conn.original as StorageConnection)
+                            }
+                          }}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDeleteModal(conn.id, conn.name, conn.category as 'database' | 'storage')}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Badge variant="secondary" className="text-xs">Coming in Q2 2025</Badge>
+
+                    {/* Error message if failed */}
+                    {conn.status === 'failed' && conn.lastTestMessage && (
+                      <div className="mt-3 ml-14 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                        {conn.lastTestMessage}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )
             })}
-          </div>
+
+          {/* Coming Soon Placeholders */}
+          {showComingSoonPlaceholders && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-foreground-muted">
+                <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                <span className="text-sm">These connectors are planned for future releases</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(comingSoonPlaceholders[activeCategory as keyof typeof comingSoonPlaceholders] || []).map((item) => {
+                  const Icon = item.icon
+                  const colorClasses: Record<string, string> = {
+                    blue: 'bg-blue-50 text-blue-600',
+                    green: 'bg-green-50 text-green-600',
+                    orange: 'bg-orange-50 text-orange-600',
+                    yellow: 'bg-yellow-50 text-yellow-600',
+                    purple: 'bg-purple-50 text-purple-600',
+                    red: 'bg-red-50 text-red-600'
+                  }
+                  const [bgClass, textClass] = (colorClasses[item.color] || 'bg-gray-50 text-gray-600').split(' ')
+
+                  return (
+                    <Card key={item.id} className="border-2 border-dashed opacity-60">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={cn('p-2 rounded-lg', bgClass)}>
+                            <Icon className={cn('w-5 h-5', textClass)} />
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-foreground">{item.name}</h3>
+                            <p className="text-xs text-foreground-muted">{item.description}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Create/Edit Connection Modal */}
+      {/* New Source Type Selector Modal */}
+      <Dialog open={showNewSourceModal} onOpenChange={setShowNewSourceModal}>
+        <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>New Data Source</DialogTitle>
+            <p className="text-sm text-foreground-muted">
+              Select the type of data source you want to connect
+            </p>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {sourceTypeOptions.map((option) => {
+              const Icon = option.icon
+              const colorMap: Record<string, { bg: string; iconBg: string; text: string; border: string; hoverBorder: string }> = {
+                'bg-blue-50 text-blue-600': {
+                  bg: 'bg-blue-50',
+                  iconBg: 'bg-blue-100',
+                  text: 'text-blue-600',
+                  border: 'border-blue-200',
+                  hoverBorder: 'hover:border-blue-300'
+                },
+                'bg-purple-50 text-purple-600': {
+                  bg: 'bg-purple-50',
+                  iconBg: 'bg-purple-100',
+                  text: 'text-purple-600',
+                  border: 'border-purple-200',
+                  hoverBorder: 'hover:border-purple-300'
+                },
+                'bg-green-50 text-green-600': {
+                  bg: 'bg-green-50',
+                  iconBg: 'bg-green-100',
+                  text: 'text-green-600',
+                  border: 'border-green-200',
+                  hoverBorder: 'hover:border-green-300'
+                },
+                'bg-orange-50 text-orange-600': {
+                  bg: 'bg-orange-50',
+                  iconBg: 'bg-orange-100',
+                  text: 'text-orange-600',
+                  border: 'border-orange-200',
+                  hoverBorder: 'hover:border-orange-300'
+                }
+              }
+              const colors = colorMap[option.color] || colorMap['bg-blue-50 text-blue-600']
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => option.available && handleNewSourceSelect(option.id)}
+                  disabled={!option.available}
+                  className={cn(
+                    'w-full p-4 border-2 rounded-lg text-left transition-all flex items-start gap-4',
+                    option.available
+                      ? `${colors.bg} ${colors.border} ${colors.hoverBorder} hover:shadow-md cursor-pointer`
+                      : 'border-dashed border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed'
+                  )}
+                >
+                  <div className={cn('p-2 rounded-lg', colors.iconBg)}>
+                    <Icon className={cn('w-5 h-5', colors.text)} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-foreground">{option.label}</h3>
+                      {!option.available && (
+                        <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-foreground-muted mt-1">{option.description}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <div className="flex justify-end w-full">
+              <Button variant="ghost" onClick={() => setShowNewSourceModal(false)}>
+                Cancel
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Database Connection Modal */}
       <CreateConnectionModal
-        open={isCreating || editingConnection !== null}
+        open={isCreatingDb || editingConnection !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setIsCreating(false)
+            setIsCreatingDb(false)
             setEditingConnection(null)
           }
         }}
         editConnection={editingConnection || undefined}
+        onBack={() => {
+          setIsCreatingDb(false)
+          setShowNewSourceModal(true)
+        }}
         onConnectionCreated={(connection, wasEdit) => {
           fetchConnections()
           setEditingConnection(null)
           if (wasEdit) {
-            success('Connection updated successfully')
+            success('Database connection updated successfully')
           } else {
-            success('Connection created successfully')
+            success('Database connection created successfully')
+          }
+        }}
+        onError={(message) => {
+          showError(message)
+        }}
+      />
+
+      {/* Create/Edit Storage Connection Modal */}
+      <CreateStorageConnectionModal
+        open={isCreatingStorage || editingStorageConnection !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreatingStorage(false)
+            setEditingStorageConnection(null)
+          }
+        }}
+        editConnection={editingStorageConnection || undefined}
+        onBack={() => {
+          setIsCreatingStorage(false)
+          setShowNewSourceModal(true)
+        }}
+        onConnectionCreated={(connection, wasEdit) => {
+          fetchStorageConnections()
+          setEditingStorageConnection(null)
+          if (wasEdit) {
+            success('Storage connection updated successfully')
+          } else {
+            success('Storage connection created successfully')
           }
         }}
         onError={(message) => {
@@ -558,11 +782,11 @@ export default function SourcesPage() {
         open={deleteModalOpen}
         onOpenChange={setDeleteModalOpen}
         onConfirm={handleDeleteConfirm}
-        title="Delete Database Connection"
-        description="Are you sure you want to delete this database connection? This action cannot be undone."
+        title={connectionToDelete?.type === 'storage' ? 'Delete Storage Connection' : 'Delete Database Connection'}
+        description="Are you sure you want to delete this connection? This action cannot be undone."
         itemName={connectionToDelete?.name || ''}
         itemType="connection"
-        isDeleting={deletingConnectionId === connectionToDelete?.id}
+        isDeleting={deletingConnectionId === connectionToDelete?.id || deletingStorageId === connectionToDelete?.id}
       />
     </div>
   )

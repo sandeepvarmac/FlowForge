@@ -14,6 +14,10 @@ interface DialogContentProps {
   children: React.ReactNode
   className?: string
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
+  /** Callback when clicking outside the dialog. Call e.preventDefault() to prevent closing. */
+  onPointerDownOutside?: (e: React.MouseEvent) => void
+  /** Callback when pressing escape. Call e.preventDefault() to prevent closing. */
+  onEscapeKeyDown?: (e: KeyboardEvent) => void
 }
 
 interface DialogHeaderProps {
@@ -74,7 +78,7 @@ export function DialogTrigger({ children, asChild }: { children: React.ReactNode
   )
 }
 
-export function DialogContent({ children, className, size = 'lg' }: DialogContentProps) {
+export function DialogContent({ children, className, size = 'lg', onPointerDownOutside, onEscapeKeyDown }: DialogContentProps) {
   const context = React.useContext(DialogContext)
   if (!context) throw new Error('DialogContent must be used within Dialog')
 
@@ -90,16 +94,42 @@ export function DialogContent({ children, className, size = 'lg' }: DialogConten
     }
   }, [context.open])
 
+  // Handle escape key
+  React.useEffect(() => {
+    if (!context.open) return
+
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (onEscapeKeyDown) {
+          onEscapeKeyDown(e)
+          if (e.defaultPrevented) return
+        }
+        context.onOpenChange(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleEscapeKey)
+    return () => document.removeEventListener('keydown', handleEscapeKey)
+  }, [context.open, context.onOpenChange, onEscapeKeyDown])
+
   if (!context.open) return null
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (onPointerDownOutside) {
+      onPointerDownOutside(e)
+      if (e.defaultPrevented) return
+    }
+    context.onOpenChange(false)
+  }
 
   return (
     <>
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-in fade-in-0"
-        onClick={() => context.onOpenChange(false)}
+        onClick={handleBackdropClick}
       />
-      
+
       {/* Dialog */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
@@ -118,7 +148,7 @@ export function DialogContent({ children, className, size = 'lg' }: DialogConten
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>
           </button>
-          
+
           {children}
         </div>
       </div>

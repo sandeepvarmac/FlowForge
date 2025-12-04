@@ -198,7 +198,7 @@ print(json.dumps(result))
 import sys
 import json
 import os
-import pandas as pd
+import polars as pl
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -226,10 +226,29 @@ sample_data = ${sampleDataJson}
 # Build column mapping from schema
 columns = [col['name'] for col in schema]
 
-# Create DataFrame
-df = pd.DataFrame(sample_data, columns=columns)
+print(f"[DEBUG] Schema columns: {columns}", file=sys.stderr)
+print(f"[DEBUG] Sample data type: {type(sample_data)}, length: {len(sample_data) if sample_data else 0}", file=sys.stderr)
 
-print(f"[DEBUG] Created DataFrame with {len(df)} rows and {len(df.columns)} columns", file=sys.stderr)
+# Create Polars DataFrame from sample data
+# Sample data can be either:
+# 1. Array of objects: [{name: "John", age: "30"}, ...] (from CSV upload)
+# 2. Array of arrays: [["John", "30"], ...] (row-oriented)
+if sample_data and len(sample_data) > 0:
+    if isinstance(sample_data[0], dict):
+        # Data is array of objects - Polars can handle this directly
+        print(f"[DEBUG] Sample data is array of objects (dict)", file=sys.stderr)
+        df = pl.DataFrame(sample_data)
+        # Ensure all columns are strings for consistent AI analysis
+        df = df.cast({col: pl.Utf8 for col in df.columns})
+    else:
+        # Data is array of arrays - use row orientation
+        print(f"[DEBUG] Sample data is array of arrays", file=sys.stderr)
+        df = pl.DataFrame(sample_data, schema={col: pl.Utf8 for col in columns}, orient='row')
+else:
+    raise ValueError("No sample data provided")
+
+print(f"[DEBUG] Created Polars DataFrame with {len(df)} rows and {len(df.columns)} columns", file=sys.stderr)
+print(f"[DEBUG] DataFrame columns: {df.columns}", file=sys.stderr)
 
 emit_progress('profiling', 'Analyzing data structure and patterns...')
 
@@ -280,7 +299,8 @@ print(json.dumps(result))
       python.on('close', (code) => {
         console.log('[AI Full API] Python process closed with code:', code)
         console.log('[AI Full API] Python stdout:', output)
-        console.log('[AI Full API] Python stderr (last 500 chars):', errorOutput.slice(-500))
+        // Show more error output for debugging (last 2000 chars)
+        console.log('[AI Full API] Python stderr (last 2000 chars):', errorOutput.slice(-2000))
 
         if (code !== 0) {
           console.error('[AI Full API] Python error - non-zero exit code:', code)

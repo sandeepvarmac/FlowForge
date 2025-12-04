@@ -1,26 +1,53 @@
 """
 AI Quality Profiler - Analyzes Bronze layer data and suggests quality rules
 Uses Anthropic Claude to intelligently detect data quality issues and recommend validation rules
+With automatic fallback to OpenAI GPT if Anthropic is unavailable
 """
 
 import os
 import json
 from typing import Dict, List, Any, Optional
 import polars as pl
-import anthropic
 from prefect import get_run_logger
 
 
 class AIQualityProfiler:
     """AI-powered data quality profiler that suggests validation rules"""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        """Initialize AI profiler with Anthropic API key"""
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable not set")
-        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, provider: Optional[str] = None):
+        """
+        Initialize AI profiler with automatic provider selection.
+
+        Priority:
+        1. Explicit provider parameter
+        2. Anthropic if ANTHROPIC_API_KEY is set
+        3. OpenAI if OPENAI_API_KEY is set
+        4. Raise error if neither is available
+        """
+        self.provider = provider
+        self.client = None
+        self.model = model
+
+        # Determine provider and initialize client
+        anthropic_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+
+        if self.provider == "anthropic" or (self.provider is None and anthropic_key):
+            if not anthropic_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            import anthropic
+            self.client = anthropic.Anthropic(api_key=anthropic_key)
+            self.provider = "anthropic"
+            self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
+        elif self.provider == "openai" or (self.provider is None and openai_key):
+            if not openai_key:
+                raise ValueError("OPENAI_API_KEY environment variable not set")
+            from openai import OpenAI
+            self.client = OpenAI(api_key=openai_key)
+            self.provider = "openai"
+            self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        else:
+            raise ValueError("No AI API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable")
 
     def profile_dataframe(
         self,
@@ -135,39 +162,50 @@ class AIQualityProfiler:
         profile: Dict[str, Any],
         sample_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Use Anthropic Claude to analyze profile and suggest quality rules"""
+        """Use AI (Anthropic or OpenAI) to analyze profile and suggest quality rules"""
         logger = get_run_logger()
 
         # Prepare prompt for the model
         prompt = self._build_ai_prompt(table_name, profile, sample_data)
 
         try:
-            logger.info("Calling Anthropic Claude for quality rule suggestions...")
+            logger.info(f"Calling {self.provider.upper()} ({self.model}) for quality rule suggestions...")
 
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+            if self.provider == "anthropic":
+                message = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                response_text = message.content[0].text if message.content else ""
+            else:  # OpenAI
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                response_text = response.choices[0].message.content if response.choices else ""
 
-            # Parse AI response
-            response_text = message.content[0].text if message.content else ""
-            logger.info(f"AI response received ({len(response_text)} chars)")
+            logger.info(f"AI response received ({len(response_text)} chars) from {self.provider}")
 
             # Extract JSON from response
             suggestions = self._parse_ai_response(response_text)
+            suggestions["_provider"] = self.provider
 
             return suggestions
 
         except Exception as e:
-            logger.error(f"AI analysis failed: {str(e)}")
+            logger.error(f"AI analysis failed ({self.provider}): {str(e)}")
             return {
                 "quality_rules": [],
                 "primary_key_recommendation": None,
                 "join_key_recommendations": [],
-                "error": str(e)
+                "error": str(e),
+                "_provider": self.provider
             }
 
     def _build_ai_prompt(

@@ -14,6 +14,7 @@ interface CreateConnectionModalProps {
   editConnection?: DatabaseConnection
   onConnectionCreated?: (connection: any, wasEdit: boolean) => void
   onError?: (message: string) => void
+  onBack?: () => void
 }
 
 interface ConnectionFormData {
@@ -49,10 +50,11 @@ const databaseTypes = [
   { value: 'oracle', label: 'Oracle', icon: Database, defaultPort: 1521, disabled: true }
 ]
 
-export function CreateConnectionModal({ open, onOpenChange, editConnection, onConnectionCreated, onError }: CreateConnectionModalProps) {
+export function CreateConnectionModal({ open, onOpenChange, editConnection, onConnectionCreated, onError, onBack }: CreateConnectionModalProps) {
   const [formData, setFormData] = React.useState<ConnectionFormData>(initialFormData)
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [isCreating, setIsCreating] = React.useState(false)
+  const [isTesting, setIsTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<{ success: boolean; message: string } | null>(null)
   const [showPassword, setShowPassword] = React.useState(false)
 
@@ -177,6 +179,45 @@ export function CreateConnectionModal({ open, onOpenChange, editConnection, onCo
       onError?.(errorMessage)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleTestConnection = async () => {
+    if (!validateForm()) return
+
+    try {
+      setIsTesting(true)
+      setTestResult(null)
+
+      // Test connection without saving using the test-only endpoint
+      const testResponse = await fetch('/api/database-connections/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: formData.type,
+          host: formData.host,
+          port: formData.port,
+          database: formData.database,
+          username: formData.username,
+          password: formData.password
+        })
+      })
+
+      const testData = await testResponse.json()
+      setTestResult({
+        success: testData.success,
+        message: testData.message || (testData.success ? 'Connection successful' : 'Connection failed')
+      })
+
+      // Don't save or close - just show the test result
+    } catch (error) {
+      console.error('Failed to test connection:', error)
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'An unexpected error occurred'
+      })
+    } finally {
+      setIsTesting(false)
     }
   }
 
@@ -423,30 +464,55 @@ export function CreateConnectionModal({ open, onOpenChange, editConnection, onCo
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={handleClose}
-            disabled={isCreating}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateConnection}
-            disabled={isCreating}
-            className="flex items-center gap-2"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {isEditMode ? 'Updating & Testing...' : 'Creating & Testing...'}
-              </>
-            ) : (
-              <>
-                <Database className="w-4 h-4" />
-                {isEditMode ? 'Update Connection' : 'Create Connection'}
-              </>
-            )}
-          </Button>
+          <div className="flex justify-between w-full">
+            <div>
+              {onBack && !isEditMode && (
+                <Button variant="outline" onClick={onBack} disabled={isCreating || isTesting}>
+                  Back
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                onClick={handleClose}
+                disabled={isCreating || isTesting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={isCreating || isTesting}
+              >
+                {isTesting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  'Test Connection'
+                )}
+              </Button>
+              <Button
+                onClick={handleCreateConnection}
+                disabled={isCreating || isTesting}
+                className="flex items-center gap-2"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {isEditMode ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    {isEditMode ? 'Update Connection' : 'Create Connection'}
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
