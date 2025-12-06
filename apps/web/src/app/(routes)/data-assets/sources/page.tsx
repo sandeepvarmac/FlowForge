@@ -731,9 +731,9 @@ export default function SourceDataPage() {
 
       if (tablePreview) {
         return (
-          <div className="flex-1 flex flex-col h-full">
+          <div className="h-full flex flex-col min-h-0">
             {/* Table Header */}
-            <div className="border-b bg-card p-4">
+            <div className="border-b bg-card p-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">{selectedNode.label}</h2>
@@ -749,9 +749,9 @@ export default function SourceDataPage() {
             </div>
 
             {/* Tabs: Schema, DDL, Preview, Dependencies */}
-            <div className="flex-1 overflow-hidden">
-              <Tabs defaultValue="schema" className="h-full flex flex-col">
-                <div className="border-b px-4">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <Tabs defaultValue="schema" className="h-full flex flex-col min-h-0 overflow-hidden">
+                <div className="border-b px-4 flex-shrink-0">
                   <TabsList className="bg-transparent h-auto p-0">
                     <TabsTrigger value="schema" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
                       Schema ({tablePreview.schema.length} columns)
@@ -769,100 +769,108 @@ export default function SourceDataPage() {
                 </div>
 
                 {/* Schema Tab */}
-                <TabsContent value="schema" className="flex-1 overflow-auto m-0 p-4">
-                  <div className="border rounded-md overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted sticky top-0">
-                        <tr>
-                          <th className="text-left p-3 font-medium text-foreground border-b">Column Name</th>
-                          <th className="text-left p-3 font-medium text-foreground border-b">Data Type</th>
-                          <th className="text-left p-3 font-medium text-foreground border-b">Nullable</th>
-                          <th className="text-left p-3 font-medium text-foreground border-b">Key</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tablePreview.schema.map((col, idx) => {
-                          // Simple heuristic to detect primary/foreign keys
-                          const isPK = col.name.toLowerCase() === 'id' || col.name.toLowerCase().endsWith('_id') && idx === 0
-                          const isFK = col.name.toLowerCase().endsWith('_id') && idx !== 0
+                <TabsContent value="schema" className="flex-1 min-h-0 m-0 p-4 overflow-hidden data-[state=inactive]:hidden">
+                  <div className="border rounded-md h-full flex flex-col min-h-0 overflow-hidden">
+                    <div className="overflow-auto flex-1 min-h-0">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 z-20 bg-primary text-white shadow-md border-b border-primary-700">
+                          <tr>
+                            <th className="text-left p-3 font-semibold border-b border-primary-800 bg-transparent">Column Name</th>
+                            <th className="text-left p-3 font-semibold border-b border-primary-800 bg-transparent">Data Type</th>
+                            <th className="text-left p-3 font-semibold border-b border-primary-800 bg-transparent">Nullable</th>
+                            <th className="text-left p-3 font-semibold border-b border-primary-800 bg-transparent">Key</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tablePreview.schema.map((col, idx) => {
+                            // Simple heuristic to detect primary/foreign keys
+                            const isPK = col.name.toLowerCase() === 'id' || col.name.toLowerCase().endsWith('_id') && idx === 0
+                            const isFK = col.name.toLowerCase().endsWith('_id') && idx !== 0
 
-                          return (
-                            <tr key={idx} className="border-b hover:bg-muted/50">
-                              <td className="p-3 font-mono text-foreground">
-                                {col.name}
-                                {isPK && <span className="ml-2 text-xs text-blue-600 font-semibold">(PK)</span>}
-                                {isFK && <span className="ml-2 text-xs text-purple-600 font-semibold">(FK)</span>}
-                              </td>
-                              <td className="p-3 text-muted-foreground">{col.type}</td>
-                              <td className="p-3">
-                                <Badge variant={col.nullable ? 'secondary' : 'outline'} className="text-xs">
-                                  {col.nullable ? 'Yes' : 'No'}
-                                </Badge>
-                              </td>
-                              <td className="p-3 text-muted-foreground text-xs">
-                                {isPK && 'Primary Key'}
-                                {isFK && 'Foreign Key'}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                            return (
+                              <tr key={idx} className="border-b border-primary-100 hover:bg-primary-100/60 odd:bg-primary-50 even:bg-white">
+                                <td className="p-3 font-mono text-foreground">
+                                  {col.name}
+                                  {isPK && <span className="ml-2 text-xs text-blue-600 font-semibold">(PK)</span>}
+                                  {isFK && <span className="ml-2 text-xs text-purple-600 font-semibold">(FK)</span>}
+                                </td>
+                                <td className="p-3 text-muted-foreground">{col.type}</td>
+                                <td className="p-3">
+                                  <Badge variant={col.nullable ? 'secondary' : 'outline'} className="text-xs">
+                                    {col.nullable ? 'Yes' : 'No'}
+                                  </Badge>
+                                </td>
+                                <td className="p-3 text-muted-foreground text-xs">
+                                  {isPK && 'Primary Key'}
+                                  {isFK && 'Foreign Key'}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </TabsContent>
 
                 {/* DDL Tab */}
-                <TabsContent value="ddl" className="flex-1 overflow-auto m-0 p-4">
-                  <div className="bg-muted/30 border rounded-md p-4">
-                    <pre className="text-sm font-mono text-foreground whitespace-pre-wrap">
-                      {`CREATE TABLE ${selectedNode.tableName} (\n${tablePreview.schema.map((col, idx) => {
-                        const isPK = col.name.toLowerCase() === 'id' || (col.name.toLowerCase().endsWith('_id') && idx === 0)
-                        return `  ${col.name} ${col.type}${col.nullable ? '' : ' NOT NULL'}${isPK ? ' PRIMARY KEY' : ''}`
-                      }).join(',\n')}\n);`}
-                    </pre>
+                <TabsContent value="ddl" className="flex-1 min-h-0 m-0 p-4 overflow-hidden data-[state=inactive]:hidden">
+                  <div className="border rounded-md h-full flex flex-col min-h-0 overflow-hidden">
+                    <div className="overflow-auto flex-1 min-h-0 p-4 bg-muted/30">
+                      <pre className="text-sm font-mono text-foreground whitespace-pre-wrap">
+                        {`CREATE TABLE ${selectedNode.tableName} (\n${tablePreview.schema.map((col, idx) => {
+                          const isPK = col.name.toLowerCase() === 'id' || (col.name.toLowerCase().endsWith('_id') && idx === 0)
+                          return `  ${col.name} ${col.type}${col.nullable ? '' : ' NOT NULL'}${isPK ? ' PRIMARY KEY' : ''}`
+                        }).join(',\n')}\n);`}
+                      </pre>
+                    </div>
+                    <div className="px-4 py-2 border-t bg-card flex-shrink-0">
+                      <p className="text-xs text-muted-foreground">
+                        Note: This is a simplified DDL representation. Actual constraints and indexes may differ.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-4">
-                    Note: This is a simplified DDL representation. Actual constraints and indexes may differ.
-                  </p>
                 </TabsContent>
 
                 {/* Preview Tab */}
-                <TabsContent value="preview" className="flex-1 overflow-auto m-0 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Showing first {Math.min(100, tablePreview.rows.length)} of {tablePreview.total_rows?.toLocaleString() || 'Unknown'} total rows
-                    </p>
-                  </div>
-                  <div className="border rounded-md overflow-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted sticky top-0">
-                        <tr>
-                          {tablePreview.schema.map((col) => (
-                            <th key={col.name} className="text-left p-3 font-medium text-foreground border-b">
-                              {col.name}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tablePreview.rows.map((row, idx) => (
-                          <tr key={idx} className="border-b hover:bg-muted/50">
+                <TabsContent value="preview" className="flex-1 min-h-0 m-0 p-4 overflow-hidden data-[state=inactive]:hidden">
+                  <div className="border rounded-md h-full flex flex-col min-h-0 overflow-hidden">
+                    <div className="px-4 py-2 border-b bg-muted/30 text-foreground flex-shrink-0">
+                      <p className="text-sm text-muted-foreground">
+                        Showing first {Math.min(100, tablePreview.rows.length)} of {tablePreview.total_rows?.toLocaleString() || 'Unknown'} total rows
+                      </p>
+                    </div>
+                    <div className="overflow-auto flex-1 min-h-0">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 z-20 bg-primary text-white shadow-md border-b border-primary-700">
+                          <tr>
                             {tablePreview.schema.map((col) => (
-                              <td key={col.name} className="p-3 text-muted-foreground">
-                                {row[col.name] !== null && row[col.name] !== undefined
-                                  ? String(row[col.name])
-                                  : <span className="text-muted-foreground/50 italic">NULL</span>}
-                              </td>
+                              <th key={col.name} className="text-left p-3 font-semibold border-b border-primary-800 bg-transparent whitespace-nowrap">
+                                {col.name}
+                              </th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {tablePreview.rows.map((row, idx) => (
+                            <tr key={idx} className="border-b border-primary-100 hover:bg-primary-100/60 odd:bg-primary-50 even:bg-white">
+                              {tablePreview.schema.map((col) => (
+                                <td key={col.name} className="p-3 text-foreground whitespace-nowrap">
+                                  {row[col.name] !== null && row[col.name] !== undefined
+                                    ? String(row[col.name])
+                                    : <span className="text-muted-foreground/50 italic">NULL</span>}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </TabsContent>
 
                 {/* Dependencies Tab */}
-                <TabsContent value="dependencies" className="flex-1 overflow-auto m-0 p-4">
+                <TabsContent value="dependencies" className="flex-1 min-h-0 m-0 p-4 overflow-auto data-[state=inactive]:hidden">
                   <div className="space-y-4">
                     {/* Referenced By (Views/Procedures that use this table) */}
                     <div className="border rounded-md p-4">
@@ -929,7 +937,7 @@ export default function SourceDataPage() {
 
   return (
     <DataAssetsLayout>
-      <div className="h-full flex overflow-hidden bg-background">
+      <div className="h-full flex overflow-hidden bg-background min-h-0">
         {/* Loading State */}
         {isLoading && (
           <div className="flex items-center justify-center w-full h-full">
@@ -1026,7 +1034,7 @@ export default function SourceDataPage() {
             </div>
 
             {/* Right Panel - Details */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               {renderMainPanel()}
             </div>
           </>

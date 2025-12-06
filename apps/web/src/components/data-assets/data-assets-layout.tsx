@@ -55,7 +55,7 @@ export function DataAssetsLayout({ children }: DataAssetsLayoutProps) {
   const activeTab = getActiveTab()
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Tab Navigation */}
       <div className="border-b bg-card">
         <div className="px-6 pt-4">
@@ -108,7 +108,7 @@ export function DataAssetsLayout({ children }: DataAssetsLayoutProps) {
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {children}
       </div>
     </div>

@@ -346,13 +346,15 @@ export default function DataAssetsExplorerPage() {
               </div>
 
               {/* Detail Content */}
-              <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
-                {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
-                {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
-                {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
-                {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
-                {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+              <div className="flex-1 overflow-hidden p-6 bg-gray-50">
+                <div className="h-full min-h-0">
+                  {activeTab === 'overview' && <OverviewTab asset={selectedAsset} details={assetDetails} />}
+                  {activeTab === 'schema' && <SchemaTab asset={selectedAsset} />}
+                  {activeTab === 'preview' && <SampleTab asset={selectedAsset} />}
+                  {activeTab === 'quality' && <QualityTab asset={selectedAsset} details={assetDetails} />}
+                  {activeTab === 'lineage' && <LineageTab asset={selectedAsset} details={assetDetails} />}
+                  {activeTab === 'jobs' && <JobsTab asset={selectedAsset} details={assetDetails} />}
+                </div>
               </div>
             </div>
           </div>
@@ -598,28 +600,28 @@ function SchemaTab({ asset }: any) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden h-full flex flex-col">
+      <div className="overflow-auto flex-1 min-h-0">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="border-b border-primary-700 sticky top-0 z-20 bg-primary text-white shadow-md">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
                 Column Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
                 Data Type
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">
                 Nullable
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-primary-100">
             {schema.columns.map((column: any, index: number) => (
-              <tr key={index} className="hover:bg-gray-50">
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">{column.name}</td>
-                <td className="px-6 py-4 text-sm text-gray-600 font-mono">{column.type}</td>
-                <td className="px-6 py-4 text-sm text-gray-600">{column.nullable ? 'Yes' : 'No'}</td>
+              <tr key={index} className="hover:bg-primary-100/60 odd:bg-primary-50 even:bg-white">
+                <td className="px-6 py-4 text-sm font-medium text-foreground">{column.name}</td>
+                <td className="px-6 py-4 text-sm text-muted-foreground font-mono">{column.type}</td>
+                <td className="px-6 py-4 text-sm text-muted-foreground">{column.nullable ? 'Yes' : 'No'}</td>
               </tr>
             ))}
           </tbody>
@@ -693,31 +695,31 @@ function SampleTab({ asset }: any) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden h-full flex flex-col">
+      <div className="px-6 py-3 bg-muted/30 text-foreground border-b border-gray-200 flex-shrink-0">
         <p className="text-sm text-gray-600">
           Showing {sampleData.rows.length} of {asset.row_count?.toLocaleString() || 'unknown'} rows
         </p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto flex-1 min-h-0">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="border-b border-primary-700 sticky top-0 z-20 bg-primary text-white shadow-md">
             <tr>
               {sampleData.columns.map((column: string) => (
                 <th
                   key={column}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider whitespace-nowrap"
+                  className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                 >
                   {column}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-primary-100">
             {sampleData.rows.map((row: any, rowIndex: number) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
+              <tr key={rowIndex} className="hover:bg-primary-100/60 odd:bg-primary-50 even:bg-white">
                 {sampleData.columns.map((column: string) => (
-                  <td key={column} className="px-6 py-4 text-sm text-gray-900 whitespace-nowrap">
+                  <td key={column} className="px-6 py-4 text-sm text-foreground whitespace-nowrap">
                     {row[column] !== null && row[column] !== undefined ? String(row[column]) : (
                       <span className="text-gray-400 italic">null</span>
                     )}

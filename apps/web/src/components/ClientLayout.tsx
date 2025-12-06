@@ -15,19 +15,19 @@ export function ClientLayout({ children }: { children: ReactNode }) {
     <AppProvider>
       <ToastProvider>
         <UploadQueueProvider>
-          <div className="flex h-dvh">
+          <div className="flex h-dvh min-h-0">
             {/* Desktop Navigation */}
             <aside className={`hidden md:flex ${isNavCollapsed ? 'w-20' : 'w-64'} border-r border-border bg-background-secondary shadow-corporate-lg flex-col transition-all duration-300 relative`}>
               <Nav isCollapsed={isNavCollapsed} onToggleCollapse={() => setIsNavCollapsed(!isNavCollapsed)} />
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 overflow-auto bg-background">
+            <main className="flex-1 bg-background overflow-hidden min-h-0">
               {/* Mobile Navigation */}
               <MobileNav />
 
               {/* Page Content */}
-              <div className="p-4 md:p-6">
+              <div className="p-4 md:p-6 h-full overflow-hidden">
                 {children}
               </div>
             </main>
