@@ -107,7 +107,11 @@ apps/web/data/silver/
 apps/web/data/gold/
 apps/web/data/uploads/
 apps/web/data/duckdb/
+apps/web/data/flowforge.db
 prefect-flows/data/
+
+# PowerPoint files (binary, managed separately)
+FlowForge-Sales-Deck.pptx
 
 # Docker volumes
 docker-compose.override.yml
