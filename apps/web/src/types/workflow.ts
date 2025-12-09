@@ -191,8 +191,26 @@ export interface ApiSourceConfig {
   authConfig?: Record<string, string>
 }
 
-// Destination Configuration (Bronze/Silver/Gold)
+// Landing Zone Configuration
+export interface LandingZoneConfig {
+  enabled?: boolean
+  pathPattern?: string
+  fileOrganization?: 'date-partitioned' | 'source-partitioned' | 'flat'
+  retentionDays?: number
+  immutable?: boolean
+}
+
+// Column Mapping for Bronze layer
+export interface BronzeColumnMapping {
+  sourceColumn: string
+  targetColumn: string
+  targetType: string
+  exclude: boolean
+}
+
+// Destination Configuration (Landing/Bronze/Silver/Gold)
 export interface DestinationConfig {
+  landingZoneConfig?: LandingZoneConfig
   bronzeConfig: LayerConfig
   silverConfig?: LayerConfig
   goldConfig?: LayerConfig
@@ -201,8 +219,9 @@ export interface DestinationConfig {
 export interface LayerConfig {
   enabled: boolean
   tableName: string
+  tableType?: 'fact' | 'dimension' | 'transactional' | 'reference' // Table classification
   partitionKeys?: string[]
-  storageFormat: 'parquet' | 'iceberg' | 'delta'
+  storageFormat: 'parquet' | 'iceberg' | 'delta' | 'duckdb'
   retentionDays?: number
   // Bronze-specific
   loadStrategy?: 'append' | 'full_refresh' | 'incremental' // Bronze: append, truncate+reload, or incremental
@@ -210,16 +229,33 @@ export interface LayerConfig {
   auditColumnsBatchId?: boolean // Add _batch_id (UUID)
   auditColumnsSourceSystem?: boolean // Add _source_system
   auditColumnsFileModified?: boolean // Add _file_modified_at
+  auditColumnsIngestionId?: boolean // Add _ingestion_id
+  auditColumnsLoadType?: boolean // Add _load_type
+  auditColumnsSchemaVersion?: boolean // Add _schema_version
   watermarkColumn?: string // For incremental loads
   watermarkType?: 'timestamp' | 'integer' | 'date' // Type of watermark
   lookbackWindowHours?: number // For incremental: how far back to look
   partitionStrategy?: 'hive' | 'delta' | 'iceberg' // Partitioning strategy
   schemaEvolution?: 'strict' | 'add_new_columns' | 'ignore_extra' // Schema change handling
+  // Bronze load mode
+  loadMode?: 'overwrite' | 'append'
+  // Bronze quarantine configuration
+  quarantineEnabled?: boolean
+  quarantineTableName?: string
+  // Bronze column mapping
+  columnMapping?: BronzeColumnMapping[]
   // Silver-specific
   primaryKey?: string | string[] // Column(s) to use for deduplication/merge (supports composite keys)
   mergeStrategy?: 'merge' | 'full_refresh' | 'append' | 'scd_type_2' // Silver: upsert, truncate, append, or SCD Type 2
   updateStrategy?: 'update_all' | 'update_changed' | 'custom' // Which columns to update on merge
   conflictResolution?: 'source_wins' | 'target_wins' | 'most_recent' // How to resolve conflicts
+  // Silver transformations
+  transformationsEnabled?: boolean // Enable Silver layer transformations
+  trimWhitespace?: boolean // Trim whitespace from string columns
+  normalizeNulls?: boolean // Normalize null values
+  standardizeDates?: boolean // Standardize date formats
+  lowercaseEmails?: boolean // Lowercase email addresses
+  standardizeBooleans?: boolean // Standardize boolean values
   surrogateKeyStrategy?: 'auto_increment' | 'uuid' | 'hash' | 'use_existing' // How to generate _sk_id
   surrogateKeyColumn?: string // Name of surrogate key column (default: _surrogate_key)
   // AI-suggested deduplication settings
@@ -234,6 +270,12 @@ export interface LayerConfig {
   scdEndDateColumn?: string // End date column name
   scdCurrentFlagColumn?: string // Current flag column name
   scdTrackDeletes?: boolean // Track deleted records
+  // Silver audit columns
+  auditColumnsEnabled?: boolean // Enable Silver layer audit columns
+  auditSourceSystem?: boolean // Track source system
+  auditChangeType?: boolean // Track change type (insert/update/delete)
+  auditRecordHash?: boolean // Hash for change detection
+  auditIsCurrent?: boolean // Track if record is current version
   // Gold-specific
   refreshStrategy?: 'full_rebuild' | 'incremental' | 'snapshot' // Gold: full rebuild, incremental, or snapshot
   buildStrategy?: 'full_rebuild' | 'incremental' // Alias for refreshStrategy (used in UI)
