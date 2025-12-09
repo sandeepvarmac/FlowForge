@@ -7,7 +7,7 @@ import { FormField, FormLabel, FormError, Select, Textarea } from '@/components/
 import { Input } from '@/components/ui'
 import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, TransformationConfig, ValidationConfig } from '@/types/workflow'
 import { StorageConnection, StorageFile } from '@/types/storage-connection'
-import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe, RefreshCw, Layers, FolderOpen, Server, Folder } from 'lucide-react'
+import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe, RefreshCw, Layers, FolderOpen, Server, Folder, Link2, BarChart3, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
 import { DatabaseSourceConfig } from './database-source-config'
@@ -19,6 +19,7 @@ import { AIFullAnalysisResult } from '@/types/workflow'
 import { useToast } from '@/hooks/use-toast'
 import { ToastContainer } from '@/components/ui/toast-container'
 import { trackAISuggestionsFetched, trackAISuggestionsApplied, trackAIError, trackAISuggestionExpanded } from '@/lib/telemetry'
+import { useFeatureFlags } from '@/lib/config/feature-flags'
 
 interface CreateJobModalProps {
   open: boolean
@@ -46,6 +47,16 @@ interface JobFormData {
   _detectedMetadata?: {
     temporal_columns?: string[]
     pk_candidates?: string[]
+    // Enhanced AI Schema Intelligence fields
+    foreign_keys?: Array<{ column: string; referencesTable: string }>
+    measure_columns?: string[]
+    dimension_columns?: string[]
+    table_type?: 'fact' | 'dimension' | 'transactional' | 'reference'
+    suggested_table_name?: string
+    summary?: string
+    data_quality_hints?: string[]
+    ai_provider?: 'anthropic' | 'openai' | 'mock'
+    ai_analyzed?: boolean
   }
   // AI-suggested quality rules storage
   _bronzeQualityRulesSuggestions?: any[]
@@ -108,17 +119,33 @@ const initialFormData: JobFormData = {
     }
   },
   destinationConfig: {
+    landingZoneConfig: {
+      enabled: true,
+      pathPattern: '/landing/{source_name}/{date:yyyy/MM/dd}/',
+      fileOrganization: 'date-partitioned' as 'date-partitioned' | 'source-partitioned' | 'flat',
+      retentionDays: 30,
+      immutable: false
+    },
     bronzeConfig: {
       enabled: true,
       tableName: '',
       storageFormat: 'parquet',
       loadStrategy: 'append',
+      loadMode: 'append' as 'overwrite' | 'append',
       auditColumns: true,
       auditColumnsBatchId: false,
       auditColumnsSourceSystem: false,
       auditColumnsFileModified: false,
       compression: 'snappy',
-      schemaEvolution: 'strict'
+      schemaEvolution: 'strict',
+      quarantineEnabled: false,
+      quarantineTableName: '',
+      columnMapping: [] as Array<{
+        sourceColumn: string
+        targetColumn: string
+        targetType: string
+        exclude: boolean
+      }>
     },
     silverConfig: {
       enabled: true,
@@ -134,9 +161,10 @@ const initialFormData: JobFormData = {
     goldConfig: {
       enabled: true,
       tableName: '',
-      storageFormat: 'parquet',
+      storageFormat: 'duckdb',
       buildStrategy: 'full_rebuild',
       materializationType: 'table',
+      tableType: 'fact', // AI will suggest: 'dimension' or 'fact'
       compression: 'zstd',
       aggregationEnabled: false,
       denormalizationEnabled: false,
@@ -148,10 +176,11 @@ const initialFormData: JobFormData = {
 const steps = [
   { id: 1, title: 'Select Source', description: 'Choose data source and configure connection', icon: Upload },
   { id: 2, title: 'Load Strategy', description: 'Define extraction mode and incremental settings', icon: RefreshCw },
-  { id: 3, title: 'Bronze Layer', description: 'Configure raw data landing zone', icon: Layers },
-  { id: 4, title: 'Silver Layer', description: 'Configure cleaned & validated data', icon: Shield },
-  { id: 5, title: 'Gold Layer', description: 'Configure analytics-ready data', icon: Sparkles },
-  { id: 6, title: 'Review & Create', description: 'Review configuration and create job', icon: CheckCircle }
+  { id: 3, title: 'Landing Zone', description: 'Configure raw file storage location', icon: FolderOpen },
+  { id: 4, title: 'Bronze Layer', description: 'Configure raw data ingestion', icon: Layers },
+  { id: 5, title: 'Silver Layer', description: 'Configure cleaned & validated data', icon: Shield },
+  { id: 6, title: 'Gold Layer', description: 'Configure analytics-ready data', icon: Sparkles },
+  { id: 7, title: 'Review & Create', description: 'Review configuration and create source', icon: CheckCircle }
 ]
 
 const jobTypes = [
@@ -207,6 +236,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [isCreatingConnection, setIsCreatingConnection] = React.useState(false)
   const [selectedConnectionId, setSelectedConnectionId] = React.useState<string | null>(null)
   const toast = useToast()
+  const featureFlags = useFeatureFlags()
 
   // Storage connection state for file-based jobs
   const [storageConnections, setStorageConnections] = React.useState<StorageConnection[]>([])
@@ -224,6 +254,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [fullAiAnalysis, setFullAiAnalysis] = React.useState<AIFullAnalysisResult | null>(null)
   const [isAnalyzingAI, setIsAnalyzingAI] = React.useState(false)
   const [aiAnalysisError, setAiAnalysisError] = React.useState<string | null>(null)
+  const [aiAnalysisStage, setAiAnalysisStage] = React.useState<string>('')
+  const [aiAnalysisProgress, setAiAnalysisProgress] = React.useState(0)
   const [showAIModal, setShowAIModal] = React.useState(false)
   const [businessContext, setBusinessContext] = React.useState<string>('')
 
@@ -246,6 +278,48 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const [goldAiSuggestionsExpanded, setGoldAiSuggestionsExpanded] = React.useState(false)
   const [usingFallbackGold, setUsingFallbackGold] = React.useState(false)
 
+  // AI Schema Intelligence state
+  const [isLoadingSchemaIntelligence, setIsLoadingSchemaIntelligence] = React.useState(false)
+  const [schemaIntelligenceError, setSchemaIntelligenceError] = React.useState<string | null>(null)
+  const [schemaIntelligenceStage, setSchemaIntelligenceStage] = React.useState<string>('')
+  const [schemaIntelligenceProgress, setSchemaIntelligenceProgress] = React.useState(0)
+
+  // AI Data Architect Review state
+  interface AIArchitectReview {
+    riskFlags: Array<{
+      severity: 'high' | 'medium' | 'low'
+      category: string
+      message: string
+      recommendation: string
+    }>
+    bronzeRecommendations: Array<{
+      field: string
+      currentValue: any
+      suggestedValue: any
+      reasoning: string
+      applied?: boolean
+    }>
+    silverRecommendations: Array<{
+      field: string
+      currentValue: any
+      suggestedValue: any
+      reasoning: string
+      applied?: boolean
+    }>
+    goldRecommendations: Array<{
+      field: string
+      currentValue: any
+      suggestedValue: any
+      reasoning: string
+      applied?: boolean
+    }>
+    overallScore: number
+    summary: string
+  }
+  const [aiArchitectReview, setAiArchitectReview] = React.useState<AIArchitectReview | null>(null)
+  const [isLoadingAiReview, setIsLoadingAiReview] = React.useState(false)
+  const [aiReviewError, setAiReviewError] = React.useState<string | null>(null)
+
   const resetForm = React.useCallback(() => {
     setFormData(initialFormData)
     setCurrentStep(1)
@@ -264,6 +338,11 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     setSilverAiSuggestions(null)
     setGoldAiSuggestions(null)
     setSelectedConnectionId(null)
+
+    // Reset AI Architect Review state
+    setAiArchitectReview(null)
+    setIsLoadingAiReview(false)
+    setAiReviewError(null)
 
     // Reset storage connection state
     setSelectedStorageConnectionId(null)
@@ -438,6 +517,11 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           }
         } as any))
 
+        // Trigger AI Schema Intelligence analysis (same as CSV upload)
+        if (data.schema && data.schema.length > 0) {
+          fetchSchemaIntelligence(data.schema, data.preview, file.name, data.preview?.length)
+        }
+
         toast.success(`File loaded - Schema detected with ${data.schema?.length || 0} columns`)
       } else {
         toast.error(`Failed to load file: ${data.error || 'Unknown error'}`)
@@ -575,12 +659,38 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
     console.log('[AI Full] Request body prepared:', { ...requestBody, sampleData: requestBody.sampleData ? `[${requestBody.sampleData.length} rows]` : undefined })
 
+    // Progress stages for UI feedback
+    const progressStages = [
+      { progress: 10, stage: 'Preparing schema analysis...' },
+      { progress: 25, stage: 'Analyzing column patterns...' },
+      { progress: 40, stage: 'Identifying relationships...' },
+      { progress: 55, stage: 'Generating Bronze layer config...' },
+      { progress: 70, stage: 'Generating Silver layer config...' },
+      { progress: 85, stage: 'Generating Gold layer config...' },
+      { progress: 95, stage: 'Finalizing recommendations...' }
+    ]
+
+    let progressInterval: NodeJS.Timeout | null = null
+    let currentStageIndex = 0
+
     try {
       console.log('[AI Full] Opening modal and starting analysis...')
       setIsAnalyzingAI(true)
       setAiAnalysisError(null)
       setShowAIModal(true)
+      setAiAnalysisProgress(0)
+      setAiAnalysisStage('Initializing AI analysis...')
       console.log('[AI Full] Modal state set to open, isAnalyzing: true')
+
+      // Start progress animation
+      progressInterval = setInterval(() => {
+        if (currentStageIndex < progressStages.length) {
+          const { progress, stage } = progressStages[currentStageIndex]
+          setAiAnalysisProgress(progress)
+          setAiAnalysisStage(stage)
+          currentStageIndex++
+        }
+      }, 1500)
 
       const response = await fetch('/api/ai/config/full', {
         method: 'POST',
@@ -589,6 +699,11 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       })
 
       const data = await response.json()
+
+      // Complete progress on success
+      if (progressInterval) clearInterval(progressInterval)
+      setAiAnalysisProgress(100)
+      setAiAnalysisStage('Analysis complete!')
 
       console.log('[AI Full] Response received:', { success: data.success, providerUsed: data.providerUsed })
 
@@ -610,6 +725,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       }
     } catch (error) {
       console.error('[AI Full] Error:', error)
+      if (progressInterval) clearInterval(progressInterval)
+      setAiAnalysisProgress(0)
+      setAiAnalysisStage('')
       setAiAnalysisError(error instanceof Error ? error.message : 'Network error')
       trackAIError({
         layer: 'bronze',
@@ -749,6 +867,101 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
     console.log('[AI] Legacy Bronze fetch disabled - unified AI analysis handles suggestions now')
 
+  }, [])
+
+  // Fetch AI Schema Intelligence
+  const fetchSchemaIntelligence = React.useCallback(async (
+    schema: Array<{ name: string; type: string; sample?: string }>,
+    sampleData?: any[],
+    fileName?: string,
+    rowCount?: number
+  ) => {
+    setIsLoadingSchemaIntelligence(true)
+    setSchemaIntelligenceError(null)
+    setSchemaIntelligenceProgress(0)
+    setSchemaIntelligenceStage('')
+
+    // Progress stages for UI feedback
+    const progressStages = [
+      { progress: 10, stage: 'Preparing schema for analysis...' },
+      { progress: 25, stage: 'Analyzing column patterns...' },
+      { progress: 45, stage: 'Detecting primary keys...' },
+      { progress: 60, stage: 'Identifying relationships...' },
+      { progress: 75, stage: 'Classifying column roles...' },
+      { progress: 90, stage: 'Finalizing insights...' }
+    ]
+
+    let progressInterval: NodeJS.Timeout | null = null
+    let currentStageIndex = 0
+
+    // Start progress animation
+    progressInterval = setInterval(() => {
+      if (currentStageIndex < progressStages.length) {
+        const { progress, stage } = progressStages[currentStageIndex]
+        setSchemaIntelligenceProgress(progress)
+        setSchemaIntelligenceStage(stage)
+        currentStageIndex++
+      }
+    }, 800)
+
+    try {
+      const response = await fetch('/api/ai/analyze-schema', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          schema,
+          sampleData: sampleData?.slice(0, 10), // Limit sample data
+          fileName,
+          rowCount
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to analyze schema')
+      }
+
+      const result = await response.json()
+      const analysis = result.analysis
+
+      // Complete progress
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      setSchemaIntelligenceProgress(100)
+      setSchemaIntelligenceStage('Analysis complete!')
+
+      // Update metadata with AI analysis results
+      setFormData(prev => ({
+        ...prev,
+        _detectedMetadata: {
+          ...prev._detectedMetadata,
+          pk_candidates: analysis.primaryKeys || [],
+          temporal_columns: analysis.temporalColumns || [],
+          foreign_keys: analysis.foreignKeys || [],
+          measure_columns: analysis.measureColumns || [],
+          dimension_columns: analysis.dimensionColumns || [],
+          table_type: analysis.tableType,
+          suggested_table_name: analysis.suggestedTableName,
+          summary: analysis.summary,
+          data_quality_hints: analysis.dataQualityHints || [],
+          ai_provider: result.provider,
+          ai_analyzed: true
+        }
+      }))
+
+      console.log(`[Schema Intelligence] Analysis complete via ${result.provider}:`, analysis)
+    } catch (error) {
+      console.error('[Schema Intelligence] Error:', error)
+      setSchemaIntelligenceError(error instanceof Error ? error.message : 'Failed to analyze schema')
+    } finally {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+      setIsLoadingSchemaIntelligence(false)
+      setSchemaIntelligenceProgress(0)
+      setSchemaIntelligenceStage('')
+    }
   }, [])
 
   // Fetch Gold AI Suggestions
@@ -1159,6 +1372,169 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
     setGoldAiSuggestionsExpanded(false)
   }, [goldAiSuggestions, formData, updateDestinationConfig, setGoldAiSuggestionsExpanded, toast])
 
+  // Fetch AI Data Architect Review
+  const fetchAiArchitectReview = React.useCallback(async () => {
+    setIsLoadingAiReview(true)
+    setAiReviewError(null)
+    setAiArchitectReview(null)
+    setAiAnalysisProgress(0)
+    setAiAnalysisStage('')
+
+    // Progress stages for review UI feedback
+    const progressStages = [
+      { progress: 10, stage: 'Analyzing source configuration...' },
+      { progress: 25, stage: 'Reviewing load strategy settings...' },
+      { progress: 40, stage: 'Checking Bronze layer configuration...' },
+      { progress: 55, stage: 'Evaluating Silver layer transformations...' },
+      { progress: 70, stage: 'Assessing Gold layer modeling...' },
+      { progress: 85, stage: 'Identifying risk flags...' },
+      { progress: 95, stage: 'Generating recommendations...' }
+    ]
+
+    let progressInterval: NodeJS.Timeout | null = null
+    let currentStageIndex = 0
+
+    // Start progress animation
+    progressInterval = setInterval(() => {
+      if (currentStageIndex < progressStages.length) {
+        const { progress, stage } = progressStages[currentStageIndex]
+        setAiAnalysisProgress(progress)
+        setAiAnalysisStage(stage)
+        currentStageIndex++
+      }
+    }, 1000)
+
+    try {
+      const response = await fetch('/api/ai/review-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceConfig: formData.sourceConfig,
+          destinationConfig: formData.destinationConfig,
+          schema: formData._detectedSchema,
+          previewData: formData._previewData?.slice(0, 10), // Send limited preview
+          sourceName: formData.name,
+          sourceType: formData.type
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI review')
+      }
+
+      // Complete progress
+      if (progressInterval) {
+        clearInterval(progressInterval)
+        progressInterval = null
+      }
+      setAiAnalysisProgress(100)
+      setAiAnalysisStage('Review complete!')
+
+      const result = await response.json()
+      setAiArchitectReview(result.review)
+    } catch (error) {
+      console.error('[AI Review] Error:', error)
+      setAiReviewError(error instanceof Error ? error.message : 'Failed to get AI review')
+    } finally {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+      setIsLoadingAiReview(false)
+      setAiAnalysisProgress(0)
+      setAiAnalysisStage('')
+    }
+  }, [formData])
+
+  // Apply individual AI recommendation
+  const applyAiRecommendation = React.useCallback((layer: 'bronze' | 'silver' | 'gold', index: number) => {
+    if (!aiArchitectReview) return
+
+    const recommendations = layer === 'bronze' ? aiArchitectReview.bronzeRecommendations
+      : layer === 'silver' ? aiArchitectReview.silverRecommendations
+      : aiArchitectReview.goldRecommendations
+
+    const rec = recommendations[index]
+    if (!rec || rec.applied) return
+
+    // Apply the recommendation based on layer
+    if (layer === 'bronze') {
+      updateDestinationConfig({
+        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, [rec.field]: rec.suggestedValue }
+      })
+    } else if (layer === 'silver') {
+      updateDestinationConfig({
+        silverConfig: { ...formData.destinationConfig.silverConfig!, [rec.field]: rec.suggestedValue }
+      })
+    } else {
+      updateDestinationConfig({
+        goldConfig: { ...formData.destinationConfig.goldConfig!, [rec.field]: rec.suggestedValue }
+      })
+    }
+
+    // Mark as applied
+    setAiArchitectReview(prev => {
+      if (!prev) return prev
+      const newRecommendations = [...(layer === 'bronze' ? prev.bronzeRecommendations : layer === 'silver' ? prev.silverRecommendations : prev.goldRecommendations)]
+      newRecommendations[index] = { ...newRecommendations[index], applied: true }
+      return {
+        ...prev,
+        [layer === 'bronze' ? 'bronzeRecommendations' : layer === 'silver' ? 'silverRecommendations' : 'goldRecommendations']: newRecommendations
+      }
+    })
+
+    toast.success(`Applied ${rec.field} recommendation`, 2000)
+  }, [aiArchitectReview, formData, updateDestinationConfig, toast])
+
+  // Apply all AI recommendations
+  const applyAllAiRecommendations = React.useCallback(() => {
+    if (!aiArchitectReview) return
+
+    let appliedCount = 0
+
+    // Apply bronze recommendations
+    aiArchitectReview.bronzeRecommendations.forEach((rec, idx) => {
+      if (!rec.applied) {
+        updateDestinationConfig({
+          bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, [rec.field]: rec.suggestedValue }
+        })
+        appliedCount++
+      }
+    })
+
+    // Apply silver recommendations
+    aiArchitectReview.silverRecommendations.forEach((rec, idx) => {
+      if (!rec.applied) {
+        updateDestinationConfig({
+          silverConfig: { ...formData.destinationConfig.silverConfig!, [rec.field]: rec.suggestedValue }
+        })
+        appliedCount++
+      }
+    })
+
+    // Apply gold recommendations
+    aiArchitectReview.goldRecommendations.forEach((rec, idx) => {
+      if (!rec.applied) {
+        updateDestinationConfig({
+          goldConfig: { ...formData.destinationConfig.goldConfig!, [rec.field]: rec.suggestedValue }
+        })
+        appliedCount++
+      }
+    })
+
+    // Mark all as applied
+    setAiArchitectReview(prev => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        bronzeRecommendations: prev.bronzeRecommendations.map(r => ({ ...r, applied: true })),
+        silverRecommendations: prev.silverRecommendations.map(r => ({ ...r, applied: true })),
+        goldRecommendations: prev.goldRecommendations.map(r => ({ ...r, applied: true }))
+      }
+    })
+
+    toast.success(`Applied ${appliedCount} AI recommendations`, 3000)
+  }, [aiArchitectReview, formData, updateDestinationConfig, toast])
+
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 1: // Select Source
@@ -1182,20 +1558,22 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         return true
       case 2: // Load Strategy - always valid (has defaults)
         return true
-      case 3: // Bronze Layer
+      case 3: // Landing Zone - always valid (has defaults)
+        return true
+      case 4: // Bronze Layer
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) return false
         return true
-      case 4: // Silver Layer
+      case 5: // Silver Layer
         if (formData.destinationConfig.silverConfig?.enabled !== false) {
           if (!formData.destinationConfig.silverConfig?.tableName?.trim()) return false
         }
         return true
-      case 5: // Gold Layer
+      case 6: // Gold Layer
         if (formData.destinationConfig.goldConfig?.enabled !== false) {
           if (!formData.destinationConfig.goldConfig?.tableName?.trim()) return false
         }
         return true
-      case 6: // Review & Create
+      case 7: // Review & Create
         return true
       default:
         return true
@@ -1207,7 +1585,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
     switch (step) {
       case 1: // Select Source
-        if (!formData.name.trim()) newErrors.name = 'Job name is required'
+        if (!formData.name.trim()) newErrors.name = 'Source name is required'
 
         // For file-based jobs, require file upload OR storage file selection in create mode
         if (formData.type === 'file-based' && mode === 'create') {
@@ -1232,26 +1610,28 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         break
       case 2: // Load Strategy - no required fields (has defaults)
         break
-      case 3: // Bronze Layer
+      case 3: // Landing Zone - no required fields (has defaults)
+        break
+      case 4: // Bronze Layer
         if (!formData.destinationConfig.bronzeConfig?.tableName?.trim()) {
           newErrors.bronzeTable = 'Bronze table name is required'
         }
         break
-      case 4: // Silver Layer
+      case 5: // Silver Layer
         if (formData.destinationConfig.silverConfig?.enabled !== false) {
           if (!formData.destinationConfig.silverConfig?.tableName?.trim()) {
             newErrors.silverTable = 'Silver table name is required'
           }
         }
         break
-      case 5: // Gold Layer
+      case 6: // Gold Layer
         if (formData.destinationConfig.goldConfig?.enabled !== false) {
           if (!formData.destinationConfig.goldConfig?.tableName?.trim()) {
             newErrors.goldTable = 'Gold table name is required'
           }
         }
         break
-      case 6: // Review & Create - validation happens in handleSubmit
+      case 7: // Review & Create - validation happens in handleSubmit
         break
     }
 
@@ -1261,9 +1641,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
   const nextStep = () => {
     if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 6))
+      setCurrentStep(prev => Math.min(prev + 1, 7))
 
-      // NOTE: AI Data Architect is now manually triggered via button in Step 2
+      // NOTE: AI Data Architect is now manually triggered via button in Step 6 (Review & Create)
       // Auto-trigger removed - user can click "Run AI Data Architect" when ready
 
       // Scroll to top of modal content
@@ -1312,7 +1692,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               <h3 className="text-sm font-semibold text-foreground border-b pb-2">Basic Information</h3>
 
               <FormField>
-                <FormLabel required>Job Name</FormLabel>
+                <FormLabel required>Source Name</FormLabel>
                 <Input
                   value={formData.name}
                   onChange={(e) => updateFormData({ name: e.target.value })}
@@ -1327,7 +1707,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 <Textarea
                   value={formData.description}
                   onChange={(e) => updateFormData({ description: e.target.value })}
-                  placeholder="Describe what this job does and the data it processes..."
+                  placeholder="Describe what this source ingests and the data it processes..."
                   rows={2}
                 />
               </FormField>
@@ -1347,13 +1727,13 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     className="w-32"
                   />
                   <p className="text-xs text-foreground-muted">
-                    Default order is assigned automatically. Adjust only if you need this job to run before/after others.
+                    Default order is assigned automatically. Adjust only if you need this source to run before/after others.
                   </p>
                 </div>
               </details>
             </div>
 
-            {/* Job Type Selection */}
+            {/* Source Type Selection */}
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-foreground border-b pb-2">Data Source Type</h3>
 
@@ -1706,6 +2086,25 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                   <table className="w-full text-sm">
                                     <thead className="sticky top-0 bg-white">
                                       <tr className="border-b border-border">
+                                        <th className="text-left p-2 font-semibold text-foreground-muted w-16">
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={!((formData.destinationConfig.bronzeConfig as any)?.excludedColumns?.length > 0)}
+                                              onChange={(e) => {
+                                                const allColumns = formData._detectedSchema?.map((c: any) => c.name) || []
+                                                updateDestinationConfig({
+                                                  bronzeConfig: {
+                                                    ...formData.destinationConfig.bronzeConfig!,
+                                                    excludedColumns: e.target.checked ? [] : allColumns
+                                                  } as any
+                                                })
+                                              }}
+                                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                            />
+                                            <span>Include</span>
+                                          </div>
+                                        </th>
                                         <th className="text-left p-2 font-semibold text-foreground-muted">#</th>
                                         <th className="text-left p-2 font-semibold text-foreground-muted">Column Name</th>
                                         <th className="text-left p-2 font-semibold text-foreground-muted">Data Type</th>
@@ -1714,8 +2113,26 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {formData._detectedSchema.map((col: any, index: number) => (
-                                        <tr key={index} className="border-b border-border hover:bg-background-secondary transition-colors">
+                                      {formData._detectedSchema.map((col: any, index: number) => {
+                                        const isExcluded = (formData.destinationConfig.bronzeConfig as any)?.excludedColumns?.includes(col.name)
+                                        return (
+                                        <tr key={index} className={cn("border-b border-border hover:bg-background-secondary transition-colors", isExcluded && "opacity-50 bg-gray-50")}>
+                                          <td className="p-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={!isExcluded}
+                                              onChange={(e) => {
+                                                const currentExcluded = (formData.destinationConfig.bronzeConfig as any)?.excludedColumns || []
+                                                const newExcluded = e.target.checked
+                                                  ? currentExcluded.filter((c: string) => c !== col.name)
+                                                  : [...currentExcluded, col.name]
+                                                updateDestinationConfig({
+                                                  bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, excludedColumns: newExcluded } as any
+                                                })
+                                              }}
+                                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                                            />
+                                          </td>
                                           <td className="p-2 text-foreground-muted font-mono text-xs">{index + 1}</td>
                                           <td className="p-2">
                                             <div className="font-medium text-foreground font-mono text-xs">{col.name}</div>
@@ -1748,7 +2165,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                             )}
                                           </td>
                                         </tr>
-                                      ))}
+                                        )
+                                      })}
                                     </tbody>
                                   </table>
                                 </div>
@@ -1965,7 +2383,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                         _uploadedFile: file,
                         _detectedSchema: schema,
                         _previewData: preview,
-                        _detectedMetadata: metadata, // Store metadata for Step 2 Load Strategy
+                        _detectedMetadata: metadata, // Store initial metadata, AI will enhance it
                         transformationConfig: transformationConfig,
                         // Update source config with hasHeader flag (incremental settings configured in Step 2)
                         sourceConfig: {
@@ -1994,6 +2412,9 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                           }
                         }
                       } as any))
+
+                      // Trigger AI Schema Intelligence analysis
+                      fetchSchemaIntelligence(schema, preview, file.name, preview?.length)
                     }}
                     onReset={() => {
                       // Clear form data related to file upload
@@ -2015,122 +2436,222 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </>
                 )}
 
-                {/* AI Schema Intelligence Display */}
+                {/* Schema Intelligence Display (AI-Powered) */}
                 {formData._detectedSchema && formData._detectedSchema.length > 0 && (
-                  <Card className="border-blue-200 bg-blue-50">
+                  <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
-                        <span className="text-blue-900">AI-Detected Schema Intelligence</span>
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-purple-600" />
+                          <span className="text-purple-900">Schema Intelligence</span>
+                          {isLoadingSchemaIntelligence && (
+                            <span className="text-xs text-purple-600 animate-pulse">Analyzing...</span>
+                          )}
+                          {formData._detectedMetadata?.ai_analyzed && (
+                            <Badge variant="default" className="text-xs bg-purple-100 text-purple-700 border-purple-300">
+                              AI Powered
+                            </Badge>
+                          )}
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="bg-white rounded-lg p-3 border border-blue-200">
-                          <div className="text-xl font-bold text-blue-700">{formData._detectedSchema.length}</div>
-                          <div className="text-xs text-blue-600 font-medium">Columns Detected</div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border border-blue-200">
-                          <div className="text-xl font-bold text-blue-700">{formData._previewData?.length || 0}</div>
-                          <div className="text-xs text-blue-600 font-medium">Sample Rows</div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border border-blue-200">
-                          <div className="text-xl font-bold text-green-700">
-                            {formData._detectedSchema.filter(c => c.type !== 'string').length}
+                      {/* Loading State with Progress Bar */}
+                      {isLoadingSchemaIntelligence && (
+                        <div className="py-4 space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-purple-700 font-medium">{schemaIntelligenceStage || 'Starting analysis...'}</span>
+                            <span className="text-purple-600 font-mono">{schemaIntelligenceProgress}%</span>
                           </div>
-                          <div className="text-xs text-green-600 font-medium">Typed Columns</div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border border-blue-200">
-                          <div className="text-xl font-bold text-purple-700">
-                            {formData._detectedSchema.filter(c => ['email', 'phone', 'date', 'url', 'timestamp'].includes(c.type)).length}
+                          <div className="w-full bg-purple-100 rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-purple-500 to-purple-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                              style={{ width: `${schemaIntelligenceProgress}%` }}
+                            />
                           </div>
-                          <div className="text-xs text-purple-600 font-medium">Special Types</div>
-                        </div>
-                      </div>
-
-                      {/* Metadata Detection Display */}
-                      {formData._detectedMetadata && (
-                        <div className="mt-4 space-y-3">
-                          {/* Temporal Columns */}
-                          {formData._detectedMetadata.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0 && (
-                            <div className="bg-white rounded-lg p-3 border border-green-200">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Clock className="w-4 h-4 text-green-600" />
-                                <span className="text-xs font-semibold text-green-900">
-                                  Temporal Columns Detected ({formData._detectedMetadata.temporal_columns.length})
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                {formData._detectedMetadata.temporal_columns.map((col: string, idx: number) => (
-                                  <Badge key={idx} variant="success" className="text-xs font-mono">
-                                    {col}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <p className="text-xs text-green-700 mt-2 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                Can be used for incremental loading in the Load Strategy step
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Primary Key Candidates */}
-                          {formData._detectedMetadata.pk_candidates && formData._detectedMetadata.pk_candidates.length > 0 && (
-                            <div className="bg-white rounded-lg p-3 border border-blue-200">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Key className="w-4 h-4 text-blue-600" />
-                                <span className="text-xs font-semibold text-blue-900">
-                                  Primary Key Candidates ({formData._detectedMetadata.pk_candidates.length})
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                {formData._detectedMetadata.pk_candidates.map((col: string, idx: number) => (
-                                  <Badge key={idx} variant="default" className="text-xs font-mono bg-blue-100 text-blue-800 border-blue-300">
-                                    {col}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Data Type Intelligence */}
-                          {formData._detectedSchema.filter(c => ['email', 'phone', 'url'].includes(c.type)).length > 0 && (
-                            <div className="bg-white rounded-lg p-3 border border-purple-200">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Sparkles className="w-4 h-4 text-purple-600" />
-                                <span className="text-xs font-semibold text-purple-900">
-                                  Intelligent Data Types Detected
-                                </span>
-                              </div>
-                              <div className="space-y-1">
-                                {formData._detectedSchema.filter(c => c.type === 'email').length > 0 && (
-                                  <div className="text-xs text-purple-700 flex items-center gap-2">
-                                    <Mail className="w-3 h-3" />
-                                    <span>{formData._detectedSchema.filter(c => c.type === 'email').length} Email column(s)</span>
-                                  </div>
-                                )}
-                                {formData._detectedSchema.filter(c => c.type === 'phone').length > 0 && (
-                                  <div className="text-xs text-purple-700 flex items-center gap-2">
-                                    <Phone className="w-3 h-3" />
-                                    <span>{formData._detectedSchema.filter(c => c.type === 'phone').length} Phone column(s)</span>
-                                  </div>
-                                )}
-                                {formData._detectedSchema.filter(c => c.type === 'url').length > 0 && (
-                                  <div className="text-xs text-purple-700 flex items-center gap-2">
-                                    <Globe className="w-3 h-3" />
-                                    <span>{formData._detectedSchema.filter(c => c.type === 'url').length} URL column(s)</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
+                          <p className="text-xs text-purple-500">
+                            Detecting primary keys, relationships, and data patterns
+                          </p>
                         </div>
                       )}
 
-                      <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        Schema detected. Configure Load Strategy in the next step to set up extraction mode.
-                      </p>
+                      {/* Error State */}
+                      {schemaIntelligenceError && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                          <p className="text-xs text-red-700">{schemaIntelligenceError}</p>
+                        </div>
+                      )}
+
+                      {/* Results */}
+                      {!isLoadingSchemaIntelligence && (
+                        <>
+                          {/* Summary */}
+                          {formData._detectedMetadata?.summary && (
+                            <div className="bg-white rounded-lg p-3 border border-purple-200 mb-4">
+                              <p className="text-sm text-purple-900">{formData._detectedMetadata.summary}</p>
+                              {formData._detectedMetadata.table_type && (
+                                <Badge variant="default" className="mt-2 text-xs bg-purple-100 text-purple-700 border-purple-300">
+                                  {formData._detectedMetadata.table_type.charAt(0).toUpperCase() + formData._detectedMetadata.table_type.slice(1)} Table
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div className="bg-white rounded-lg p-3 border border-blue-200">
+                              <div className="text-xl font-bold text-blue-700">{formData._detectedSchema.length}</div>
+                              <div className="text-xs text-blue-600 font-medium">Columns</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-green-200">
+                              <div className="text-xl font-bold text-green-700">
+                                {formData._detectedMetadata?.pk_candidates?.length || 0}
+                              </div>
+                              <div className="text-xs text-green-600 font-medium">Primary Keys</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-orange-200">
+                              <div className="text-xl font-bold text-orange-700">
+                                {formData._detectedMetadata?.foreign_keys?.length || 0}
+                              </div>
+                              <div className="text-xs text-orange-600 font-medium">Foreign Keys</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-purple-200">
+                              <div className="text-xl font-bold text-purple-700">
+                                {formData._detectedMetadata?.temporal_columns?.length || 0}
+                              </div>
+                              <div className="text-xs text-purple-600 font-medium">Temporal</div>
+                            </div>
+                          </div>
+
+                          {/* Detected Intelligence */}
+                          <div className="space-y-3">
+                            {/* Primary Keys */}
+                            {formData._detectedMetadata?.pk_candidates && formData._detectedMetadata.pk_candidates.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-green-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Key className="w-4 h-4 text-green-600" />
+                                  <span className="text-xs font-semibold text-green-900">
+                                    Primary Key{formData._detectedMetadata.pk_candidates.length > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {formData._detectedMetadata.pk_candidates.map((col: string, idx: number) => (
+                                    <Badge key={idx} variant="success" className="text-xs font-mono">
+                                      {col}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Foreign Keys */}
+                            {formData._detectedMetadata?.foreign_keys && formData._detectedMetadata.foreign_keys.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-orange-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Link2 className="w-4 h-4 text-orange-600" />
+                                  <span className="text-xs font-semibold text-orange-900">
+                                    Foreign Keys ({formData._detectedMetadata.foreign_keys.length})
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {formData._detectedMetadata.foreign_keys.map((fk: { column: string; referencesTable: string }, idx: number) => (
+                                    <div key={idx} className="text-xs text-orange-700 flex items-center gap-1">
+                                      <Badge variant="default" className="font-mono bg-orange-100 text-orange-800 border-orange-300">
+                                        {fk.column}
+                                      </Badge>
+                                      <span className="text-orange-500">→</span>
+                                      <span className="font-medium">{fk.referencesTable}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Temporal Columns */}
+                            {formData._detectedMetadata?.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-purple-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Clock className="w-4 h-4 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-900">
+                                    Temporal Columns
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {formData._detectedMetadata.temporal_columns.map((col: string, idx: number) => (
+                                    <Badge key={idx} variant="default" className="text-xs font-mono bg-purple-100 text-purple-800 border-purple-300">
+                                      {col}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-purple-600 mt-2">
+                                  Suitable for incremental loading and partitioning
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Measure & Dimension Columns */}
+                            {((formData._detectedMetadata?.measure_columns?.length || 0) > 0 ||
+                              (formData._detectedMetadata?.dimension_columns?.length || 0) > 0) && (
+                              <div className="grid grid-cols-2 gap-3">
+                                {formData._detectedMetadata?.measure_columns && formData._detectedMetadata.measure_columns.length > 0 && (
+                                  <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                                      <span className="text-xs font-semibold text-blue-900">Measures</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {formData._detectedMetadata.measure_columns.slice(0, 5).map((col: string, idx: number) => (
+                                        <Badge key={idx} variant="default" className="text-xs font-mono bg-blue-100 text-blue-800 border-blue-300">
+                                          {col}
+                                        </Badge>
+                                      ))}
+                                      {formData._detectedMetadata.measure_columns.length > 5 && (
+                                        <span className="text-xs text-blue-600">+{formData._detectedMetadata.measure_columns.length - 5} more</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                {formData._detectedMetadata?.dimension_columns && formData._detectedMetadata.dimension_columns.length > 0 && (
+                                  <div className="bg-white rounded-lg p-3 border border-teal-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Layers className="w-4 h-4 text-teal-600" />
+                                      <span className="text-xs font-semibold text-teal-900">Dimensions</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {formData._detectedMetadata.dimension_columns.slice(0, 5).map((col: string, idx: number) => (
+                                        <Badge key={idx} variant="default" className="text-xs font-mono bg-teal-100 text-teal-800 border-teal-300">
+                                          {col}
+                                        </Badge>
+                                      ))}
+                                      {formData._detectedMetadata.dimension_columns.length > 5 && (
+                                        <span className="text-xs text-teal-600">+{formData._detectedMetadata.dimension_columns.length - 5} more</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Data Quality Hints */}
+                            {formData._detectedMetadata?.data_quality_hints && formData._detectedMetadata.data_quality_hints.length > 0 && (
+                              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                                  <span className="text-xs font-semibold text-amber-900">AI Recommendations</span>
+                                </div>
+                                <ul className="space-y-1">
+                                  {formData._detectedMetadata.data_quality_hints.map((hint: string, idx: number) => (
+                                    <li key={idx} className="text-xs text-amber-700 flex items-start gap-2">
+                                      <span className="text-amber-500 mt-0.5">•</span>
+                                      {hint}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -2278,9 +2799,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                             ...prev,
                             _detectedMetadata: {
                               temporal_columns: metadata?.temporal_columns || [],
-                              pk_candidates: metadata?.pk_candidates || []
+                              pk_candidates: [] // Let AI Schema Intelligence populate this
                             }
                           }))
+
+                          // Trigger AI Schema Intelligence for database sources (same as file uploads)
+                          if (schema && schema.length > 0) {
+                            fetchSchemaIntelligence(schema, metadata?.preview, tableName, metadata?.rowCount)
+                          }
 
                           // Update source config with table name only (incremental settings configured in Step 2)
                           updateSourceConfig({
@@ -2329,101 +2855,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
-
-            {/* AI Data Architect Card */}
-            <Card className={cn(
-              "border-2 transition-all",
-              fullAiAnalysis?.success
-                ? "border-green-300 bg-green-50/30"
-                : "border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50"
-            )}>
-              <CardContent className="p-5">
-                <div className="flex items-start gap-4">
-                  <div className={cn(
-                    "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0",
-                    fullAiAnalysis?.success ? "bg-green-100" : "bg-purple-100"
-                  )}>
-                    <Sparkles className={cn(
-                      "w-6 h-6",
-                      fullAiAnalysis?.success ? "text-green-600" : "text-purple-600"
-                    )} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-foreground">AI Data Architect</h3>
-                      {fullAiAnalysis?.success && (
-                        <Badge variant="success" className="text-xs">Analysis Complete</Badge>
-                      )}
-                      {isAnalyzingAI && (
-                        <Badge variant="secondary" className="text-xs animate-pulse">Analyzing...</Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-foreground-muted mb-3">
-                      {fullAiAnalysis?.success
-                        ? `AI has analyzed your data and provided recommendations for all layers. Provider: ${fullAiAnalysis.providerUsed || 'AI'}`
-                        : "Let AI analyze your data and recommend optimal configurations for Load Strategy, Bronze, Silver, and Gold layers."
-                      }
-                    </p>
-                    <div className="flex items-center gap-3">
-                      {!fullAiAnalysis?.success ? (
-                        <Button
-                          onClick={() => {
-                            console.log('[AI Data Architect] Manual trigger clicked')
-                            fetchFullAIAnalysis()
-                          }}
-                          disabled={isAnalyzingAI}
-                          className="bg-purple-600 hover:bg-purple-700 text-white"
-                        >
-                          {isAnalyzingAI ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                              Analyzing...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-4 h-4 mr-2" />
-                              Run AI Data Architect
-                            </>
-                          )}
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            variant="outline"
-                            onClick={() => setShowAIModal(true)}
-                            className="border-green-300 text-green-700 hover:bg-green-50"
-                          >
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Recommendations
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            onClick={() => {
-                              console.log('[AI Data Architect] Re-run clicked')
-                              fetchFullAIAnalysis()
-                            }}
-                            disabled={isAnalyzingAI}
-                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                          >
-                            <RefreshCw className={cn("w-4 h-4 mr-2", isAnalyzingAI && "animate-spin")} />
-                            Re-analyze
-                          </Button>
-                        </>
-                      )}
-                      <span className="text-xs text-foreground-muted">
-                        or configure manually below
-                      </span>
-                    </div>
-                    {aiAnalysisError && (
-                      <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {aiAnalysisError}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Load Strategy Selection */}
             <Card>
@@ -2651,29 +3082,31 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 )}
 
-                {/* CDC Option - Coming Soon */}
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full p-4 border-2 border-dashed border-border rounded-lg text-left opacity-60 cursor-not-allowed"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
-                        <Activity className="w-5 h-5 text-purple-600" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-foreground">Change Data Capture (CDC)</h4>
-                          <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                {/* CDC Option - Coming Soon (hidden via feature flag) */}
+                {featureFlags.showCDCOption && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full p-4 border-2 border-dashed border-border rounded-lg text-left opacity-60 cursor-not-allowed"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0">
+                          <Activity className="w-5 h-5 text-purple-600" />
                         </div>
-                        <p className="text-xs text-foreground-muted leading-relaxed">
-                          Real-time capture of inserts, updates, and deletes from the source system using database logs.
-                        </p>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-foreground">Change Data Capture (CDC)</h4>
+                            <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                          </div>
+                          <p className="text-xs text-foreground-muted leading-relaxed">
+                            Real-time capture of inserts, updates, and deletes from the source system using database logs.
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                </div>
+                    </button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2733,7 +3166,253 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 3: // Bronze Layer (was case 2)
+      case 3: // Landing Zone Step (NEW)
+        return (
+          <div className="space-y-6">
+            {/* Step Header */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <FolderOpen className="w-5 h-5 text-slate-600 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 mb-1">Landing Zone Configuration</h4>
+                  <p className="text-sm text-slate-700">
+                    Configure how raw source files are stored before processing. The landing zone preserves original files for audit, reprocessing, and disaster recovery.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Landing Zone Settings Card */}
+            <Card className="border-slate-300">
+              <CardHeader className="pb-3 bg-slate-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-slate-500 rounded-full"></div>
+                    Landing Zone Settings
+                  </CardTitle>
+                  <Badge variant="secondary" className="text-xs">Raw File Storage</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6 pt-4">
+                {/* Path Pattern */}
+                <div className="space-y-3">
+                  <FormLabel className="flex items-center gap-2">
+                    <Folder className="w-4 h-4 text-slate-500" />
+                    Storage Path Pattern
+                  </FormLabel>
+                  <Select
+                    value={formData.destinationConfig.landingZoneConfig?.pathPattern || '/landing/{source_name}/{date:yyyy/MM/dd}/'}
+                    onChange={(e) => updateFormData({
+                      destinationConfig: {
+                        ...formData.destinationConfig,
+                        landingZoneConfig: {
+                          ...formData.destinationConfig.landingZoneConfig,
+                          pathPattern: e.target.value
+                        }
+                      }
+                    })}
+                  >
+                    <option value="/landing/{source_name}/{date:yyyy/MM/dd}/">Date-Partitioned: /landing/{'{source_name}'}/{'{date:yyyy/MM/dd}'}/</option>
+                    <option value="/landing/{source_name}/{date:yyyy}/{date:MM}/">Monthly: /landing/{'{source_name}'}/{'{yyyy}'}/{'{MM}'}/</option>
+                    <option value="/landing/{source_name}/">Flat: /landing/{'{source_name}'}/</option>
+                    <option value="/raw/{source_type}/{source_name}/{date:yyyy/MM/dd}/">By Source Type: /raw/{'{source_type}'}/{'{source_name}'}/{'{date}'}/</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted">
+                    Pattern variables: {'{source_name}'} = source identifier, {'{date:format}'} = ingestion date, {'{source_type}'} = file/database/api
+                  </p>
+                </div>
+
+                {/* File Organization */}
+                <div className="space-y-3">
+                  <FormLabel className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-slate-500" />
+                    File Organization Strategy
+                  </FormLabel>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Date-Partitioned Option */}
+                    <button
+                      type="button"
+                      onClick={() => updateFormData({
+                        destinationConfig: {
+                          ...formData.destinationConfig,
+                          landingZoneConfig: {
+                            ...formData.destinationConfig.landingZoneConfig,
+                            fileOrganization: 'date-partitioned'
+                          }
+                        }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.landingZoneConfig?.fileOrganization === 'date-partitioned'
+                          ? "border-slate-500 bg-slate-100 ring-2 ring-slate-300"
+                          : "border-border hover:border-slate-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock className="w-4 h-4 text-slate-600" />
+                        <span className="font-medium text-sm">Date-Partitioned</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        Organize by ingestion date (yyyy/MM/dd). Best for time-series data.
+                      </p>
+                    </button>
+
+                    {/* Source-Partitioned Option */}
+                    <button
+                      type="button"
+                      onClick={() => updateFormData({
+                        destinationConfig: {
+                          ...formData.destinationConfig,
+                          landingZoneConfig: {
+                            ...formData.destinationConfig.landingZoneConfig,
+                            fileOrganization: 'source-partitioned'
+                          }
+                        }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.landingZoneConfig?.fileOrganization === 'source-partitioned'
+                          ? "border-slate-500 bg-slate-100 ring-2 ring-slate-300"
+                          : "border-border hover:border-slate-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <Server className="w-4 h-4 text-slate-600" />
+                        <span className="font-medium text-sm">Source-Partitioned</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        Organize by source system. Best for multi-source ingestion.
+                      </p>
+                    </button>
+
+                    {/* Flat Option */}
+                    <button
+                      type="button"
+                      onClick={() => updateFormData({
+                        destinationConfig: {
+                          ...formData.destinationConfig,
+                          landingZoneConfig: {
+                            ...formData.destinationConfig.landingZoneConfig,
+                            fileOrganization: 'flat'
+                          }
+                        }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.landingZoneConfig?.fileOrganization === 'flat'
+                          ? "border-slate-500 bg-slate-100 ring-2 ring-slate-300"
+                          : "border-border hover:border-slate-300"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <FolderOpen className="w-4 h-4 text-slate-600" />
+                        <span className="font-medium text-sm">Flat</span>
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        All files in single directory. Best for simple pipelines.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Retention & Immutability Settings */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Retention Days */}
+                  <div className="space-y-3">
+                    <FormLabel className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-slate-500" />
+                      Retention Period (Days)
+                    </FormLabel>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={formData.destinationConfig.landingZoneConfig?.retentionDays || 30}
+                      onChange={(e) => updateFormData({
+                        destinationConfig: {
+                          ...formData.destinationConfig,
+                          landingZoneConfig: {
+                            ...formData.destinationConfig.landingZoneConfig,
+                            retentionDays: parseInt(e.target.value) || 30
+                          }
+                        }
+                      })}
+                      className="w-32"
+                    />
+                    <p className="text-xs text-foreground-muted">
+                      Files older than this will be archived or deleted. Regulatory requirements may dictate minimum retention.
+                    </p>
+                  </div>
+
+                  {/* Immutability Flag */}
+                  <div className="space-y-3">
+                    <FormLabel className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-slate-500" />
+                      Immutability
+                    </FormLabel>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateFormData({
+                          destinationConfig: {
+                            ...formData.destinationConfig,
+                            landingZoneConfig: {
+                              ...formData.destinationConfig.landingZoneConfig,
+                              immutable: !formData.destinationConfig.landingZoneConfig?.immutable
+                            }
+                          }
+                        })}
+                        className={cn(
+                          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                          formData.destinationConfig.landingZoneConfig?.immutable
+                            ? "bg-slate-600"
+                            : "bg-gray-300"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                            formData.destinationConfig.landingZoneConfig?.immutable
+                              ? "translate-x-6"
+                              : "translate-x-1"
+                          )}
+                        />
+                      </button>
+                      <span className="text-sm text-foreground">
+                        {formData.destinationConfig.landingZoneConfig?.immutable ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground-muted">
+                      When enabled, files cannot be modified or deleted until retention expires. Required for compliance.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Preview Path */}
+                <div className="bg-slate-100 border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye className="w-4 h-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Preview: Generated Path</span>
+                  </div>
+                  <code className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded block">
+                    {(formData.destinationConfig.landingZoneConfig?.pathPattern || '/landing/{source_name}/{date:yyyy/MM/dd}/')
+                      .replace('{source_name}', formData.name?.toLowerCase().replace(/\s+/g, '_') || 'my_source')
+                      .replace('{source_type}', formData.type || 'file')
+                      .replace('{date:yyyy/MM/dd}', new Date().toISOString().split('T')[0].replace(/-/g, '/'))
+                      .replace('{date:yyyy}', new Date().getFullYear().toString())
+                      .replace('{date:MM}', String(new Date().getMonth() + 1).padStart(2, '0'))
+                      .replace('{yyyy}', new Date().getFullYear().toString())
+                      .replace('{MM}', String(new Date().getMonth() + 1).padStart(2, '0'))
+                    }
+                    {formData._uploadedFile?.name || 'sample_file.csv'}
+                  </code>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+
+      case 4: // Bronze Layer (was case 3)
         return (
           <div className="space-y-6">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -2747,87 +3426,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
-
-            {/* AI Suggestions Card - Show for both database and file sources */}
-            {(() => {
-              // Check if we have analyzable data from any source type
-              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
-              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
-
-              if (!isDatabaseSource && !isFileSource) {
-                return null
-              }
-
-              // Show as static display if AI recommendations have been applied
-              const aiApplied = formData._aiUsageMetadata?.bronze?.applied === true
-
-              // Use fullAiAnalysis.bronze data when AI has been applied
-              const bronzeSuggestions: Record<string, AISuggestion> = aiApplied && fullAiAnalysis?.bronze
-                ? {
-                    ...(fullAiAnalysis.bronze.incremental_load && {
-                      incremental_load: {
-                        enabled: fullAiAnalysis.bronze.incremental_load.enabled,
-                        confidence: 85,
-                        reasoning: fullAiAnalysis.bronze.incremental_load.reasoning || 'AI analyzed your data patterns',
-                        strategy: fullAiAnalysis.bronze.incremental_load.strategy,
-                        watermark_column: fullAiAnalysis.bronze.incremental_load.watermark_column
-                      }
-                    }),
-                    ...(fullAiAnalysis.bronze.schema_evolution && {
-                      schema_evolution: {
-                        enabled: fullAiAnalysis.bronze.schema_evolution.enabled,
-                        confidence: 80,
-                        reasoning: fullAiAnalysis.bronze.schema_evolution.reasoning || 'Recommended for evolving data sources',
-                        mode: fullAiAnalysis.bronze.schema_evolution.mode
-                      }
-                    }),
-                    ...(fullAiAnalysis.bronze.partitioning && {
-                      partitioning: {
-                        enabled: fullAiAnalysis.bronze.partitioning.enabled,
-                        confidence: 75,
-                        reasoning: fullAiAnalysis.bronze.partitioning.reasoning || 'Optimizes query performance',
-                        columns: fullAiAnalysis.bronze.partitioning.columns
-                      }
-                    })
-                  }
-                : (aiSuggestions || {})
-
-              const hasSuggestions = Object.keys(bronzeSuggestions).length > 0
-              console.log('[Step2] Rendering AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSuggestions:', hasSuggestions, 'loading:', isLoadingAiSuggestions, 'aiApplied:', aiApplied)
-
-              // Get source name for description
-              const sourceName = isDatabaseSource
-                ? formData.sourceConfig.databaseConfig?.tableName
-                : formData._uploadedFile?.name || formData.name
-
-              // Get confidence from metadata
-              const confidence = formData._aiUsageMetadata?.bronze?.confidence
-                ? Math.round(formData._aiUsageMetadata.bronze.confidence * 100)
-                : undefined
-
-              return (
-                <AISuggestionCard
-                  title="AI Data Architect Suggestions"
-                  description={`Based on analyzing ${sourceName}`}
-                  suggestions={bronzeSuggestions}
-                  loading={isLoadingAiSuggestions}
-                  error={aiSuggestionsError}
-                  onAccept={hasSuggestions && !aiApplied ? applyAiSuggestions : undefined}
-                  onAdjust={hasSuggestions && !aiApplied ? () => {
-                    console.log('[AI] Toggle expanded from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
-                    setAiSuggestionsExpanded(!aiSuggestionsExpanded)
-                  } : undefined}
-                  isExpanded={hasSuggestions && aiSuggestionsExpanded}
-                  onToggleExpand={hasSuggestions && !aiApplied ? () => {
-                    console.log('[AI] onToggleExpand from', aiSuggestionsExpanded, 'to', !aiSuggestionsExpanded)
-                    setAiSuggestionsExpanded(!aiSuggestionsExpanded)
-                  } : undefined}
-                  usingFallback={usingFallbackBronze}
-                  staticDisplay={aiApplied}
-                  confidenceOverride={confidence}
-                />
-              )
-            })()}
 
             {/* Bronze Layer - Enhanced */}
             <Card className="border-amber-300 bg-amber-50/30">
@@ -2984,7 +3582,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                               className="w-3.5 h-3.5 text-primary border-gray-300 rounded"
                             />
                             <span className="text-xs text-foreground">
-                              <code className="font-mono bg-white px-1 py-0.5 rounded">_ingestion_id</code> - Unique ingestion job identifier
+                              <code className="font-mono bg-white px-1 py-0.5 rounded">_ingestion_id</code> - Unique ingestion identifier
                             </span>
                           </label>
 
@@ -3021,39 +3619,43 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   )}
                 </FormField>
 
-                {/* Partitioning - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Partitioning</span>
+                {/* Partitioning - Coming Soon (hidden via feature flag) */}
+                {featureFlags.showPartitioningConfig && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                      <span className="text-sm font-medium text-blue-900">Partitioning</span>
+                    </div>
+                    <p className="text-xs text-blue-700 mb-2">
+                      Improve query performance by partitioning data based on columns
+                    </p>
+                    <div className="space-y-1 text-xs text-blue-700 ml-2">
+                      <div>• Partition by date columns (YYYY/MM/DD)</div>
+                      <div>• Partition by categorical columns</div>
+                      <div>• Hive / Delta / Iceberg partitioning strategies</div>
+                      <div>• Automatic partition pruning optimization</div>
+                    </div>
                   </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Improve query performance by partitioning data based on columns
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Partition by date columns (YYYY/MM/DD)</div>
-                    <div>• Partition by categorical columns</div>
-                    <div>• Hive / Delta / Iceberg partitioning strategies</div>
-                    <div>• Automatic partition pruning optimization</div>
-                  </div>
-                </div>
+                )}
 
-                {/* Schema Evolution - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Schema Evolution</span>
+                {/* Schema Evolution - Coming Soon (hidden via feature flag) */}
+                {featureFlags.showSchemaEvolution && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                      <span className="text-sm font-medium text-blue-900">Schema Evolution</span>
+                    </div>
+                    <p className="text-xs text-blue-700 mb-2">
+                      Handle schema changes automatically when source data structure changes
+                    </p>
+                    <div className="space-y-1 text-xs text-blue-700 ml-2">
+                      <div>• <strong>Strict Mode:</strong> Fail on schema mismatch (recommended for production)</div>
+                      <div>• <strong>Add New Columns:</strong> Automatically add new columns from source</div>
+                      <div>• <strong>Ignore Extra:</strong> Ignore columns not in target schema</div>
+                      <div>• Column type change detection and warnings</div>
+                    </div>
                   </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Handle schema changes automatically when source data structure changes
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>Strict Mode:</strong> Fail on schema mismatch (recommended for production)</div>
-                    <div>• <strong>Add New Columns:</strong> Automatically add new columns from source</div>
-                    <div>• <strong>Ignore Extra:</strong> Ignore columns not in target schema</div>
-                    <div>• Column type change detection and warnings</div>
-                  </div>
-                </div>
+                )}
 
                 {/* Data Quality Checks - AI Suggested */}
                 {aiSuggestions?.validation_hints?.suggested_rules && aiSuggestions.validation_hints.suggested_rules.length > 0 ? (
@@ -3104,7 +3706,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       Save Rules for Quality Module
                     </Button>
                     <p className="text-xs text-purple-600 mt-2 text-center">
-                      For comprehensive validation rules, configure them in the Data Quality tab after job creation.
+                      For comprehensive validation rules, configure them in the Data Quality tab after source creation.
                     </p>
                   </div>
                 ) : (
@@ -3117,7 +3719,262 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       Bronze layer performs minimal validation: schema conformance, required field checks, and row count monitoring.
                     </p>
                     <p className="text-xs text-gray-500">
-                      For comprehensive data quality rules (null handling, type validation, deduplication), configure them in the <strong>Data Quality</strong> tab after job creation.
+                      For comprehensive data quality rules (null handling, type validation, deduplication), configure them in the <strong>Data Quality</strong> tab after source creation.
+                    </p>
+                  </div>
+                )}
+
+                {/* Load Mode Selection */}
+                <div className="border border-amber-200 rounded-lg p-4 bg-amber-50/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <RefreshCw className="w-4 h-4 text-amber-600" />
+                    <span className="text-sm font-semibold text-amber-900">Load Mode</span>
+                  </div>
+                  <p className="text-xs text-amber-700 mb-3">
+                    Determines how data is written to the Bronze table based on your Load Strategy
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Overwrite Mode */}
+                    <button
+                      type="button"
+                      onClick={() => updateDestinationConfig({
+                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadMode: 'overwrite' }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.bronzeConfig?.loadMode === 'overwrite'
+                          ? "border-amber-500 bg-amber-100 ring-2 ring-amber-300"
+                          : "border-border hover:border-amber-300 bg-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <RefreshCw className="w-4 h-4 text-amber-600" />
+                        <span className="font-medium text-sm">Overwrite</span>
+                        {(formData.type === 'file-based'
+                          ? !formData.sourceConfig.fileConfig?.isIncremental
+                          : !formData.sourceConfig.databaseConfig?.isIncremental) && (
+                          <Badge variant="outline" className="text-xs ml-auto border-green-300 text-green-700 bg-green-50">Recommended</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        Truncate and reload entire table. Best for Full Load strategy.
+                      </p>
+                    </button>
+
+                    {/* Append Mode */}
+                    <button
+                      type="button"
+                      onClick={() => updateDestinationConfig({
+                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadMode: 'append' }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.bronzeConfig?.loadMode === 'append'
+                          ? "border-amber-500 bg-amber-100 ring-2 ring-amber-300"
+                          : "border-border hover:border-amber-300 bg-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowRight className="w-4 h-4 text-amber-600" />
+                        <span className="font-medium text-sm">Append</span>
+                        {(formData.type === 'file-based'
+                          ? formData.sourceConfig.fileConfig?.isIncremental
+                          : formData.sourceConfig.databaseConfig?.isIncremental) && (
+                          <Badge variant="outline" className="text-xs ml-auto border-green-300 text-green-700 bg-green-50">Recommended</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        Add new records to existing table. Best for Incremental Load strategy.
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quarantine Configuration */}
+                <div className="border border-red-200 rounded-lg p-4 bg-red-50/30">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600" />
+                      <span className="text-sm font-semibold text-red-900">Error Quarantine</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newEnabled = !formData.destinationConfig.bronzeConfig?.quarantineEnabled
+                        const tableName = formData.destinationConfig.bronzeConfig?.tableName || ''
+                        updateDestinationConfig({
+                          bronzeConfig: {
+                            ...formData.destinationConfig.bronzeConfig!,
+                            quarantineEnabled: newEnabled,
+                            quarantineTableName: newEnabled ? `${tableName}_errors` : ''
+                          }
+                        })
+                      }}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                        formData.destinationConfig.bronzeConfig?.quarantineEnabled
+                          ? "bg-red-500"
+                          : "bg-gray-300"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                          formData.destinationConfig.bronzeConfig?.quarantineEnabled
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        )}
+                      />
+                    </button>
+                  </div>
+                  <p className="text-xs text-red-700 mb-3">
+                    Route failed records to a separate quarantine table instead of failing the entire batch
+                  </p>
+                  {formData.destinationConfig.bronzeConfig?.quarantineEnabled && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-700">Quarantine Table:</span>
+                        <code className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-mono">
+                          {formData.destinationConfig.bronzeConfig?.quarantineTableName || `${formData.destinationConfig.bronzeConfig?.tableName || 'bronze_table'}_errors`}
+                        </code>
+                      </div>
+                      <div className="text-xs text-red-600 space-y-1">
+                        <p className="font-medium">Records quarantined for:</p>
+                        <ul className="list-disc list-inside ml-2 space-y-0.5">
+                          <li>Schema mismatch (unexpected columns)</li>
+                          <li>Type cast errors (invalid data types)</li>
+                          <li>Mandatory field missing (null in required columns)</li>
+                          <li>Corrupt data (malformed rows)</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Column Mapping Section */}
+                {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+                  <div className="border border-amber-200 rounded-lg p-4 bg-amber-50/50">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-900">Column Mapping (Landing → Bronze)</span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">{formData._detectedSchema.length} Columns</Badge>
+                    </div>
+                    <p className="text-xs text-amber-700 mb-3">
+                      Configure which columns to include, rename, or change data types. Excluded columns will not be ingested into Bronze.
+                    </p>
+                    <div className="max-h-64 overflow-y-auto border border-amber-200 rounded bg-white">
+                      <table className="w-full text-xs">
+                        <thead className="bg-amber-50 sticky top-0">
+                          <tr>
+                            <th className="text-left p-2 font-medium text-amber-900">Include</th>
+                            <th className="text-left p-2 font-medium text-amber-900">Source Column</th>
+                            <th className="text-left p-2 font-medium text-amber-900">Target Column</th>
+                            <th className="text-left p-2 font-medium text-amber-900">Target Type</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-amber-100">
+                          {formData._detectedSchema.map((col, idx) => {
+                            const mapping = formData.destinationConfig.bronzeConfig?.columnMapping?.find(
+                              m => m.sourceColumn === col.name
+                            ) || { sourceColumn: col.name, targetColumn: col.name, targetType: col.type, exclude: false }
+
+                            return (
+                              <tr key={idx} className={cn(mapping.exclude && "bg-gray-50 opacity-60")}>
+                                <td className="p-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={!mapping.exclude}
+                                    onChange={(e) => {
+                                      const currentMappings = formData.destinationConfig.bronzeConfig?.columnMapping || []
+                                      const existingIndex = currentMappings.findIndex(m => m.sourceColumn === col.name)
+                                      const newMapping = { ...mapping, exclude: !e.target.checked }
+
+                                      let newMappings
+                                      if (existingIndex >= 0) {
+                                        newMappings = [...currentMappings]
+                                        newMappings[existingIndex] = newMapping
+                                      } else {
+                                        newMappings = [...currentMappings, newMapping]
+                                      }
+
+                                      updateDestinationConfig({
+                                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, columnMapping: newMappings }
+                                      })
+                                    }}
+                                    className="w-4 h-4 text-amber-600 border-gray-300 rounded"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <code className="font-mono text-amber-800">{col.name}</code>
+                                  <span className="text-gray-400 ml-1">({col.type})</span>
+                                </td>
+                                <td className="p-2">
+                                  <input
+                                    type="text"
+                                    value={mapping.targetColumn}
+                                    onChange={(e) => {
+                                      const currentMappings = formData.destinationConfig.bronzeConfig?.columnMapping || []
+                                      const existingIndex = currentMappings.findIndex(m => m.sourceColumn === col.name)
+                                      const newMapping = { ...mapping, targetColumn: e.target.value }
+
+                                      let newMappings
+                                      if (existingIndex >= 0) {
+                                        newMappings = [...currentMappings]
+                                        newMappings[existingIndex] = newMapping
+                                      } else {
+                                        newMappings = [...currentMappings, newMapping]
+                                      }
+
+                                      updateDestinationConfig({
+                                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, columnMapping: newMappings }
+                                      })
+                                    }}
+                                    disabled={mapping.exclude}
+                                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded font-mono disabled:bg-gray-100"
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <select
+                                    value={mapping.targetType}
+                                    onChange={(e) => {
+                                      const currentMappings = formData.destinationConfig.bronzeConfig?.columnMapping || []
+                                      const existingIndex = currentMappings.findIndex(m => m.sourceColumn === col.name)
+                                      const newMapping = { ...mapping, targetType: e.target.value }
+
+                                      let newMappings
+                                      if (existingIndex >= 0) {
+                                        newMappings = [...currentMappings]
+                                        newMappings[existingIndex] = newMapping
+                                      } else {
+                                        newMappings = [...currentMappings, newMapping]
+                                      }
+
+                                      updateDestinationConfig({
+                                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, columnMapping: newMappings }
+                                      })
+                                    }}
+                                    disabled={mapping.exclude}
+                                    className="w-full px-2 py-1 text-xs border border-gray-200 rounded disabled:bg-gray-100"
+                                  >
+                                    <option value="string">string</option>
+                                    <option value="integer">integer</option>
+                                    <option value="decimal">decimal</option>
+                                    <option value="boolean">boolean</option>
+                                    <option value="date">date</option>
+                                    <option value="datetime">datetime</option>
+                                    <option value="timestamp">timestamp</option>
+                                  </select>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="text-xs text-amber-600 mt-2">
+                      ⚠️ Type casting errors will be routed to the quarantine table if enabled
                     </p>
                   </div>
                 )}
@@ -3126,7 +3983,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 4: // Silver Layer (was case 3)
+      case 5: // Silver Layer (was case 4)
         return (
           <div className="space-y-6">
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
@@ -3140,86 +3997,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
-
-            {/* Silver AI Suggestions Card - Show for both database and file sources */}
-            {(() => {
-              // Check if we have analyzable data from any source type
-              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
-              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
-
-              if (!isDatabaseSource && !isFileSource) {
-                return null
-              }
-
-              // Show as static display if AI recommendations have been applied
-              const aiApplied = formData._aiUsageMetadata?.silver?.applied === true
-
-              // Use fullAiAnalysis.silver data when AI has been applied
-              const silverSuggestions: Record<string, AISuggestion> = aiApplied && fullAiAnalysis?.silver
-                ? {
-                    ...(fullAiAnalysis.silver.primary_key && {
-                      primary_key: {
-                        enabled: true,
-                        confidence: 90,
-                        reasoning: fullAiAnalysis.silver.primary_key.reasoning || 'Identified unique key columns',
-                        columns: fullAiAnalysis.silver.primary_key.columns?.join(', ')
-                      }
-                    }),
-                    ...(fullAiAnalysis.silver.deduplication && {
-                      deduplication: {
-                        enabled: fullAiAnalysis.silver.deduplication.enabled,
-                        confidence: 85,
-                        reasoning: fullAiAnalysis.silver.deduplication.reasoning || 'Remove duplicate records',
-                        strategy: fullAiAnalysis.silver.deduplication.strategy
-                      }
-                    }),
-                    ...(fullAiAnalysis.silver.merge_strategy && {
-                      merge_strategy: {
-                        enabled: true,
-                        confidence: 80,
-                        reasoning: fullAiAnalysis.silver.merge_strategy.reasoning || 'Optimal merge approach',
-                        type: fullAiAnalysis.silver.merge_strategy.type
-                      }
-                    })
-                  }
-                : (silverAiSuggestions || {})
-
-              const hasSilverSuggestions = Object.keys(silverSuggestions).length > 0
-              console.log('[Step3] Rendering Silver AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasSilverSuggestions:', hasSilverSuggestions, 'loading:', isLoadingSilverAiSuggestions, 'aiApplied:', aiApplied)
-
-              // Get source name for description
-              const sourceName = isDatabaseSource
-                ? formData.sourceConfig.databaseConfig?.tableName
-                : formData._uploadedFile?.name || formData.name
-
-              // Get confidence from metadata
-              const confidence = formData._aiUsageMetadata?.silver?.confidence
-                ? Math.round(formData._aiUsageMetadata.silver.confidence * 100)
-                : undefined
-
-              return (
-                <AISuggestionCard
-                  title="AI Data Quality Architect Suggestions"
-                  description={`Based on analyzing ${sourceName}`}
-                  suggestions={silverSuggestions}
-                  loading={isLoadingSilverAiSuggestions}
-                  error={silverAiSuggestionsError}
-                  onAccept={hasSilverSuggestions && !aiApplied ? applySilverAiSuggestions : undefined}
-                  onAdjust={hasSilverSuggestions && !aiApplied ? () => {
-                    console.log('[Silver AI] Toggle expanded from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
-                    setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
-                  } : undefined}
-                  isExpanded={hasSilverSuggestions && silverAiSuggestionsExpanded}
-                  onToggleExpand={hasSilverSuggestions && !aiApplied ? () => {
-                    console.log('[Silver AI] onToggleExpand from', silverAiSuggestionsExpanded, 'to', !silverAiSuggestionsExpanded)
-                    setSilverAiSuggestionsExpanded(!silverAiSuggestionsExpanded)
-                  } : undefined}
-                  usingFallback={usingFallbackSilver}
-                  staticDisplay={aiApplied}
-                  confidenceOverride={confidence}
-                />
-              )
-            })()}
 
             {/* Silver Layer - Enhanced */}
             <Card className="border-gray-300 bg-gray-50/30">
@@ -3483,18 +4260,139 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </p>
                 </FormField>
 
-                {/* AI Transformations Preview */}
+                {/* Column Transformations Grid */}
                 {formData._detectedSchema && formData._detectedSchema.length > 0 && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-4 h-4 text-purple-600" />
-                      <span className="text-sm font-semibold text-purple-900">AI-Suggested Transformations</span>
-                      <Badge variant="secondary" className="text-xs ml-auto">Preview Only</Badge>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-100/50 px-3 py-2 border-b border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-900">Column Transformations ({formData._detectedSchema.length} columns)</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">Configure per column</Badge>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2 text-xs">
+                    <div className="max-h-80 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 sticky top-0">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-gray-900">Source Column</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-900">Target Name</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-900">Type</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-900">Transform</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-900 w-16">Nullable</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {formData._detectedSchema.map((col, idx) => {
+                            const isExcludedFromBronze = (formData.destinationConfig.bronzeConfig as any)?.excludedColumns?.includes(col.name)
+                            const colTransforms = (formData.destinationConfig.silverConfig as any)?.columnTransforms?.[col.name] || {}
+                            if (isExcludedFromBronze) return null
+                            return (
+                              <tr key={idx} className="hover:bg-gray-50/50">
+                                <td className="px-3 py-2">
+                                  <code className="font-mono text-gray-800">{col.name}</code>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    value={colTransforms.targetName || col.name}
+                                    onChange={(e) => {
+                                      const currentTransforms = (formData.destinationConfig.silverConfig as any)?.columnTransforms || {}
+                                      updateDestinationConfig({
+                                        silverConfig: {
+                                          ...formData.destinationConfig.silverConfig!,
+                                          columnTransforms: {
+                                            ...currentTransforms,
+                                            [col.name]: { ...currentTransforms[col.name], targetName: e.target.value }
+                                          }
+                                        } as any
+                                      })
+                                    }}
+                                    className="h-7 text-xs font-mono"
+                                    placeholder={col.name}
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Badge variant="secondary" className="text-xs font-mono">
+                                    {col.type}
+                                  </Badge>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Select
+                                    value={colTransforms.transform || 'none'}
+                                    onChange={(e) => {
+                                      const currentTransforms = (formData.destinationConfig.silverConfig as any)?.columnTransforms || {}
+                                      updateDestinationConfig({
+                                        silverConfig: {
+                                          ...formData.destinationConfig.silverConfig!,
+                                          columnTransforms: {
+                                            ...currentTransforms,
+                                            [col.name]: { ...currentTransforms[col.name], transform: e.target.value }
+                                          }
+                                        } as any
+                                      })
+                                    }}
+                                    className="h-7 text-xs"
+                                  >
+                                    <option value="none">No Transform</option>
+                                    <option value="trim">Trim Whitespace</option>
+                                    <option value="lowercase">Lowercase</option>
+                                    <option value="uppercase">Uppercase</option>
+                                    {(col.type === 'string' || col.type === 'text') && (
+                                      <>
+                                        <option value="parse_date">Parse as Date</option>
+                                        <option value="parse_number">Parse as Number</option>
+                                      </>
+                                    )}
+                                    {col.type === 'date' && (
+                                      <option value="iso8601">Format ISO 8601</option>
+                                    )}
+                                  </Select>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={colTransforms.nullable !== false}
+                                    onChange={(e) => {
+                                      const currentTransforms = (formData.destinationConfig.silverConfig as any)?.columnTransforms || {}
+                                      updateDestinationConfig({
+                                        silverConfig: {
+                                          ...formData.destinationConfig.silverConfig!,
+                                          columnTransforms: {
+                                            ...currentTransforms,
+                                            [col.name]: { ...currentTransforms[col.name], nullable: e.target.checked }
+                                          }
+                                        } as any
+                                      })
+                                    }}
+                                    className="w-4 h-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500"
+                                  />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="bg-gray-50/50 px-3 py-2 border-t border-gray-200 text-xs text-gray-600">
+                      Rename columns, apply transformations, and configure nullable constraints
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Transformation Recommendations */}
+                {formData._detectedSchema && formData._detectedSchema.some(col => ['email', 'phone', 'date'].includes(col.type)) && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-semibold text-purple-900">AI Transformation Recommendations</span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">Optional</Badge>
+                    </div>
+                    <div className="space-y-2 text-xs mb-3">
                       {formData._detectedSchema
                         .filter(col => ['email', 'phone', 'date'].includes(col.type))
-                        .slice(0, 3)
+                        .slice(0, 4)
                         .map((col, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-purple-800">
                             <CheckCircle className="w-3 h-3 text-purple-600" />
@@ -3507,10 +4405,30 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                             </span>
                           </div>
                         ))}
-                      {formData._detectedSchema.filter(col => ['email', 'phone', 'date'].includes(col.type)).length === 0 && (
-                        <p className="text-purple-700">No special transformations detected for this dataset</p>
-                      )}
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-purple-700 border-purple-300 hover:bg-purple-100 text-xs"
+                      onClick={() => {
+                        // Apply AI-suggested transformations
+                        const transforms = { ...(formData.destinationConfig.silverConfig as any)?.columnTransforms || {} }
+                        formData._detectedSchema?.forEach(col => {
+                          if (col.type === 'email') {
+                            transforms[col.name] = { ...transforms[col.name], transform: 'lowercase' }
+                          } else if (col.type === 'date') {
+                            transforms[col.name] = { ...transforms[col.name], transform: 'iso8601' }
+                          }
+                        })
+                        updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, columnTransforms: transforms } as any
+                        })
+                        toast.success('AI transformation recommendations applied')
+                      }}
+                    >
+                      Apply AI Recommendations
+                    </Button>
                   </div>
                 )}
 
@@ -3621,7 +4539,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     {formData._silverQualityRulesApplied && (
                       <div className="mt-2 flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded p-2">
                         <CheckCircle className="w-3 h-3" />
-                        <span>Quality rules will be available in the Quality Module after job creation</span>
+                        <span>Quality rules will be available in the Quality Module after source creation</span>
                       </div>
                     )}
                   </div>
@@ -3775,7 +4693,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       <div className="space-y-1 text-xs text-foreground-muted ml-2">
                         <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_created_at</code> - When record was first created in Silver</div>
                         <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_updated_at</code> - When record was last updated</div>
-                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_load_id</code> - Ingestion job identifier</div>
+                        <div>• <code className="font-mono bg-white px-1 py-0.5 rounded">_load_id</code> - Ingestion identifier</div>
                       </div>
 
                       <div className="border-t border-gray-200 pt-2 mt-3">
@@ -3958,7 +4876,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 5: // Gold Layer (was case 4)
+      case 6: // Gold Layer (was case 5)
         return (
           <div className="space-y-6">
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
@@ -3972,149 +4890,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </div>
               </div>
             </div>
-
-            {/* Gold AI Suggestions Card - Show for both database and file sources */}
-            {(() => {
-              // Check if we have analyzable data from any source type
-              const isDatabaseSource = formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName
-              const isFileSource = formData.type === 'file-based' && formData._detectedSchema && formData._detectedSchema.length > 0 && formData._previewData && formData._previewData.length > 0
-
-              if (!isDatabaseSource && !isFileSource) {
-                return null
-              }
-
-              // Show as static display if AI recommendations have been applied
-              const aiApplied = formData._aiUsageMetadata?.gold?.applied === true
-
-              // Use fullAiAnalysis.gold data when AI has been applied
-              // Backend returns: aggregation (not aggregations), dimensions, indexing, materialization, schedule
-              const goldData = fullAiAnalysis?.gold as any
-              const goldSuggestions: Record<string, AISuggestion> = aiApplied && goldData
-                ? {
-                    // Aggregation config (backend uses 'aggregation' not 'aggregations')
-                    ...(goldData.aggregation && {
-                      aggregation: {
-                        enabled: goldData.aggregation.enabled !== false,
-                        confidence: goldData.aggregation.confidence || 85,
-                        reasoning: goldData.aggregation.reasoning || 'Recommended analytics aggregations',
-                        level: goldData.aggregation.level,
-                        metrics: goldData.aggregation.metrics?.map((m: any) => m.name || m).join(', ') || ''
-                      }
-                    }),
-                    // Dimensions (top-level in backend response)
-                    ...(goldData.dimensions && goldData.dimensions.length > 0 && {
-                      dimensions: {
-                        enabled: true,
-                        confidence: 80,
-                        reasoning: 'Key dimensions for analytics grouping',
-                        columns: goldData.dimensions.join(', ')
-                      }
-                    }),
-                    // Indexing strategy
-                    ...(goldData.indexing && goldData.indexing.enabled && {
-                      indexing: {
-                        enabled: true,
-                        confidence: goldData.indexing.confidence || 75,
-                        reasoning: goldData.indexing.reasoning || 'Recommended indexing for query performance',
-                        strategy: goldData.indexing.strategy,
-                        columns: goldData.indexing.columns?.join(', ') || ''
-                      }
-                    }),
-                    // Materialization strategy
-                    ...(goldData.materialization && goldData.materialization.enabled && {
-                      materialization: {
-                        enabled: true,
-                        confidence: goldData.materialization.confidence || 80,
-                        reasoning: goldData.materialization.reasoning || 'Recommended materialization strategy',
-                        refresh_strategy: goldData.materialization.refresh_strategy
-                      }
-                    }),
-                    // Schedule config
-                    ...(goldData.schedule && {
-                      schedule: {
-                        enabled: true,
-                        confidence: goldData.schedule.confidence || 75,
-                        reasoning: goldData.schedule.reasoning || goldData.schedule.recommended_time || 'Recommended refresh schedule',
-                        frequency: goldData.schedule.frequency,
-                        cron: goldData.schedule.cron_expression
-                      }
-                    })
-                  }
-                : (goldAiSuggestions || {})
-
-              const hasGoldSuggestions = Object.keys(goldSuggestions).length > 0
-              console.log('[Step4] Rendering Gold AI card - isDatabaseSource:', isDatabaseSource, 'isFileSource:', isFileSource, 'hasGoldSuggestions:', hasGoldSuggestions, 'loading:', isLoadingGoldAiSuggestions, 'aiApplied:', aiApplied)
-              console.log('[Step4] Gold data from backend:', goldData)
-              console.log('[Step4] Mapped goldSuggestions:', goldSuggestions)
-
-              // Get source name for description
-              const sourceName = isDatabaseSource
-                ? formData.sourceConfig.databaseConfig?.tableName
-                : formData._uploadedFile?.name || formData.name
-
-              // Get confidence from metadata
-              const confidence = formData._aiUsageMetadata?.gold?.confidence
-                ? Math.round(formData._aiUsageMetadata.gold.confidence * 100)
-                : undefined
-
-              return (
-                <div className="mb-4 space-y-3">
-                  {/* Business Context Input - only show if AI not yet applied */}
-                  {!aiApplied && (
-                    <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="w-4 h-4 text-amber-600" />
-                        <span className="text-sm font-semibold text-amber-900">Business Context (Optional)</span>
-                      </div>
-                      <p className="text-xs text-amber-700 mb-3">
-                        Provide business context to help AI suggest better metrics and aggregations (e.g., "Customer transaction analytics for monthly revenue reporting")
-                      </p>
-                      <textarea
-                        value={businessContext}
-                        onChange={(e) => setBusinessContext(e.target.value)}
-                        placeholder="Describe the business use case for this Gold layer..."
-                        className="w-full text-xs p-2 border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                        rows={2}
-                      />
-                      {businessContext && businessContext.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBusinessContext('')
-                            fetchGoldAiSuggestions()
-                          }}
-                          className="mt-2 text-xs text-amber-700 hover:text-amber-900 underline"
-                        >
-                          Clear & Refresh AI Suggestions
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* AI Suggestions Card */}
-                  <AISuggestionCard
-                    title="AI Analytics Architect Suggestions"
-                    description={`Based on analyzing ${sourceName}${businessContext ? ' with business context' : ''}`}
-                    suggestions={goldSuggestions}
-                    loading={isLoadingGoldAiSuggestions}
-                    error={goldAiSuggestionsError}
-                    onAccept={hasGoldSuggestions && !aiApplied ? applyGoldAiSuggestions : undefined}
-                    onAdjust={hasGoldSuggestions && !aiApplied ? () => {
-                      console.log('[Gold AI] Toggle expanded from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
-                      setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
-                    } : undefined}
-                    isExpanded={hasGoldSuggestions && goldAiSuggestionsExpanded}
-                    onToggleExpand={hasGoldSuggestions && !aiApplied ? () => {
-                      console.log('[Gold AI] onToggleExpand from', goldAiSuggestionsExpanded, 'to', !goldAiSuggestionsExpanded)
-                      setGoldAiSuggestionsExpanded(!goldAiSuggestionsExpanded)
-                    } : undefined}
-                    usingFallback={usingFallbackGold}
-                    staticDisplay={aiApplied}
-                    confidenceOverride={confidence}
-                  />
-                </div>
-              )
-            })()}
 
             {/* Gold Layer - Enhanced */}
             <Card className="border-yellow-400 bg-yellow-50/30">
@@ -4181,13 +4956,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   <FormField>
                     <FormLabel>Storage Format</FormLabel>
                     <Select
-                      value={formData.destinationConfig.goldConfig?.storageFormat || 'parquet'}
+                      value={formData.destinationConfig.goldConfig?.storageFormat || 'duckdb'}
                       onChange={(e) => updateDestinationConfig({
                         goldConfig: { ...formData.destinationConfig.goldConfig!, storageFormat: e.target.value as any }
                       })}
                       disabled={formData.destinationConfig.goldConfig?.enabled === false}
                     >
-                      <option value="parquet">Parquet (Active)</option>
+                      <option value="duckdb">DuckDB (Analytics Database)</option>
+                      <option value="parquet">Parquet (File-based)</option>
                       <option value="iceberg" disabled>Apache Iceberg (Coming Soon)</option>
                       <option value="delta" disabled>Delta Lake (Coming Soon)</option>
                     </Select>
@@ -4211,54 +4987,341 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </FormField>
                 </div>
 
-                {/* Materialization Type */}
-                <FormField>
-                  <FormLabel>Materialization Type</FormLabel>
-                  <Select
-                    value={formData.destinationConfig.goldConfig?.materializationType || 'table'}
-                    onChange={(e) => updateDestinationConfig({
-                      goldConfig: { ...formData.destinationConfig.goldConfig!, materializationType: e.target.value as any }
-                    })}
-                    disabled={formData.destinationConfig.goldConfig?.enabled === false}
-                  >
-                    <option value="table">Table (Physical Storage - Recommended)</option>
-                    <option value="view" disabled>View (Coming Soon)</option>
-                    <option value="materialized_view" disabled>Materialized View (Coming Soon)</option>
-                  </Select>
-                  <p className="text-xs text-foreground-muted mt-1">
-                    {formData.destinationConfig.goldConfig?.materializationType === 'table' && 'Physical table with stored data for fast queries'}
-                    {formData.destinationConfig.goldConfig?.materializationType === 'view' && 'Virtual view that queries Silver on demand'}
-                    {formData.destinationConfig.goldConfig?.materializationType === 'materialized_view' && 'Pre-computed view with auto-refresh'}
-                  </p>
-                </FormField>
+                {/* Table Type (Dimension/Fact) */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField>
+                    <FormLabel>Table Type</FormLabel>
+                    <Select
+                      value={(formData.destinationConfig.goldConfig as any)?.tableType || 'fact'}
+                      onChange={(e) => updateDestinationConfig({
+                        goldConfig: { ...formData.destinationConfig.goldConfig!, tableType: e.target.value as any }
+                      })}
+                      disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                    >
+                      <option value="fact">Fact Table (Transactional/Events)</option>
+                      <option value="dimension">Dimension Table (Reference/Lookup)</option>
+                    </Select>
+                    <p className="text-xs text-foreground-muted mt-1">
+                      {(formData.destinationConfig.goldConfig as any)?.tableType === 'dimension' && 'Descriptive attributes for analysis (e.g., Customer, Product)'}
+                      {((formData.destinationConfig.goldConfig as any)?.tableType === 'fact' || !(formData.destinationConfig.goldConfig as any)?.tableType) && 'Measurable events/transactions (e.g., Sales, Payments)'}
+                    </p>
+                  </FormField>
+
+                  {/* Materialization Type */}
+                  <FormField>
+                    <FormLabel>Materialization</FormLabel>
+                    <Select
+                      value={formData.destinationConfig.goldConfig?.materializationType || 'table'}
+                      onChange={(e) => updateDestinationConfig({
+                        goldConfig: { ...formData.destinationConfig.goldConfig!, materializationType: e.target.value as any }
+                      })}
+                      disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                    >
+                      <option value="table">Table (Physical Storage)</option>
+                      <option value="view" disabled>View (Coming Soon)</option>
+                      <option value="materialized_view" disabled>Materialized View (Coming Soon)</option>
+                    </Select>
+                  </FormField>
+                </div>
+
+                {/* AI Table Type Recommendation */}
+                {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span className="text-sm font-semibold text-purple-900">AI Recommendation</span>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">Optional</Badge>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="text-purple-800">
+                        Based on schema analysis, this appears to be a{' '}
+                        <strong>
+                          {formData._detectedSchema.some(col =>
+                            col.name.toLowerCase().includes('amount') ||
+                            col.name.toLowerCase().includes('quantity') ||
+                            col.name.toLowerCase().includes('payment') ||
+                            col.name.toLowerCase().includes('transaction')
+                          ) ? 'Fact Table' : 'Dimension Table'}
+                        </strong>
+                      </p>
+                      <div className="text-xs text-purple-700 space-y-1">
+                        {formData._detectedSchema.some(col =>
+                          col.name.toLowerCase().includes('amount') ||
+                          col.name.toLowerCase().includes('quantity')
+                        ) ? (
+                          <>
+                            <p>• Contains numeric measures (amount, quantity)</p>
+                            <p>• Has temporal columns for time-series analysis</p>
+                            <p>• Suitable for aggregations and metrics</p>
+                          </>
+                        ) : (
+                          <>
+                            <p>• Contains descriptive attributes</p>
+                            <p>• Has unique identifiers (ID columns)</p>
+                            <p>• Suitable as reference/lookup data</p>
+                          </>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 text-purple-700 border-purple-300 hover:bg-purple-100"
+                        onClick={() => {
+                          const suggestedType = formData._detectedSchema?.some(col =>
+                            col.name.toLowerCase().includes('amount') ||
+                            col.name.toLowerCase().includes('quantity') ||
+                            col.name.toLowerCase().includes('payment') ||
+                            col.name.toLowerCase().includes('transaction')
+                          ) ? 'fact' : 'dimension'
+                          updateDestinationConfig({
+                            goldConfig: { ...formData.destinationConfig.goldConfig!, tableType: suggestedType as any }
+                          })
+                        }}
+                      >
+                        Apply Recommendation
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Gold Column Schema Grid */}
+                {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+                  <div className="border border-yellow-200 rounded-lg overflow-hidden">
+                    <div className="bg-yellow-100/50 px-3 py-2 border-b border-yellow-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-yellow-900">
+                          Gold Layer Column Configuration ({formData._detectedSchema.filter(col => {
+                            const isExcludedBronze = (formData.destinationConfig.bronzeConfig as any)?.excludedColumns?.includes(col.name)
+                            const isExcludedGold = (formData.destinationConfig.goldConfig as any)?.excludedColumns?.includes(col.name)
+                            return !isExcludedBronze && !isExcludedGold
+                          }).length} columns)
+                        </span>
+                        <Badge variant="secondary" className="text-xs">Business-Ready Naming</Badge>
+                      </div>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-yellow-50 sticky top-0">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-10">Include</th>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900">Source Column</th>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900">Business Name</th>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-32">Column Role</th>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-28">Aggregation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-yellow-100">
+                          {formData._detectedSchema.map((col, idx) => {
+                            const isExcludedFromBronze = (formData.destinationConfig.bronzeConfig as any)?.excludedColumns?.includes(col.name)
+                            const isExcludedFromGold = (formData.destinationConfig.goldConfig as any)?.excludedColumns?.includes(col.name)
+                            const goldColConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig?.[col.name] || {}
+
+                            // Skip columns excluded from Bronze
+                            if (isExcludedFromBronze) return null
+
+                            // Auto-detect column role based on name and type
+                            const detectRole = () => {
+                              const nameLower = col.name.toLowerCase()
+                              if (nameLower.endsWith('_id') || nameLower === 'id') return 'dimension_key'
+                              if (col.type === 'number' || col.type === 'integer') {
+                                if (nameLower.includes('amount') || nameLower.includes('quantity') || nameLower.includes('rate') || nameLower.includes('value') || nameLower.includes('payment') || nameLower.includes('income') || nameLower.includes('score')) return 'measure'
+                              }
+                              if (col.type === 'date' || col.type === 'datetime' || nameLower.includes('date') || nameLower.includes('_at')) return 'date_dimension'
+                              return 'dimension_attribute'
+                            }
+
+                            const currentRole = goldColConfig.role || detectRole()
+                            const isMeasure = currentRole === 'measure'
+
+                            return (
+                              <tr key={idx} className={cn(
+                                "hover:bg-yellow-50/50",
+                                isExcludedFromGold && "opacity-50 bg-gray-50"
+                              )}>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={!isExcludedFromGold}
+                                    onChange={(e) => {
+                                      const currentExcluded = (formData.destinationConfig.goldConfig as any)?.excludedColumns || []
+                                      const newExcluded = e.target.checked
+                                        ? currentExcluded.filter((c: string) => c !== col.name)
+                                        : [...currentExcluded, col.name]
+                                      updateDestinationConfig({
+                                        goldConfig: { ...formData.destinationConfig.goldConfig!, excludedColumns: newExcluded } as any
+                                      })
+                                    }}
+                                    className="w-4 h-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                                    disabled={formData.destinationConfig.goldConfig?.enabled === false}
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <code className="font-mono text-yellow-800 text-xs">{col.name}</code>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Input
+                                    value={goldColConfig.businessName || col.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                                    onChange={(e) => {
+                                      const currentConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig || {}
+                                      updateDestinationConfig({
+                                        goldConfig: {
+                                          ...formData.destinationConfig.goldConfig!,
+                                          columnConfig: {
+                                            ...currentConfig,
+                                            [col.name]: { ...currentConfig[col.name], businessName: e.target.value }
+                                          }
+                                        } as any
+                                      })
+                                    }}
+                                    className="h-7 text-xs"
+                                    placeholder={col.name}
+                                    disabled={formData.destinationConfig.goldConfig?.enabled === false || isExcludedFromGold}
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <Select
+                                    value={currentRole}
+                                    onChange={(e) => {
+                                      const currentConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig || {}
+                                      updateDestinationConfig({
+                                        goldConfig: {
+                                          ...formData.destinationConfig.goldConfig!,
+                                          columnConfig: {
+                                            ...currentConfig,
+                                            [col.name]: { ...currentConfig[col.name], role: e.target.value }
+                                          }
+                                        } as any
+                                      })
+                                    }}
+                                    className="h-7 text-xs"
+                                    disabled={formData.destinationConfig.goldConfig?.enabled === false || isExcludedFromGold}
+                                  >
+                                    <option value="dimension_key">Dimension Key</option>
+                                    <option value="dimension_attribute">Dimension Attr</option>
+                                    <option value="date_dimension">Date Dimension</option>
+                                    <option value="measure">Measure</option>
+                                    <option value="degenerate">Degenerate Dim</option>
+                                  </Select>
+                                </td>
+                                <td className="px-3 py-2">
+                                  {isMeasure ? (
+                                    <Select
+                                      value={goldColConfig.aggregation || 'sum'}
+                                      onChange={(e) => {
+                                        const currentConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig || {}
+                                        updateDestinationConfig({
+                                          goldConfig: {
+                                            ...formData.destinationConfig.goldConfig!,
+                                            columnConfig: {
+                                              ...currentConfig,
+                                              [col.name]: { ...currentConfig[col.name], aggregation: e.target.value }
+                                            }
+                                          } as any
+                                        })
+                                      }}
+                                      className="h-7 text-xs"
+                                      disabled={formData.destinationConfig.goldConfig?.enabled === false || isExcludedFromGold}
+                                    >
+                                      <option value="sum">SUM</option>
+                                      <option value="avg">AVG</option>
+                                      <option value="count">COUNT</option>
+                                      <option value="min">MIN</option>
+                                      <option value="max">MAX</option>
+                                      <option value="count_distinct">COUNT DISTINCT</option>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-gray-400 text-xs italic">N/A</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="bg-yellow-50 px-3 py-2 border-t border-yellow-200 text-xs text-yellow-700">
+                      <div className="flex items-center justify-between">
+                        <span>
+                          <strong>Tip:</strong> Business names appear in reports/dashboards. Column roles determine how data is used in analytics.
+                        </span>
+                        {formData._detectedSchema && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-6 text-yellow-700 border-yellow-300 hover:bg-yellow-100"
+                            onClick={() => {
+                              // Apply AI-suggested business names
+                              const newConfig: Record<string, any> = {}
+                              formData._detectedSchema?.forEach(col => {
+                                const nameLower = col.name.toLowerCase()
+                                let businessName = col.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+                                // Smart business name transformations
+                                businessName = businessName
+                                  .replace(/\bId\b/g, 'ID')
+                                  .replace(/\bDti\b/g, 'DTI')
+                                  .replace(/\bLtv\b/g, 'LTV')
+                                  .replace(/\bApi\b/g, 'API')
+
+                                // Detect role
+                                let role = 'dimension_attribute'
+                                if (nameLower.endsWith('_id') || nameLower === 'id') role = 'dimension_key'
+                                else if (col.type === 'number' || col.type === 'integer') {
+                                  if (nameLower.includes('amount') || nameLower.includes('quantity') || nameLower.includes('rate') || nameLower.includes('value') || nameLower.includes('payment') || nameLower.includes('income') || nameLower.includes('score')) role = 'measure'
+                                }
+                                else if (col.type === 'date' || col.type === 'datetime' || nameLower.includes('date') || nameLower.includes('_at')) role = 'date_dimension'
+
+                                newConfig[col.name] = {
+                                  businessName,
+                                  role,
+                                  aggregation: role === 'measure' ? 'sum' : undefined
+                                }
+                              })
+
+                              updateDestinationConfig({
+                                goldConfig: {
+                                  ...formData.destinationConfig.goldConfig!,
+                                  columnConfig: newConfig
+                                } as any
+                              })
+                            }}
+                          >
+                            <Sparkles className="w-3 h-3 mr-1" />
+                            Apply AI Naming
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* AI Aggregations Preview */}
-                {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+                {formData._detectedSchema && formData._detectedSchema.length > 0 && (formData.destinationConfig.goldConfig as any)?.tableType === 'fact' && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Sparkles className="w-4 h-4 text-green-600" />
                       <span className="text-sm font-semibold text-green-900">AI-Suggested Aggregations</span>
-                      <Badge variant="secondary" className="text-xs ml-auto">Preview Only</Badge>
+                      <Badge variant="secondary" className="text-xs ml-auto">Optional</Badge>
                     </div>
                     <div className="space-y-2 text-xs">
                       {formData._detectedSchema
                         .filter(col => col.type === 'number' || col.type === 'integer')
-                        .slice(0, 2)
+                        .slice(0, 3)
                         .map((col, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-green-800">
                             <CheckCircle className="w-3 h-3 text-green-600" />
                             <code className="font-mono bg-white px-1.5 py-0.5 rounded">{col.name}</code>
                             <span>→</span>
-                            <span className="text-green-700">SUM, AVG, MIN, MAX by date/category</span>
+                            <span className="text-green-700">SUM, AVG, COUNT by date/category</span>
                           </div>
                         ))}
                       {formData._detectedSchema.filter(col => col.type === 'number' || col.type === 'integer').length === 0 && (
                         <p className="text-green-700">No numeric columns detected for aggregation</p>
                       )}
-                      <div className="flex items-center gap-2 text-green-800 pt-1 border-t border-green-200">
-                        <AlertCircle className="w-3 h-3 text-green-600" />
-                        <span className="text-green-700">Full aggregation config available in advanced mode</span>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -4353,7 +5416,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <div>• <strong>Azure Synapse:</strong> Export to Synapse Analytics</div>
                     <div>• <strong>PostgreSQL/MySQL:</strong> Export to relational databases</div>
                     <div>• <strong>Excel/CSV:</strong> Download for business users</div>
-                    <div>• Schedule: On job completion, Daily, Weekly</div>
+                    <div>• Schedule: On source completion, Daily, Weekly</div>
                   </div>
                 </div>
 
@@ -4379,21 +5442,310 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
           </div>
         )
 
-      case 6: // Review & Create (was case 5)
+      case 7: // Review & Create (was case 6)
         return (
           <div className="space-y-6">
             <div className="text-sm font-medium text-foreground mb-2">
               Review Configuration
             </div>
             <div className="text-sm text-foreground-muted mb-4">
-              Review your job configuration before creating
+              Review your source configuration before creating
             </div>
+
+            {/* AI Data Architect - Senior Architect Review */}
+            <Card className={cn(
+              "border-2 transition-all",
+              aiArchitectReview
+                ? aiArchitectReview.overallScore >= 80
+                  ? "border-green-300 bg-gradient-to-r from-green-50 to-emerald-50"
+                  : aiArchitectReview.overallScore >= 60
+                    ? "border-yellow-300 bg-gradient-to-r from-yellow-50 to-amber-50"
+                    : "border-red-300 bg-gradient-to-r from-red-50 to-orange-50"
+                : "border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50"
+            )}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center",
+                      aiArchitectReview
+                        ? aiArchitectReview.overallScore >= 80
+                          ? "bg-green-100"
+                          : aiArchitectReview.overallScore >= 60
+                            ? "bg-yellow-100"
+                            : "bg-red-100"
+                        : "bg-purple-100"
+                    )}>
+                      <Sparkles className={cn(
+                        "w-5 h-5",
+                        aiArchitectReview
+                          ? aiArchitectReview.overallScore >= 80
+                            ? "text-green-600"
+                            : aiArchitectReview.overallScore >= 60
+                              ? "text-yellow-600"
+                              : "text-red-600"
+                          : "text-purple-600"
+                      )} />
+                    </div>
+                    <div>
+                      <span className="text-foreground">AI Data Architect</span>
+                      <p className="text-xs font-normal text-foreground-muted mt-0.5">
+                        Senior Data Architect Review
+                      </p>
+                    </div>
+                  </CardTitle>
+                  {!aiArchitectReview && !isLoadingAiReview && (
+                    <Button
+                      type="button"
+                      onClick={fetchAiArchitectReview}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Review with AI
+                    </Button>
+                  )}
+                  {aiArchitectReview && (
+                    <div className="flex items-center gap-2">
+                      <Badge className={cn(
+                        "text-sm px-3 py-1",
+                        aiArchitectReview.overallScore >= 80 ? "bg-green-100 text-green-700 border-green-300" :
+                        aiArchitectReview.overallScore >= 60 ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
+                        "bg-red-100 text-red-700 border-red-300"
+                      )}>
+                        Score: {aiArchitectReview.overallScore}/100
+                      </Badge>
+                      <Button
+                        type="button"
+                        onClick={fetchAiArchitectReview}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Re-review
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {!aiArchitectReview && !isLoadingAiReview && (
+                  <p className="text-sm text-purple-700 mt-2">
+                    Have our AI Senior Data Architect review your configuration and identify potential issues with load strategy,
+                    data quality rules, partitioning, and layer-specific settings.
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent>
+                {isLoadingAiReview && (
+                  <div className="py-6 space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-purple-700 font-medium">{aiAnalysisStage || 'Reviewing your configuration...'}</span>
+                      <span className="text-purple-600 font-mono">{aiAnalysisProgress}%</span>
+                    </div>
+                    <div className="w-full bg-purple-100 rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${aiAnalysisProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-purple-500">
+                      Analyzing load strategy, Bronze/Silver/Gold configurations, data quality rules, and best practices...
+                    </p>
+                  </div>
+                )}
+
+                {aiReviewError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      <span>{aiReviewError}</span>
+                    </div>
+                  </div>
+                )}
+
+                {aiArchitectReview && (
+                  <div className="space-y-4">
+                    {/* Summary */}
+                    <div className="text-sm text-purple-800 bg-white/50 rounded-lg p-3">
+                      {aiArchitectReview.summary}
+                    </div>
+
+                    {/* Risk Flags */}
+                    {aiArchitectReview.riskFlags.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-red-700 uppercase tracking-wide flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />
+                          Risk Flags ({aiArchitectReview.riskFlags.length})
+                        </div>
+                        {aiArchitectReview.riskFlags.map((flag, idx) => (
+                          <div key={idx} className={cn(
+                            "rounded-lg p-3 text-sm",
+                            flag.severity === 'high' ? "bg-red-50 border border-red-200" :
+                            flag.severity === 'medium' ? "bg-yellow-50 border border-yellow-200" :
+                            "bg-blue-50 border border-blue-200"
+                          )}>
+                            <div className="flex items-start gap-2">
+                              <Badge className={cn(
+                                "text-xs shrink-0",
+                                flag.severity === 'high' ? "bg-red-100 text-red-700" :
+                                flag.severity === 'medium' ? "bg-yellow-100 text-yellow-700" :
+                                "bg-blue-100 text-blue-700"
+                              )}>
+                                {flag.severity.toUpperCase()}
+                              </Badge>
+                              <div>
+                                <p className="font-medium">{flag.message}</p>
+                                <p className="text-xs mt-1 opacity-80">{flag.recommendation}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Recommendations by Layer */}
+                    {(aiArchitectReview.bronzeRecommendations.length > 0 ||
+                      aiArchitectReview.silverRecommendations.length > 0 ||
+                      aiArchitectReview.goldRecommendations.length > 0) && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide">
+                            Recommendations
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={applyAllAiRecommendations}
+                            size="sm"
+                            className="text-xs bg-purple-600 hover:bg-purple-700"
+                          >
+                            Apply All
+                          </Button>
+                        </div>
+
+                        {/* Bronze Recommendations */}
+                        {aiArchitectReview.bronzeRecommendations.length > 0 && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                              <span className="text-xs font-semibold text-amber-900">Bronze Layer</span>
+                            </div>
+                            <div className="space-y-2">
+                              {aiArchitectReview.bronzeRecommendations.map((rec, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs bg-white rounded p-2">
+                                  <div className="flex-1">
+                                    <span className="font-medium">{rec.field}:</span>{' '}
+                                    <span className="text-gray-500">{String(rec.currentValue)}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-amber-700 font-medium">{String(rec.suggestedValue)}</span>
+                                    <p className="text-gray-500 mt-0.5">{rec.reasoning}</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    onClick={() => applyAiRecommendation('bronze', idx)}
+                                    disabled={rec.applied}
+                                    size="sm"
+                                    variant="outline"
+                                    className={cn("text-xs ml-2 shrink-0", rec.applied && "bg-green-50 text-green-600")}
+                                  >
+                                    {rec.applied ? '✓ Applied' : 'Apply'}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Silver Recommendations */}
+                        {aiArchitectReview.silverRecommendations.length > 0 && (
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
+                              <span className="text-xs font-semibold text-gray-900">Silver Layer</span>
+                            </div>
+                            <div className="space-y-2">
+                              {aiArchitectReview.silverRecommendations.map((rec, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs bg-white rounded p-2">
+                                  <div className="flex-1">
+                                    <span className="font-medium">{rec.field}:</span>{' '}
+                                    <span className="text-gray-500">{String(rec.currentValue)}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-gray-700 font-medium">{String(rec.suggestedValue)}</span>
+                                    <p className="text-gray-500 mt-0.5">{rec.reasoning}</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    onClick={() => applyAiRecommendation('silver', idx)}
+                                    disabled={rec.applied}
+                                    size="sm"
+                                    variant="outline"
+                                    className={cn("text-xs ml-2 shrink-0", rec.applied && "bg-green-50 text-green-600")}
+                                  >
+                                    {rec.applied ? '✓ Applied' : 'Apply'}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Gold Recommendations */}
+                        {aiArchitectReview.goldRecommendations.length > 0 && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                              <span className="text-xs font-semibold text-yellow-900">Gold Layer</span>
+                            </div>
+                            <div className="space-y-2">
+                              {aiArchitectReview.goldRecommendations.map((rec, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs bg-white rounded p-2">
+                                  <div className="flex-1">
+                                    <span className="font-medium">{rec.field}:</span>{' '}
+                                    <span className="text-gray-500">{String(rec.currentValue)}</span>
+                                    <span className="mx-1">→</span>
+                                    <span className="text-yellow-700 font-medium">{String(rec.suggestedValue)}</span>
+                                    <p className="text-gray-500 mt-0.5">{rec.reasoning}</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    onClick={() => applyAiRecommendation('gold', idx)}
+                                    disabled={rec.applied}
+                                    size="sm"
+                                    variant="outline"
+                                    className={cn("text-xs ml-2 shrink-0", rec.applied && "bg-green-50 text-green-600")}
+                                  >
+                                    {rec.applied ? '✓ Applied' : 'Apply'}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {aiArchitectReview.riskFlags.length === 0 &&
+                      aiArchitectReview.bronzeRecommendations.length === 0 &&
+                      aiArchitectReview.silverRecommendations.length === 0 &&
+                      aiArchitectReview.goldRecommendations.length === 0 && (
+                      <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg p-3">
+                        <CheckCircle className="w-5 h-5" />
+                        <span className="text-sm font-medium">Excellent! Your configuration looks good.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isLoadingAiReview && !aiArchitectReview && !aiReviewError && (
+                  <div className="text-center py-6 text-sm text-purple-600">
+                    <p>Click "Review with AI" to get expert recommendations on your configuration</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Summary Cards */}
             <div className="space-y-4">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Job Details</CardTitle>
+                  <CardTitle className="text-sm">Source Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -4453,218 +5805,13 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </CardHeader>
                   <CardContent className="text-sm text-green-800">
                     <p>
-                      Your job is configured and ready to process <strong>{formData._detectedSchema.length} columns</strong> through the medallion architecture.
-                      {mode === 'edit' ? ' Click "Save Changes" to update this job.' : ' Click "Create Job" to add this job to your workflow.'}
+                      Your source is configured and ready to process <strong>{formData._detectedSchema.length} columns</strong> through the medallion architecture.
+                      {mode === 'edit' ? ' Click "Save Changes" to update this source.' : ' Click "Create Source" to add this source to your pipeline.'}
                     </p>
                   </CardContent>
                 </Card>
               )}
             </div>
-          </div>
-        )
-
-      case 6: // Review & Create - Alternate version (was case 5)
-        return (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="w-6 h-6 text-purple-600" />
-                <div>
-                  <h4 className="text-lg font-semibold text-purple-900 mb-1">Review & Submit</h4>
-                  <p className="text-sm text-purple-800">
-                    Review your configuration and AI assistance levels before creating the job
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Source Configuration Summary */}
-            <Card className="border-blue-200 bg-blue-50/30">
-              <CardHeader className="pb-3 bg-blue-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Database className="w-4 h-4 text-blue-600" />
-                    Source Configuration
-                  </CardTitle>
-                  <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
-                    Manual ⚙
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Type:</span>
-                  <span className="font-medium">{formData.type === 'database' ? 'Database' : 'File-based'}</span>
-                </div>
-                {formData.type === 'database' && formData.sourceConfig.databaseConfig?.tableName && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Database Type:</span>
-                      <span className="font-medium">{formData.sourceConfig.type}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Table:</span>
-                      <span className="font-medium">{formData.sourceConfig.databaseConfig.tableName}</span>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Bronze Layer Summary */}
-            <Card className="border-amber-200 bg-amber-50/30">
-              <CardHeader className="pb-3 bg-amber-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                    Bronze Layer (Raw)
-                  </CardTitle>
-                  {formData._aiUsageMetadata?.bronze?.applied ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">
-                      ✓ AI Applied
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                      Manual ⚙
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Storage Format:</span>
-                  <span className="font-medium">{formData.destinationConfig.bronzeConfig?.storageFormat || 'parquet'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Load Strategy:</span>
-                  <span className="font-medium">{formData.destinationConfig.bronzeConfig?.loadStrategy || 'append'}</span>
-                </div>
-                {formData._aiUsageMetadata?.bronze?.applied && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.bronze.appliedCount} of {formData._aiUsageMetadata.bronze.suggestionsCount}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Confidence:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.bronze.confidence}%</span>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Silver Layer Summary */}
-            <Card className="border-gray-300 bg-gray-50/30">
-              <CardHeader className="pb-3 bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
-                    Silver Layer (Validated)
-                  </CardTitle>
-                  {formData._aiUsageMetadata?.silver?.applied ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">
-                      ✓ AI Applied
-                    </Badge>
-                  ) : silverAiSuggestions && Object.keys(silverAiSuggestions).length > 0 ? (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                      ℹ AI Suggested
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                      Manual ⚙
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Primary Key:</span>
-                  <span className="font-medium">{formData.destinationConfig.silverConfig?.primaryKey || 'Not configured'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Merge Strategy:</span>
-                  <span className="font-medium">{formData.destinationConfig.silverConfig?.mergeStrategy || 'merge'}</span>
-                </div>
-                {formData._aiUsageMetadata?.silver?.applied && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.silver.appliedCount} of {formData._aiUsageMetadata.silver.suggestionsCount}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Confidence:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.silver.confidence}%</span>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Gold Layer Summary */}
-            <Card className="border-yellow-300 bg-yellow-50/30">
-              <CardHeader className="pb-3 bg-yellow-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    Gold Layer (Business-Ready)
-                  </CardTitle>
-                  {formData._aiUsageMetadata?.gold?.applied ? (
-                    <Badge className="bg-green-100 text-green-700 border-green-200">
-                      ✓ AI Applied
-                    </Badge>
-                  ) : goldAiSuggestions && Object.keys(goldAiSuggestions).length > 0 ? (
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-200">
-                      ℹ AI Suggested
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                      Manual ⚙
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Aggregation:</span>
-                  <span className="font-medium">{formData.destinationConfig.goldConfig?.aggregationEnabled ? 'Enabled' : 'Disabled'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Materialization:</span>
-                  <span className="font-medium">{formData.destinationConfig.goldConfig?.materializationType || 'view'}</span>
-                </div>
-                {formData._aiUsageMetadata?.gold?.applied && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Suggestions Applied:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.gold.appliedCount} of {formData._aiUsageMetadata.gold.suggestionsCount}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">AI Confidence:</span>
-                      <span className="font-medium">{formData._aiUsageMetadata.gold.confidence}%</span>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Overall Summary */}
-            {formData._detectedSchema && formData._detectedSchema.length > 0 && (
-              <Card className="border-green-200 bg-green-50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    Configuration Complete
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Your job is configured and ready to process <strong>{formData._detectedSchema.length} columns</strong> through the medallion architecture.
-                    {mode === 'edit' ? ' Click "Save Changes" to update this job.' : ' Click "Create Job" to add this job to your workflow.'}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )
 
@@ -4686,14 +5833,14 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {mode === 'edit' ? 'Edit Job' : cloningJob ? 'Clone Job' : 'Create New Job'}
+            {mode === 'edit' ? 'Edit Source' : cloningJob ? 'Clone Source' : 'Create New Source'}
           </DialogTitle>
           <DialogDescription>
             {mode === 'edit'
-              ? 'Update job configuration and settings'
+              ? 'Update source configuration and settings'
               : cloningJob
-                ? 'Create a new job based on existing configuration'
-                : 'Configure a new data processing job for your workflow'}
+                ? 'Create a new source based on existing configuration'
+                : 'Configure a new data source for your pipeline'}
           </DialogDescription>
         </DialogHeader>
 
@@ -4760,7 +5907,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 </Button>
               ) : (
                 <Button onClick={handleSubmit} disabled={!isStepValid(currentStep)}>
-                  {mode === 'edit' ? 'Save Changes' : 'Create Job'}
+                  {mode === 'edit' ? 'Save Changes' : 'Create Source'}
                 </Button>
               )}
             </div>

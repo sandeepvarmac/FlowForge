@@ -29,14 +29,14 @@ function mapWorkflow(row: any, jobs: any[]) {
 
 function loadJobs(db: any, workflowId: string) {
   const rows = db.prepare(`
-    SELECT * FROM jobs
-    WHERE workflow_id = ?
+    SELECT * FROM sources
+    WHERE pipeline_id = ?
     ORDER BY order_index ASC
   `).all(workflowId) as any[]
 
   return rows.map(row => ({
     id: row.id,
-    workflowId: row.workflow_id,
+    workflowId: row.pipeline_id,
     name: row.name,
     description: row.description,
     type: row.type,
@@ -60,7 +60,7 @@ export async function GET(
   const db = getDatabase()
 
   const workflow = db.prepare(`
-    SELECT * FROM workflows WHERE id = ?
+    SELECT * FROM pipelines WHERE id = ?
   `).get(workflowId)
 
   if (!workflow) {
@@ -84,7 +84,7 @@ export async function PATCH(
   const db = getDatabase()
 
   const existing = db.prepare(`
-    SELECT * FROM workflows WHERE id = ?
+    SELECT * FROM pipelines WHERE id = ?
   `).get(workflowId)
 
   if (!existing) {
@@ -144,13 +144,13 @@ export async function PATCH(
   values.push(workflowId)
 
   db.prepare(`
-    UPDATE workflows
+    UPDATE pipelines
     SET ${setClauses.join(', ')}
     WHERE id = ?
   `).run(...values)
 
   const updated = db.prepare(`
-    SELECT * FROM workflows WHERE id = ?
+    SELECT * FROM pipelines WHERE id = ?
   `).get(workflowId)
   const jobs = loadJobs(db, workflowId)
 
@@ -165,7 +165,7 @@ export async function DELETE(
   const db = getDatabase()
 
   const result = db.prepare(`
-    DELETE FROM workflows WHERE id = ?
+    DELETE FROM pipelines WHERE id = ?
   `).run(workflowId)
 
   if (result.changes === 0) {

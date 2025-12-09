@@ -9,7 +9,7 @@ import { WorkflowFormData } from "@/types"
 import { useWorkflowActions } from "@/hooks"
 import { Info, X } from "lucide-react"
 
-interface CreateWorkflowModalProps {
+interface CreatePipelineModalProps {
   mode?: 'create' | 'edit'
   workflowId?: string
   initialData?: Partial<WorkflowFormData>
@@ -33,14 +33,14 @@ const defaultFormData: WorkflowFormData = {
   retentionDays: 90
 }
 
-export function CreateWorkflowModal({
+export function CreatePipelineModal({
   mode = 'create',
   workflowId,
   initialData,
   open,
   onOpenChange,
   onSuccess
-}: CreateWorkflowModalProps) {
+}: CreatePipelineModalProps) {
   const router = useRouter()
   const { createWorkflow } = useWorkflowActions()
   const [loading, setLoading] = React.useState(false)
@@ -71,7 +71,7 @@ export function CreateWorkflowModal({
   const validate = (): boolean => {
     const newErrors: Partial<WorkflowFormData> = {}
 
-    if (!formData.name.trim()) newErrors.name = 'Workflow name is required'
+    if (!formData.name.trim()) newErrors.name = 'Pipeline name is required'
     if (!formData.description.trim()) newErrors.description = 'Description is required'
     if (!formData.team) newErrors.team = 'Team is required'
 
@@ -136,13 +136,13 @@ export function CreateWorkflowModal({
         setTagInput('')
         onOpenChange(false)
 
-        // Auto-navigate to workflow detail page
+        // Auto-navigate to pipeline detail page
         if (newWorkflow?.id) {
-          router.push(`/workflows/${newWorkflow.id}`)
+          router.push(`/pipelines/${newWorkflow.id}`)
         }
       }
     } catch (error) {
-      console.error(`Failed to ${mode} workflow:`, error)
+      console.error(`Failed to ${mode} pipeline:`, error)
     } finally {
       setLoading(false)
     }
@@ -157,11 +157,11 @@ export function CreateWorkflowModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent size="2xl" className="max-h-[95vh] max-w-[95vw] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>{mode === 'edit' ? 'Edit Workflow' : 'Create New Workflow'}</DialogTitle>
+          <DialogTitle>{mode === 'edit' ? 'Edit Pipeline' : 'Create New Pipeline'}</DialogTitle>
           <DialogDescription>
             {mode === 'edit'
-              ? 'Update workflow configuration and metadata'
-              : 'Configure a new data processing workflow for your enterprise data platform'}
+              ? 'Update pipeline configuration and metadata'
+              : 'Configure a new data processing pipeline for your enterprise data platform'}
           </DialogDescription>
         </DialogHeader>
 
@@ -171,7 +171,7 @@ export function CreateWorkflowModal({
             <h3 className="text-sm font-semibold text-foreground border-b pb-2">Basic Information</h3>
 
             <FormField>
-              <FormLabel htmlFor="name" required>Workflow Name</FormLabel>
+              <FormLabel htmlFor="name" required>Pipeline Name</FormLabel>
               <Input
                 id="name"
                 placeholder="e.g., Customer Data Pipeline"
@@ -202,6 +202,26 @@ export function CreateWorkflowModal({
                 onChange={(e) => updateField('application', e.target.value)}
               >
                 <option value="">Select an application...</option>
+                <optgroup label="Lending & Credit">
+                  <option value="Loan Origination System">Loan Origination System (LOS)</option>
+                  <option value="Loan Management System">Loan Management System (LMS)</option>
+                  <option value="Credit Decision Engine">Credit Decision Engine</option>
+                  <option value="Underwriting Platform">Underwriting Platform</option>
+                  <option value="Collections System">Collections System</option>
+                  <option value="Servicing Platform">Servicing Platform</option>
+                </optgroup>
+                <optgroup label="Banking Core">
+                  <option value="Core Banking System">Core Banking System</option>
+                  <option value="Payment Processing">Payment Processing</option>
+                  <option value="Treasury Management">Treasury Management</option>
+                  <option value="Account Management">Account Management</option>
+                </optgroup>
+                <optgroup label="Risk & Compliance">
+                  <option value="Risk Management System">Risk Management System</option>
+                  <option value="Fraud Detection">Fraud Detection</option>
+                  <option value="AML/KYC System">AML/KYC System</option>
+                  <option value="Regulatory Reporting">Regulatory Reporting</option>
+                </optgroup>
                 <optgroup label="CRM Systems">
                   <option value="Salesforce CRM">Salesforce CRM</option>
                   <option value="Microsoft Dynamics 365">Microsoft Dynamics 365</option>
@@ -278,11 +298,16 @@ export function CreateWorkflowModal({
                   onChange={(e) => updateField('businessUnit', e.target.value)}
                 >
                   <option value="Data Engineering">Data Engineering</option>
+                  <option value="Lending Operations">Lending Operations</option>
+                  <option value="Credit Risk">Credit Risk</option>
+                  <option value="Loan Servicing">Loan Servicing</option>
+                  <option value="Collections">Collections</option>
+                  <option value="Underwriting">Underwriting</option>
                   <option value="Finance">Finance</option>
                   <option value="Sales">Sales</option>
                   <option value="Marketing">Marketing</option>
                   <option value="Operations">Operations</option>
-                  <option value="Supply Chain">Supply Chain</option>
+                  <option value="Compliance">Compliance</option>
                   <option value="Human Resources">Human Resources</option>
                   <option value="IT">Information Technology</option>
                   <option value="Customer Service">Customer Service</option>
@@ -298,6 +323,10 @@ export function CreateWorkflowModal({
                   onChange={(e) => updateField('team', e.target.value)}
                 >
                   <option value="Data Engineering Team">Data Engineering Team</option>
+                  <option value="Credit Analytics Team">Credit Analytics Team</option>
+                  <option value="Loan Portfolio Team">Loan Portfolio Team</option>
+                  <option value="Risk Analytics Team">Risk Analytics Team</option>
+                  <option value="Servicing Analytics">Servicing Analytics</option>
                   <option value="Analytics Team">Analytics Team</option>
                   <option value="Finance Data Team">Finance Data Team</option>
                   <option value="Sales Operations">Sales Operations</option>
@@ -311,15 +340,15 @@ export function CreateWorkflowModal({
             </div>
           </div>
 
-          {/* Workflow Configuration */}
+          {/* Pipeline Configuration */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Workflow Configuration</h3>
+            <h3 className="text-sm font-semibold text-foreground border-b pb-2">Pipeline Configuration</h3>
 
             {/* Trigger Info Note */}
             <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-blue-800">
-                <span className="font-semibold">Note:</span> Workflows start as manual by default. You can add scheduled or dependency triggers after creation via the "Triggers" tab.
+                <span className="font-semibold">Note:</span> Pipelines start as manual by default. You can add scheduled or dependency triggers after creation via the "Triggers" tab.
               </div>
             </div>
 
@@ -455,10 +484,13 @@ export function CreateWorkflowModal({
           <Button onClick={handleSubmit} disabled={loading}>
             {loading
               ? (mode === 'edit' ? 'Saving...' : 'Creating...')
-              : (mode === 'edit' ? 'Save Changes' : 'Create Workflow')}
+              : (mode === 'edit' ? 'Save Changes' : 'Create Pipeline')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
+
+/** @deprecated Use CreatePipelineModal instead */
+export const CreateWorkflowModal = CreatePipelineModal

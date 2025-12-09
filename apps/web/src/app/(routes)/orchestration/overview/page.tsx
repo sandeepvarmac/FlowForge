@@ -2,7 +2,8 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   Activity,
   TrendingUp,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react'
 import { OrchestrationService } from '@/lib/services/orchestration-service'
 import { formatDistanceToNow } from 'date-fns'
-import { CreateWorkflowModal } from '@/components/workflows'
+import { CreatePipelineModal } from '@/components/workflows/create-workflow-modal'
 
 // Type definitions
 type SystemStatus = 'operational' | 'degraded' | 'outage'
@@ -168,7 +169,7 @@ export default function OverviewPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
           >
             <Plus className="w-4 h-4" />
-            Create Workflow
+            Create Pipeline
           </button>
         </div>
       </div>
@@ -179,7 +180,7 @@ export default function OverviewPage() {
       {/* Hero KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
-          title="Active Workflows"
+          title="Active Pipelines"
           value={metrics.kpis.activeWorkflows.value}
           change={metrics.kpis.activeWorkflows.change}
           changePercent={metrics.kpis.activeWorkflows.changePercent}
@@ -225,8 +226,8 @@ export default function OverviewPage() {
       {/* Coming Soon - Phase 2 & 3 Features */}
       <ComingSoonFeatures />
 
-      {/* Create Workflow Modal */}
-      <CreateWorkflowModal
+      {/* Create Pipeline Modal */}
+      <CreatePipelineModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
       />
@@ -395,13 +396,13 @@ function RecentActivityStream({ activities, onCreateClick }: RecentActivityStrea
             <div className="text-center py-12 text-foreground-muted">
               <Activity className="w-16 h-16 mx-auto mb-4 opacity-30" />
               <h3 className="text-lg font-semibold text-foreground mb-2">No Executions Yet</h3>
-              <p className="text-sm mb-6">Create your first workflow to start orchestrating data pipelines</p>
+              <p className="text-sm mb-6">Create your first pipeline to start orchestrating data flows</p>
               <button
                 onClick={onCreateClick}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors font-medium"
               >
                 <Plus className="w-5 h-5" />
-                Create Your First Workflow
+                Create Your First Pipeline
               </button>
             </div>
           ) : (
@@ -549,8 +550,8 @@ function SuccessRateTrends({ trends }: SuccessRateTrendsProps) {
 function ComingSoonFeatures() {
   const comingSoonFeatures = [
     {
-      title: 'Top Workflows by Activity',
-      description: 'Most executed workflows with success rates and average duration',
+      title: 'Top Pipelines by Activity',
+      description: 'Most executed pipelines with success rates and average duration',
       icon: Users,
       phase: 'Phase 2'
     },
@@ -568,13 +569,13 @@ function ComingSoonFeatures() {
     },
     {
       title: 'Execution Duration Analysis',
-      description: 'Performance trends and outlier detection across workflows',
+      description: 'Performance trends and outlier detection across pipelines',
       icon: BarChart3,
       phase: 'Phase 3'
     },
     {
-      title: 'Scheduled Workflows Calendar',
-      description: 'Timeline view of upcoming scheduled workflow executions',
+      title: 'Scheduled Pipelines Calendar',
+      description: 'Timeline view of upcoming scheduled pipeline executions',
       icon: Calendar,
       phase: 'Phase 3'
     },

@@ -13,8 +13,8 @@ export async function DELETE(
     const db = getDatabase()
 
     const job = db.prepare(`
-      SELECT id, workflow_id FROM jobs WHERE id = ?
-    `).get(jobId) as { id: string; workflow_id: string } | undefined
+      SELECT id, pipeline_id FROM sources WHERE id = ?
+    `).get(jobId) as { id: string; pipeline_id: string } | undefined
 
     if (!job) {
       return NextResponse.json(
@@ -24,13 +24,13 @@ export async function DELETE(
     }
 
     db.prepare(`
-      DELETE FROM jobs WHERE id = ?
+      DELETE FROM sources WHERE id = ?
     `).run(jobId)
 
     return NextResponse.json({
       success: true,
       jobId,
-      workflowId: job.workflow_id
+      workflowId: job.pipeline_id
     })
 
   } catch (error: any) {

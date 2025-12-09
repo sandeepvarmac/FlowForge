@@ -25,12 +25,12 @@ export async function GET(request: NextRequest) {
         rr.source_table,
         rr.target_table,
         rr.tolerance_percentage,
-        e.workflow_id,
+        e.pipeline_id as workflow_id,
         w.name as workflow_name
       FROM reconciliation_executions re
       LEFT JOIN reconciliation_rules rr ON re.rule_id = rr.id
       LEFT JOIN executions e ON re.execution_id = e.id
-      LEFT JOIN workflows w ON e.workflow_id = w.id
+      LEFT JOIN pipelines w ON e.pipeline_id = w.id
       WHERE 1=1
     `
     const params: any[] = []

@@ -18,7 +18,7 @@ export async function GET(
 
     // Check if workflow exists
     const workflow = db.prepare(`
-      SELECT id FROM workflows WHERE id = ?
+      SELECT id FROM pipelines WHERE id = ?
     `).get(workflowId)
 
     if (!workflow) {
@@ -33,12 +33,12 @@ export async function GET(
     const upstream = db.prepare(`
       SELECT
         t.id as trigger_id,
-        t.depends_on_workflow_id as workflow_id,
+        t.depends_on_pipeline_id as workflow_id,
         w.name as workflow_name,
         t.dependency_condition as condition
-      FROM workflow_triggers t
-      JOIN workflows w ON t.depends_on_workflow_id = w.id
-      WHERE t.workflow_id = ?
+      FROM pipeline_triggers t
+      JOIN pipelines w ON t.depends_on_pipeline_id = w.id
+      WHERE t.pipeline_id = ?
         AND t.trigger_type = 'dependency'
         AND t.enabled = 1
     `).all(workflowId) as any[]
@@ -48,12 +48,12 @@ export async function GET(
     const downstream = db.prepare(`
       SELECT
         t.id as trigger_id,
-        t.workflow_id as workflow_id,
+        t.pipeline_id as workflow_id,
         w.name as workflow_name,
         t.dependency_condition as condition
-      FROM workflow_triggers t
-      JOIN workflows w ON t.workflow_id = w.id
-      WHERE t.depends_on_workflow_id = ?
+      FROM pipeline_triggers t
+      JOIN pipelines w ON t.pipeline_id = w.id
+      WHERE t.depends_on_pipeline_id = ?
         AND t.trigger_type = 'dependency'
         AND t.enabled = 1
     `).all(workflowId) as any[]

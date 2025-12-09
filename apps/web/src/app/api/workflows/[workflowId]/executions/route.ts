@@ -136,33 +136,33 @@ function extractFlowRunIdFromLogs(serialisedLogs?: string | null): string | null
 }
 
 async function syncPrefectExecutions(database: SqliteDatabase, workflowId: string) {
-  // Drop any orphaned job executions referencing deleted jobs before syncing.
+  // Drop any orphaned source executions referencing deleted sources before syncing.
   database.prepare(`
-    DELETE FROM job_executions
-    WHERE job_id NOT IN (SELECT id FROM jobs)
+    DELETE FROM source_executions
+    WHERE source_id NOT IN (SELECT id FROM sources)
   `).run()
 
-  // Only sync executions for jobs that still exist locally. This prevents deleted
-  // jobs from reappearing when Prefect reports historical flow runs.
+  // Only sync executions for sources that still exist locally. This prevents deleted
+  // sources from reappearing when Prefect reports historical flow runs.
   const inflightJobs = database.prepare(`
     SELECT
-      je.id,
-      je.execution_id,
-      je.job_id,
-      je.status,
-      je.started_at,
-      je.logs,
-      je.flow_run_id,
+      se.id,
+      se.execution_id,
+      se.source_id,
+      se.status,
+      se.started_at,
+      se.logs,
+      se.flow_run_id,
       e.started_at AS execution_started_at
-    FROM job_executions je
-    JOIN executions e ON je.execution_id = e.id
-    JOIN jobs j ON j.id = je.job_id
-    WHERE e.workflow_id = ?
-      AND je.status IN ('running', 'pending')
+    FROM source_executions se
+    JOIN executions e ON se.execution_id = e.id
+    JOIN sources s ON s.id = se.source_id
+    WHERE e.pipeline_id = ?
+      AND se.status IN ('running', 'pending')
   `).all(workflowId) as Array<{
     id: string
     execution_id: string
-    job_id: string
+    source_id: string
     status: string
     started_at: string
     logs?: string | null
@@ -185,7 +185,7 @@ async function syncPrefectExecutions(database: SqliteDatabase, workflowId: strin
 
     if (!job.flow_run_id && flowRunId) {
       database.prepare(`
-        UPDATE job_executions
+        UPDATE source_executions
         SET flow_run_id = ?, updated_at = ?
         WHERE id = ?
       `).run(flowRunId, new Date().toISOString(), job.id)
@@ -219,7 +219,7 @@ async function syncPrefectExecutions(database: SqliteDatabase, workflowId: strin
         : null
 
       database.prepare(`
-        UPDATE job_executions
+        UPDATE source_executions
         SET status = ?, completed_at = ?, duration_ms = ?, logs = ?, error_message = ?, updated_at = ?
         WHERE id = ?
       `).run(
@@ -235,7 +235,7 @@ async function syncPrefectExecutions(database: SqliteDatabase, workflowId: strin
       executionIdsToRefresh.add(job.execution_id)
     } else if (logMessages.length > 0) {
       database.prepare(`
-        UPDATE job_executions
+        UPDATE source_executions
         SET logs = ?, updated_at = ?
         WHERE id = ?
       `).run(JSON.stringify(logMessages), nowIso, job.id)
@@ -244,7 +244,7 @@ async function syncPrefectExecutions(database: SqliteDatabase, workflowId: strin
 
   executionIdsToRefresh.forEach(executionId => {
     const jobStatuses = database.prepare(`
-      SELECT status FROM job_executions WHERE execution_id = ?
+      SELECT status FROM source_executions WHERE execution_id = ?
     `).all(executionId) as Array<{ status: string }>
 
     if (jobStatuses.length === 0) {
@@ -297,21 +297,21 @@ export async function GET(
         e.*,
         (
           SELECT COUNT(*)
-          FROM job_executions je
-          WHERE je.execution_id = e.id AND je.status = 'completed'
+          FROM source_executions se
+          WHERE se.execution_id = e.id AND se.status = 'completed'
         ) as completed_jobs,
         (
           SELECT COUNT(*)
-          FROM job_executions je
-          WHERE je.execution_id = e.id AND je.status = 'failed'
+          FROM source_executions se
+          WHERE se.execution_id = e.id AND se.status = 'failed'
         ) as failed_jobs,
         (
-          SELECT SUM(je.records_processed)
-          FROM job_executions je
-          WHERE je.execution_id = e.id
+          SELECT SUM(se.records_processed)
+          FROM source_executions se
+          WHERE se.execution_id = e.id
         ) as total_records
       FROM executions e
-      WHERE e.workflow_id = ?
+      WHERE e.pipeline_id = ?
       ORDER BY e.created_at DESC
       LIMIT 50
     `).all(workflowId)
@@ -319,35 +319,35 @@ export async function GET(
     const executionsWithJobs = executions.map((execution: any) => {
       const rawJobExecutions = db.prepare(`
         SELECT
-          je.*,
-          j.name as job_name,
-          j.type as job_type
-        FROM job_executions je
-        JOIN jobs j ON je.job_id = j.id
-        WHERE je.execution_id = ?
-        ORDER BY je.created_at ASC
+          se.*,
+          s.name as job_name,
+          s.type as job_type
+        FROM source_executions se
+        JOIN sources s ON se.source_id = s.id
+        WHERE se.execution_id = ?
+        ORDER BY se.created_at ASC
       `).all(execution.id)
 
-      const jobExecutions = rawJobExecutions.map((je: any) => {
-        const logs = parseLogField(je.logs)
+      const jobExecutions = rawJobExecutions.map((se: any) => {
+        const logs = parseLogField(se.logs)
         return {
-          id: je.id,
-          jobId: je.job_id,
-          jobName: je.job_name,
-          jobType: je.job_type,
-          status: je.status,
-          startedAt: je.started_at ?? null,
-          completedAt: je.completed_at ?? null,
-          durationMs: je.duration_ms ?? null,
-          recordsProcessed: je.records_processed ?? null,
-          bronzeFilePath: je.bronze_file_path ?? null,
-          silverFilePath: je.silver_file_path ?? null,
-          goldFilePath: je.gold_file_path ?? null,
+          id: se.id,
+          jobId: se.source_id,
+          jobName: se.job_name,
+          jobType: se.job_type,
+          status: se.status,
+          startedAt: se.started_at ?? null,
+          completedAt: se.completed_at ?? null,
+          durationMs: se.duration_ms ?? null,
+          recordsProcessed: se.records_processed ?? null,
+          bronzeFilePath: se.bronze_file_path ?? null,
+          silverFilePath: se.silver_file_path ?? null,
+          goldFilePath: se.gold_file_path ?? null,
           logs,
-          error: je.error_message ?? null,
-          flowRunId: je.flow_run_id ?? null,
-          createdAt: je.created_at ?? null,
-          updatedAt: je.updated_at ?? null
+          error: se.error_message ?? null,
+          flowRunId: se.flow_run_id ?? null,
+          createdAt: se.created_at ?? null,
+          updatedAt: se.updated_at ?? null
         }
       })
 
@@ -356,7 +356,7 @@ export async function GET(
 
       return {
         id: execution.id,
-        workflowId: execution.workflow_id,
+        workflowId: execution.pipeline_id,
         status: execution.status,
         startTime: execution.started_at ?? null,
         endTime: execution.completed_at ?? null,

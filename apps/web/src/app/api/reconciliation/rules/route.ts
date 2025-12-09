@@ -18,13 +18,13 @@ export async function GET(request: NextRequest) {
         r.*,
         w.name as workflow_name
       FROM reconciliation_rules r
-      LEFT JOIN workflows w ON r.workflow_id = w.id
+      LEFT JOIN pipelines w ON r.pipeline_id = w.id
       WHERE 1=1
     `
     const params: any[] = []
 
     if (workflowId) {
-      query += ` AND r.workflow_id = ?`
+      query += ` AND r.pipeline_id = ?`
       params.push(workflowId)
     }
 

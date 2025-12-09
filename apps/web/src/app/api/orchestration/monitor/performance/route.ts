@@ -61,8 +61,8 @@ export async function GET(request: NextRequest) {
         MAX(e.duration_ms) as max_duration,
         COUNT(CASE WHEN e.status = 'completed' THEN 1 END) as success_count,
         COUNT(CASE WHEN e.status = 'failed' THEN 1 END) as failure_count
-      FROM workflows w
-      JOIN executions e ON w.id = e.workflow_id
+      FROM pipelines w
+      JOIN executions e ON w.id = e.pipeline_id
       WHERE e.started_at >= ? AND e.duration_ms IS NOT NULL
       GROUP BY w.id, w.name
       ORDER BY execution_count DESC
@@ -108,8 +108,8 @@ export async function GET(request: NextRequest) {
         COUNT(*) as total_executions,
         COUNT(CASE WHEN e.status = 'failed' THEN 1 END) as failure_count,
         CAST(COUNT(CASE WHEN e.status = 'failed' THEN 1 END) * 100.0 / COUNT(*) AS REAL) as failure_rate
-      FROM workflows w
-      JOIN executions e ON w.id = e.workflow_id
+      FROM pipelines w
+      JOIN executions e ON w.id = e.pipeline_id
       WHERE e.started_at >= ?
       GROUP BY w.id, w.name
       HAVING failure_count > 0
@@ -129,10 +129,10 @@ export async function GET(request: NextRequest) {
         COUNT(CASE WHEN je.status = 'failed' THEN 1 END) as failure_count,
         CAST(COUNT(CASE WHEN je.status = 'failed' THEN 1 END) * 100.0 / COUNT(*) AS REAL) as failure_rate,
         je.error_message as last_error
-      FROM jobs j
-      JOIN job_executions je ON j.id = je.job_id
+      FROM sources j
+      JOIN source_executions je ON j.id = je.source_id
       JOIN executions e ON je.execution_id = e.id
-      JOIN workflows w ON j.workflow_id = w.id
+      JOIN pipelines w ON j.pipeline_id = w.id
       WHERE e.started_at >= ?
       GROUP BY j.id, j.name, j.type, w.name, je.error_message
       HAVING failure_count > 0

@@ -22,8 +22,8 @@ export async function POST(
     const id = `job_${now}_${Math.random().toString(36).substring(7)}`
 
     db.prepare(`
-      INSERT INTO jobs (
-        id, workflow_id, name, description, type, order_index, status,
+      INSERT INTO sources (
+        id, pipeline_id, name, description, type, order_index, status,
         source_config, destination_config, transformation_config, validation_config,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

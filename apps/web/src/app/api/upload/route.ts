@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { saveUploadedFile, getFileHash, readFile } from '@/lib/storage'
 import { analyzeSchemaWithAI } from '@/lib/ai/anthropic-client'
-import { analyzePrimaryKeyCandidates } from '@/lib/ai/primary-key-detector'
+// Note: Primary key analysis moved to /api/ai/analyze-schema (AI-powered Schema Intelligence)
 import { getDatabase } from '@/lib/db'
 import Papa from 'papaparse'
 
@@ -136,9 +136,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Analyze primary key candidates
-    console.log('🔍 Analyzing primary key candidates...')
-    const primaryKeyAnalysis = analyzePrimaryKeyCandidates(data, columns)
+    // Note: Primary key analysis is now handled by /api/ai/analyze-schema (Schema Intelligence)
+    // The frontend calls this endpoint separately after file upload
 
     return NextResponse.json({
       success: true,
@@ -147,8 +146,7 @@ export async function POST(request: NextRequest) {
       columnCount: columns.length,
       columns,
       preview: data,
-      aiAnalysis,
-      primaryKeyAnalysis
+      aiAnalysis
     })
 
   } catch (error) {

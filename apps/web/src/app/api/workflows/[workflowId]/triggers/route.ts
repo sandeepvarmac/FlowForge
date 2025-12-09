@@ -29,7 +29,7 @@ function calculateNextRun(cronExpression: string, timezone: string = 'UTC'): num
 function mapTrigger(row: any) {
   return {
     id: row.id,
-    workflowId: row.workflow_id,
+    workflowId: row.pipeline_id,
     triggerType: row.trigger_type,
     enabled: Boolean(row.enabled),
     triggerName: row.trigger_name,
@@ -39,7 +39,7 @@ function mapTrigger(row: any) {
     nextRunAt: row.next_run_at,
     lastRunAt: row.last_run_at,
     // Dependency trigger fields
-    dependsOnWorkflowId: row.depends_on_workflow_id,
+    dependsOnWorkflowId: row.depends_on_pipeline_id,
     dependsOnWorkflowName: row.depends_on_workflow_name, // Populated by JOIN
     dependencyCondition: row.dependency_condition,
     delayMinutes: row.delay_minutes,
@@ -66,7 +66,7 @@ export async function GET(
 
     // Check if workflow exists
     const workflow = db.prepare(`
-      SELECT id FROM workflows WHERE id = ?
+      SELECT id FROM pipelines WHERE id = ?
     `).get(workflowId)
 
     if (!workflow) {
@@ -81,9 +81,9 @@ export async function GET(
       SELECT
         t.*,
         w.name as depends_on_workflow_name
-      FROM workflow_triggers t
-      LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
-      WHERE t.workflow_id = ?
+      FROM pipeline_triggers t
+      LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
+      WHERE t.pipeline_id = ?
       ORDER BY t.created_at DESC
     `).all(workflowId) as any[]
 
@@ -114,7 +114,7 @@ export async function POST(
 
     // Check if workflow exists
     const workflow = db.prepare(`
-      SELECT id FROM workflows WHERE id = ?
+      SELECT id FROM pipelines WHERE id = ?
     `).get(workflowId)
 
     if (!workflow) {
@@ -179,7 +179,7 @@ export async function POST(
 
       // Check if upstream workflow exists
       const upstreamWorkflow = db.prepare(`
-        SELECT id FROM workflows WHERE id = ?
+        SELECT id FROM pipelines WHERE id = ?
       `).get(body.dependsOnWorkflowId)
 
       if (!upstreamWorkflow) {
@@ -219,10 +219,10 @@ export async function POST(
     }
 
     db.prepare(`
-      INSERT INTO workflow_triggers (
-        id, workflow_id, trigger_type, enabled, trigger_name,
+      INSERT INTO pipeline_triggers (
+        id, pipeline_id, trigger_type, enabled, trigger_name,
         cron_expression, timezone, next_run_at, last_run_at,
-        depends_on_workflow_id, dependency_condition, delay_minutes,
+        depends_on_pipeline_id, dependency_condition, delay_minutes,
         event_type, event_config,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -250,8 +250,8 @@ export async function POST(
       SELECT
         t.*,
         w.name as depends_on_workflow_name
-      FROM workflow_triggers t
-      LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
+      FROM pipeline_triggers t
+      LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
       WHERE t.id = ?
     `).get(triggerId)
 

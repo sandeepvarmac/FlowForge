@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import path from 'path'
+import fs from 'fs'
+import os from 'os'
 
 /**
  * POST /api/ai/config/full
@@ -124,6 +126,39 @@ export async function POST(request: NextRequest) {
     console.log('[AI Full API] Python path:', pythonPath)
     console.log('[AI Full API] Prefect flows path:', prefectFlowsPath)
 
+    // Sanitize sample data to avoid huge inline scripts (Windows spawn ENAMETOOLONG)
+    const truncateValue = (val: any) => {
+      if (typeof val === 'string') {
+        return val.length > 500 ? val.slice(0, 500) + '…' : val
+      }
+      return val
+    }
+
+    const sanitizeRow = (row: any) => {
+      if (row && typeof row === 'object' && !Array.isArray(row)) {
+        return Object.fromEntries(Object.entries(row).map(([k, v]) => [k, truncateValue(v)]))
+      }
+      if (Array.isArray(row)) {
+        return row.map(truncateValue)
+      }
+      return truncateValue(row)
+    }
+
+    let sanitizedSampleData = sampleData
+    if (Array.isArray(sampleData)) {
+      sanitizedSampleData = sampleData.slice(0, 200).map(sanitizeRow)
+      // Ensure the JSON payload is not too large for the command line
+      let payload = JSON.stringify(sanitizedSampleData)
+      while (payload.length > 50000 && sanitizedSampleData.length > 20) {
+        sanitizedSampleData = sanitizedSampleData.slice(0, Math.max(10, Math.floor(sanitizedSampleData.length / 2)))
+        payload = JSON.stringify(sanitizedSampleData)
+      }
+    }
+
+    // For file/other sources, write payload to a temp file to avoid massive inline scripts
+    let tempDir: string | null = null
+    let tempPayloadPath: string | null = null
+
     let pythonScript = ''
 
     if (isDatabaseSource) {
@@ -191,8 +226,19 @@ print(json.dumps(result))
 `
     } else {
       // Generate script for file/other source
-      const schemaJson = JSON.stringify(schema)
-      const sampleDataJson = JSON.stringify(sampleData)
+      // Write payload to temp file to keep command line short
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-config-'))
+      tempPayloadPath = path.join(tempDir, 'payload.json')
+      fs.writeFileSync(
+        tempPayloadPath,
+        JSON.stringify({
+          tableName,
+          sourceType,
+          schema,
+          sampleData: sanitizedSampleData,
+          businessContext: businessContext || null,
+        })
+      )
 
       pythonScript = `
 import sys
@@ -219,9 +265,14 @@ def emit_progress(stage, message):
 
 emit_progress('loading', 'Loading and preparing data...')
 
-# Create DataFrame from provided schema and sample data
-schema = ${schemaJson}
-sample_data = ${sampleDataJson}
+payload_path = r'${tempPayloadPath?.replace(/\\/g, '\\\\') || ''}'
+with open(payload_path, 'r', encoding='utf-8') as f:
+    payload = json.load(f)
+
+schema = payload.get('schema', [])
+sample_data = payload.get('sampleData', [])
+table_name = payload.get('tableName') or '${tableName}'
+business_context = payload.get('businessContext')
 
 # Build column mapping from schema
 columns = [col['name'] for col in schema]
@@ -253,11 +304,11 @@ print(f"[DEBUG] DataFrame columns: {df.columns}", file=sys.stderr)
 emit_progress('profiling', 'Analyzing data structure and patterns...')
 
 # Get unified AI suggestions
-business_context = ${businessContext ? `'''${businessContext}'''` : 'None'}
+business_context = business_context or None
 
 result = analyze_full_pipeline(
     df=df,
-    table_name='${tableName}',
+    table_name=table_name,
     source_type='${sourceType}',
     business_context=business_context
 )
@@ -297,6 +348,15 @@ print(json.dumps(result))
       })
 
       python.on('close', (code) => {
+        // Clean up temp payload
+        if (tempDir && fs.existsSync(tempDir)) {
+          try {
+            fs.rmSync(tempDir, { recursive: true, force: true })
+          } catch (e) {
+            console.error('[AI Full API] Failed to remove temp dir', e)
+          }
+        }
+
         console.log('[AI Full API] Python process closed with code:', code)
         console.log('[AI Full API] Python stdout:', output)
         // Show more error output for debugging (last 2000 chars)

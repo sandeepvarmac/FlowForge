@@ -51,12 +51,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (workflowIds.length > 0) {
-      conditions.push(`e.workflow_id IN (${workflowIds.map(() => '?').join(',')})`)
+      conditions.push(`e.pipeline_id IN (${workflowIds.map(() => '?').join(',')})`)
       params.push(...workflowIds)
     }
 
     if (search) {
-      conditions.push(`(w.name LIKE ? OR e.id LIKE ?)`)
+      conditions.push(`(p.name LIKE ? OR e.id LIKE ?)`)
       params.push(`%${search}%`, `%${search}%`)
     }
 
@@ -66,30 +66,30 @@ export async function GET(request: NextRequest) {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM executions e
-      JOIN workflows w ON e.workflow_id = w.id
+      JOIN pipelines p ON e.pipeline_id = p.id
       ${whereClause}
     `
     const countResult = db.prepare(countQuery).get(...params) as { total: number }
     const total = countResult.total
 
-    // Get executions with workflow info and job execution counts
+    // Get executions with pipeline info and source execution counts
     const executionsQuery = `
       SELECT
         e.id,
-        e.workflow_id,
+        e.pipeline_id,
         e.status,
         e.started_at,
         e.completed_at,
         e.duration_ms,
-        w.name as workflow_name,
-        w.description as workflow_description,
-        (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id) as total_jobs,
-        (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'completed') as completed_jobs,
-        (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'failed') as failed_jobs,
-        (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'running') as running_jobs,
-        (SELECT SUM(je.records_processed) FROM job_executions je WHERE je.execution_id = e.id) as total_records_processed
+        p.name as pipeline_name,
+        p.description as pipeline_description,
+        (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id) as total_sources,
+        (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'completed') as completed_sources,
+        (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'failed') as failed_sources,
+        (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'running') as running_sources,
+        (SELECT SUM(se.records_processed) FROM source_executions se WHERE se.execution_id = e.id) as total_records_processed
       FROM executions e
-      JOIN workflows w ON e.workflow_id = w.id
+      JOIN pipelines p ON e.pipeline_id = p.id
       ${whereClause}
       ORDER BY e.started_at DESC
       LIMIT ? OFFSET ?
@@ -109,20 +109,22 @@ export async function GET(request: NextRequest) {
     `
     const stats = db.prepare(statsQuery).get(startTime)
 
-    // Get workflow list for filter dropdown
-    const workflowsQuery = `
-      SELECT DISTINCT w.id, w.name
-      FROM workflows w
-      JOIN executions e ON w.id = e.workflow_id
+    // Get pipeline list for filter dropdown
+    const pipelinesQuery = `
+      SELECT DISTINCT p.id, p.name
+      FROM pipelines p
+      JOIN executions e ON p.id = e.pipeline_id
       WHERE e.started_at >= ?
-      ORDER BY w.name
+      ORDER BY p.name
     `
-    const workflows = db.prepare(workflowsQuery).all(startTime)
+    const pipelines = db.prepare(pipelinesQuery).all(startTime)
 
     return NextResponse.json({
       executions,
       stats,
-      workflows,
+      pipelines,
+      // Legacy field name for backward compatibility
+      workflows: pipelines,
       pagination: {
         page,
         limit,

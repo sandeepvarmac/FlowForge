@@ -134,13 +134,13 @@ async function getKPIs(db: any) {
   // Active workflows
   const activeWorkflows = db.prepare(`
     SELECT COUNT(*) as count
-    FROM workflows
+    FROM pipelines
     WHERE status IN ('active', 'scheduled', 'manual')
   `).get() as { count: number }
 
   const activeWorkflowsYesterday = db.prepare(`
     SELECT COUNT(*) as count
-    FROM workflows
+    FROM pipelines
     WHERE status IN ('active', 'scheduled', 'manual')
     AND created_at < ?
   `).get(yesterday.toISOString()) as { count: number }
@@ -177,12 +177,12 @@ async function getKPIs(db: any) {
     AND created_at < ?
   `).get(twoDaysAgo.toISOString(), yesterday.toISOString()) as { count: number }
 
-  // Data processed (placeholder - would come from job_executions)
+  // Data processed (placeholder - would come from source_executions)
   const dataProcessed = db.prepare(`
     SELECT
       COALESCE(SUM(records_processed), 0) as totalRows,
       COUNT(*) as totalJobs
-    FROM job_executions
+    FROM source_executions
     WHERE created_at >= ?
   `).get(yesterday.toISOString()) as { totalRows: number, totalJobs: number }
 
@@ -190,7 +190,7 @@ async function getKPIs(db: any) {
     SELECT
       COALESCE(SUM(records_processed), 0) as totalRows,
       COUNT(*) as totalJobs
-    FROM job_executions
+    FROM source_executions
     WHERE created_at >= ?
     AND created_at < ?
   `).get(twoDaysAgo.toISOString(), yesterday.toISOString()) as { totalRows: number, totalJobs: number }
@@ -233,32 +233,39 @@ async function getRecentActivity(db: any) {
   const executions = db.prepare(`
     SELECT
       e.id,
-      e.workflow_id,
+      e.pipeline_id,
       e.status,
       e.started_at,
       e.completed_at,
       e.duration_ms,
-      w.name as workflow_name,
-      (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id) as total_jobs,
-      (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'completed') as completed_jobs,
-      (SELECT COUNT(*) FROM job_executions je WHERE je.execution_id = e.id AND je.status = 'failed') as failed_jobs
+      p.name as pipeline_name,
+      (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id) as total_sources,
+      (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'completed') as completed_sources,
+      (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'failed') as failed_sources
     FROM executions e
-    JOIN workflows w ON e.workflow_id = w.id
+    JOIN pipelines p ON e.pipeline_id = p.id
     ORDER BY e.created_at DESC
     LIMIT 50
   `).all() as any[]
 
   return executions.map(exec => ({
     id: exec.id,
-    workflowId: exec.workflow_id,
-    workflowName: exec.workflow_name,
+    pipelineId: exec.pipeline_id,
+    pipelineName: exec.pipeline_name,
+    // Keep legacy field names for backward compatibility
+    workflowId: exec.pipeline_id,
+    workflowName: exec.pipeline_name,
     status: exec.status,
     startedAt: exec.started_at ? new Date(exec.started_at) : null,
     completedAt: exec.completed_at ? new Date(exec.completed_at) : null,
     duration: exec.duration_ms,
-    totalJobs: exec.total_jobs,
-    completedJobs: exec.completed_jobs,
-    failedJobs: exec.failed_jobs
+    totalSources: exec.total_sources,
+    completedSources: exec.completed_sources,
+    failedSources: exec.failed_sources,
+    // Legacy field names
+    totalJobs: exec.total_sources,
+    completedJobs: exec.completed_sources,
+    failedJobs: exec.failed_sources
   }))
 }
 

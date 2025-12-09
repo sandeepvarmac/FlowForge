@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
-import type { Workflow, WorkflowFormData } from '@/types/workflow'
+import type { Pipeline, PipelineFormData } from '@/types/pipeline'
 import { Cron } from 'croner'
 
 export const runtime = 'nodejs'
@@ -24,11 +24,8 @@ function calculateNextRun(cronExpression: string, timezone: string = 'UTC'): num
 }
 
 /**
- * GET /api/workflows
- * Get all workflows (pipelines)
- *
- * Note: This endpoint uses the new table names (pipelines, sources, pipeline_triggers)
- * but returns data with legacy field names (workflows, jobs) for backward compatibility
+ * GET /api/pipelines
+ * Get all pipelines (formerly workflows)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -36,13 +33,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const includeLastExecution = searchParams.get('includeLastExecution') === 'true'
 
-    // Use new table names: pipelines (was workflows), sources (was jobs), pipeline_triggers (was workflow_triggers)
-    const workflows = db.prepare(`
+    const pipelines = db.prepare(`
       SELECT p.*,
         (SELECT json_group_array(
           json_object(
             'id', s.id,
-            'workflowId', s.pipeline_id,
+            'pipelineId', s.pipeline_id,
             'name', s.name,
             'description', s.description,
             'type', s.type,
@@ -56,7 +52,7 @@ export async function GET(request: NextRequest) {
             'createdAt', s.created_at,
             'updatedAt', s.updated_at
           )
-        ) FROM sources s WHERE s.pipeline_id = p.id ORDER BY s.order_index) as jobs,
+        ) FROM sources s WHERE s.pipeline_id = p.id ORDER BY s.order_index) as sources,
         (SELECT json_group_array(
           json_object(
             'id', t.id,
@@ -64,7 +60,7 @@ export async function GET(request: NextRequest) {
             'enabled', t.enabled,
             'cronExpression', t.cron_expression,
             'nextRunAt', t.next_run_at,
-            'dependsOnWorkflowId', t.depends_on_pipeline_id,
+            'dependsOnPipelineId', t.depends_on_pipeline_id,
             'dependencyCondition', t.dependency_condition
           )
         ) FROM pipeline_triggers t WHERE t.pipeline_id = p.id AND t.enabled = 1) as triggers
@@ -72,7 +68,7 @@ export async function GET(request: NextRequest) {
       ORDER BY p.created_at DESC
     `).all() as any[]
 
-    const result = workflows.map(row => {
+    const result = pipelines.map(row => {
       const triggers = row.triggers ? JSON.parse(row.triggers) : []
 
       // Calculate dynamic status based on enabled triggers
@@ -118,21 +114,21 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const workflow: any = {
+      const pipeline: any = {
         id: row.id,
         name: row.name,
         description: row.description,
         application: row.application,
         owner: row.owner,
-        status: calculatedStatus, // Use calculated status instead of stored status
-        type: calculatedType, // Use calculated type instead of stored type
+        status: calculatedStatus,
+        type: calculatedType,
         team: row.team,
         environment: row.environment,
         priority: row.priority,
         dataClassification: row.data_classification,
         notificationEmail: row.notification_email,
         tags: row.tags ? JSON.parse(row.tags) : [],
-        jobs: row.jobs ? JSON.parse(row.jobs) : [],
+        sources: row.sources ? JSON.parse(row.sources) : [],
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
         nextRun: nextRunTimestamp ? new Date(nextRunTimestamp * 1000) : undefined,
         createdAt: new Date(row.created_at),
@@ -144,9 +140,9 @@ export async function GET(request: NextRequest) {
         const lastExecution = db.prepare(`
           SELECT
             e.*,
-            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'completed') as completed_jobs,
-            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'failed') as failed_jobs,
-            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id) as total_jobs
+            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'completed') as completed_sources,
+            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id AND se.status = 'failed') as failed_sources,
+            (SELECT COUNT(*) FROM source_executions se WHERE se.execution_id = e.id) as total_sources
           FROM executions e
           WHERE e.pipeline_id = ?
           ORDER BY e.created_at DESC
@@ -154,49 +150,47 @@ export async function GET(request: NextRequest) {
         `).get(row.id) as any
 
         if (lastExecution) {
-          workflow.lastExecution = {
+          pipeline.lastExecution = {
             id: lastExecution.id,
             status: lastExecution.status,
             startTime: lastExecution.started_at,
             endTime: lastExecution.completed_at,
             duration: lastExecution.duration_ms,
-            completedJobs: lastExecution.completed_jobs,
-            failedJobs: lastExecution.failed_jobs,
-            totalJobs: lastExecution.total_jobs,
+            completedSources: lastExecution.completed_sources,
+            failedSources: lastExecution.failed_sources,
+            totalSources: lastExecution.total_sources,
           }
         } else {
-          workflow.lastExecution = null
+          pipeline.lastExecution = null
         }
       }
 
-      return workflow
+      return pipeline
     })
 
-    return NextResponse.json({ workflows: result })
+    return NextResponse.json({ pipelines: result })
 
   } catch (error) {
-    console.error('❌ Error fetching workflows:', error)
+    console.error('❌ Error fetching pipelines:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch workflows' },
+      { error: 'Failed to fetch pipelines' },
       { status: 500 }
     )
   }
 }
 
 /**
- * POST /api/workflows
- * Create a new workflow (pipeline)
+ * POST /api/pipelines
+ * Create a new pipeline (formerly workflow)
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: WorkflowFormData = await request.json()
+    const body: PipelineFormData = await request.json()
     const db = getDatabase()
 
     const now = Date.now()
-    // Use 'pl_' prefix for new pipelines
     const id = `pl_${now}_${Math.random().toString(36).substring(7)}`
 
-    // Insert into pipelines table (was workflows)
     db.prepare(`
       INSERT INTO pipelines (
         id, name, description, application, owner, status, type,
@@ -209,9 +203,9 @@ export async function POST(request: NextRequest) {
       body.description,
       body.application,
       body.team,
-      body.workflowType === 'manual' ? 'manual' : 'scheduled',
-      body.workflowType,
-      body.team, // Using team instead of businessUnit
+      body.pipelineType === 'manual' ? 'manual' : 'scheduled',
+      body.pipelineType,
+      body.team,
       body.notificationEmail,
       JSON.stringify(body.tags || []),
       body.environment || 'development',
@@ -221,28 +215,28 @@ export async function POST(request: NextRequest) {
       now
     )
 
-    const workflow: Workflow = {
+    const pipeline: Pipeline = {
       id,
       name: body.name,
       description: body.description,
       application: body.application,
       owner: body.team,
-      status: body.workflowType === 'manual' ? 'manual' : 'scheduled',
-      type: body.workflowType,
+      status: body.pipelineType === 'manual' ? 'manual' : 'scheduled',
+      type: body.pipelineType,
       team: body.team,
       environment: body.environment || 'development',
       priority: body.priority,
       dataClassification: body.dataClassification,
       notificationEmail: body.notificationEmail,
       tags: body.tags || [],
-      jobs: [],
+      sources: [],
       createdAt: new Date(now),
       updatedAt: new Date(now)
     }
 
-    console.log(`✅ Created pipeline: ${workflow.name} (${id})`)
+    console.log(`✅ Created pipeline: ${pipeline.name} (${id})`)
 
-    return NextResponse.json({ workflow })
+    return NextResponse.json({ pipeline })
 
   } catch (error) {
     console.error('❌ Error creating pipeline:', error)

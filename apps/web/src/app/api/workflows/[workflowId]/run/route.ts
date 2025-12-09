@@ -84,7 +84,7 @@ export async function POST(
     const db = getDatabase()
 
     const workflow = db.prepare(`
-      SELECT * FROM workflows WHERE id = ?
+      SELECT * FROM pipelines WHERE id = ?
     `).get(workflowId) as any
 
     if (!workflow) {
@@ -95,7 +95,7 @@ export async function POST(
     }
 
     const jobs = db.prepare(`
-      SELECT * FROM jobs WHERE workflow_id = ? ORDER BY order_index ASC
+      SELECT * FROM sources WHERE pipeline_id = ? ORDER BY order_index ASC
     `).all(workflowId) as any[]
 
     if (!jobs?.length) {
@@ -123,12 +123,12 @@ export async function POST(
 
     for (const job of jobs) {
       const jobStartTime = new Date().toISOString()
-      const jobExecutionId = `job_exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+      const sourceExecutionId = `job_exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
       db.prepare(`
-        INSERT INTO job_executions (id, execution_id, job_id, status, started_at, created_at, updated_at)
+        INSERT INTO source_executions (id, execution_id, source_id, status, started_at, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(jobExecutionId, executionId, job.id, 'running', jobStartTime, jobStartTime, jobStartTime)
+      `).run(sourceExecutionId, executionId, job.id, 'running', jobStartTime, jobStartTime, jobStartTime)
 
       const rawSourceConfig = typeof job.source_config === 'string' ? JSON.parse(job.source_config) : job.source_config
       const enrichedSourceConfig = enrichConnectionCredentials(rawSourceConfig, db)
@@ -181,17 +181,17 @@ export async function POST(
               }
             },
             batch_id: batchId,
-            execution_id: jobExecutionId,
+            execution_id: sourceExecutionId,
             source_type: 'database',
           })
 
           console.log(`✅ Database ingestion flow run created: ${prefectRun.id}`)
 
           db.prepare(`
-            UPDATE job_executions
+            UPDATE source_executions
             SET status = ?, logs = ?, updated_at = ?, flow_run_id = ?
             WHERE id = ?
-          `).run('running', JSON.stringify([`Database ingestion started: ${sourceType}`, `Prefect flow run: ${prefectRun.id}`]), new Date().toISOString(), prefectRun.id, jobExecutionId)
+          `).run('running', JSON.stringify([`Database ingestion started: ${sourceType}`, `Prefect flow run: ${prefectRun.id}`]), new Date().toISOString(), prefectRun.id, sourceExecutionId)
 
           jobResults.push({
             jobId: job.id,
@@ -295,10 +295,10 @@ export async function POST(
         ]
 
         db.prepare(`
-          UPDATE job_executions
+          UPDATE source_executions
           SET status = ?, logs = ?, updated_at = ?, flow_run_id = ?
           WHERE id = ?
-        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), flowRuns[0], jobExecutionId)
+        `).run('running', JSON.stringify(logEntry), new Date().toISOString(), flowRuns[0], sourceExecutionId)
 
         jobResults.push({
           jobId: job.id,
@@ -313,10 +313,10 @@ export async function POST(
         overallStatus = 'failed'
         const jobEndTime = new Date().toISOString()
         db.prepare(`
-          UPDATE job_executions
+          UPDATE source_executions
           SET status = ?, completed_at = ?, duration_ms = ?, error_message = ?, updated_at = ?
           WHERE id = ?
-        `).run('failed', jobEndTime, new Date(jobEndTime).getTime() - new Date(jobStartTime).getTime(), error.message, jobEndTime, jobExecutionId)
+        `).run('failed', jobEndTime, new Date(jobEndTime).getTime() - new Date(jobStartTime).getTime(), error.message, jobEndTime, sourceExecutionId)
 
         db.prepare(`
           UPDATE executions
@@ -340,7 +340,7 @@ export async function POST(
     }
 
     db.prepare(`
-      UPDATE workflows SET last_run = ?, updated_at = ? WHERE id = ?
+      UPDATE pipelines SET last_run = ?, updated_at = ? WHERE id = ?
     `).run(startTime, new Date().toISOString(), workflowId)
 
     db.prepare(`

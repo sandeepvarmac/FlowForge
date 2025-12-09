@@ -47,7 +47,7 @@ export async function POST(
     const { jobId } = params
     const db = getDatabase()
     const jobRow = db.prepare(`
-      SELECT * FROM jobs WHERE id = ?
+      SELECT * FROM sources WHERE id = ?
     `).get(jobId) as any
 
     if (!jobRow) {
@@ -55,13 +55,13 @@ export async function POST(
     }
 
     const sourceConfig = typeof jobRow.source_config === 'string' ? JSON.parse(jobRow.source_config) : jobRow.source_config
-    const landingKey = sourceConfig?.landingKey || `landing/${jobRow.workflow_id}/${jobRow.id}/${sourceConfig?.fileConfig?.filePath || ''}`
+    const landingKey = sourceConfig?.landingKey || `landing/${jobRow.pipeline_id}/${jobRow.id}/${sourceConfig?.fileConfig?.filePath || ''}`
     const prefectConfig = sourceConfig?.prefect ?? {}
     const [flowName, deploymentName] = (prefectConfig.deploymentName || `${PREFECT_FLOW_NAME}/${PREFECT_DEPLOYMENT_NAME}`).split('/')
     const primaryKeys = prefectConfig.parameters?.primary_keys || []
 
     const prefectRun = await triggerPrefectRun(flowName, deploymentName, {
-      workflow_id: jobRow.workflow_id,
+      workflow_id: jobRow.pipeline_id,
       job_id: jobId,
       landing_key: landingKey,
       primary_keys: primaryKeys

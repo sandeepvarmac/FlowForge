@@ -11,7 +11,7 @@ import type { Job } from '@/types/workflow'
 import { MetadataCatalog } from '@/components/metadata'
 import { WorkflowTriggersSection } from '@/components/workflows/workflow-triggers-section'
 import { AddTriggerModal } from '@/components/workflows/add-trigger-modal'
-import { CreateWorkflowModal } from '@/components/workflows/create-workflow-modal'
+import { CreatePipelineModal } from '@/components/workflows/create-workflow-modal'
 import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil, ChevronDown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -112,7 +112,7 @@ const buildExecutionTimeline = (
     if (context.startTime) {
       events.push({
         label: 'Run started',
-        description: `Job started at ${formatTimeOnly(context.startTime)}`,
+        description: `Source started at ${formatTimeOnly(context.startTime)}`,
         severity: 'info'
       })
     }
@@ -212,7 +212,7 @@ const buildExecutionTimeline = (
   if (context.startTime) {
     events.push({
       label: 'Run started',
-      description: `Job started at ${formatTimeOnly(context.startTime)}`,
+      description: `Source started at ${formatTimeOnly(context.startTime)}`,
       severity: 'info'
     })
   }
@@ -291,7 +291,7 @@ const TIMELINE_BADGE_STYLES: Record<TimelineEventSeverity, string> = {
   error: 'bg-red-50 text-red-700 border-red-200'
 }
 
-export default function WorkflowDetailPage() {
+export default function PipelineDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { state, dispatch } = useAppContext()
@@ -390,8 +390,8 @@ export default function WorkflowDetailPage() {
           </Button>
         </div>
         <Card className="p-8 text-center">
-          <h2 className="text-xl font-semibold mb-2">Workflow not found</h2>
-          <p className="text-foreground-muted">The workflow you're looking for doesn't exist.</p>
+          <h2 className="text-xl font-semibold mb-2">Pipeline not found</h2>
+          <p className="text-foreground-muted">The pipeline you're looking for doesn't exist.</p>
         </Card>
       </div>
     )
@@ -504,15 +504,15 @@ export default function WorkflowDetailPage() {
 
       toast({
         type: 'success',
-        title: 'Workflow Updated',
-        description: 'The workflow details have been updated successfully'
+        title: 'Pipeline Updated',
+        description: 'The pipeline details have been updated successfully'
       })
     } catch (error) {
       console.error('Failed to refresh workflow:', error)
       toast({
         type: 'error',
         title: 'Refresh Failed',
-        description: 'The workflow was updated but failed to refresh. Please reload the page.'
+        description: 'The pipeline was updated but failed to refresh. Please reload the page.'
       })
     }
   }
@@ -524,7 +524,7 @@ export default function WorkflowDetailPage() {
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => router.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Workflows
+            Back to Pipelines
           </Button>
         </div>
         <div className="flex items-center gap-2">
@@ -534,7 +534,7 @@ export default function WorkflowDetailPage() {
               disabled={isLoading(workflowId, 'run')}
             >
               <Play className="w-4 h-4 mr-2" />
-              Run Workflow
+              Run Pipeline
             </Button>
           )}
           {workflow.status === 'scheduled' && (
@@ -567,7 +567,7 @@ export default function WorkflowDetailPage() {
         </div>
       </div>
 
-      {/* Workflow Info */}
+      {/* Pipeline Info */}
       <div className="grid gap-6">
         <Card>
           <CardHeader>
@@ -580,7 +580,7 @@ export default function WorkflowDetailPage() {
                     size="sm"
                     className="h-8 w-8 p-0"
                     onClick={handleEditWorkflow}
-                    title="Edit workflow details"
+                    title="Edit pipeline details"
                   >
                     <Pencil className="w-4 h-4" />
                   </Button>
@@ -648,27 +648,27 @@ export default function WorkflowDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Job Pipeline */}
+        {/* Data Sources */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Layers className="w-5 h-5" />
-              Job Pipeline ({workflow.jobs.length} jobs)
+              Data Sources ({workflow.jobs.length} sources)
             </CardTitle>
-            <Button 
+            <Button
               variant="outline"
               onClick={() => setCreateJobModalOpen(true)}
             >
               <span className="mr-2">+</span>
-              Add Job
+              Add Source
             </Button>
           </CardHeader>
           <CardContent>
             {workflow.jobs.length === 0 ? (
               <div className="text-center py-8 text-foreground-muted">
                 <Activity className="w-8 h-8 mx-auto mb-3 opacity-50" />
-                <p>No jobs configured</p>
-                <p className="text-sm">Add jobs to define your data pipeline</p>
+                <p>No sources configured</p>
+                <p className="text-sm">Add sources to define your data pipeline</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -732,13 +732,13 @@ export default function WorkflowDetailPage() {
               <div className="text-center py-8 text-foreground-muted">
                 <FileText className="w-8 h-8 mx-auto mb-3 opacity-50" />
                 <p>No files in landing folder</p>
-                <p className="text-sm">Files uploaded through job creation will appear here</p>
+                <p className="text-sm">Files uploaded through source creation will appear here</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {Object.entries(landingFiles.filesByJob).map(([jobId, files]: [string, any]) => {
                   const job = workflow?.jobs.find(j => j.id === jobId)
-                  const jobName = job?.name || `Job ${jobId.slice(0, 8)}`
+                  const jobName = job?.name || `Source ${jobId.slice(0, 8)}`
 
                   return (
                     <div key={jobId} className="border border-border rounded-lg p-4">
@@ -820,7 +820,7 @@ export default function WorkflowDetailPage() {
               <div className="text-center py-8 text-foreground-muted">
                 <Activity className="w-8 h-8 mx-auto mb-3 opacity-50" />
                 <p>No execution history available</p>
-                <p className="text-sm">Run this workflow to see execution details</p>
+                <p className="text-sm">Run this pipeline to see execution details</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -885,10 +885,10 @@ export default function WorkflowDetailPage() {
                         </div>
                       </CardHeader>
                       <CardContent className="pt-0 space-y-4">
-                        {/* Job Summary */}
+                        {/* Source Summary */}
                         <div className="flex items-center gap-4 text-sm pb-3 border-b border-border">
                           <div className="flex items-center gap-2">
-                            <span className="text-foreground-muted">Jobs:</span>
+                            <span className="text-foreground-muted">Sources:</span>
                             <span className="font-semibold text-foreground">{jobExecutions.length} total</span>
                           </div>
                           {completedJobs > 0 && (
@@ -922,16 +922,16 @@ export default function WorkflowDetailPage() {
                           </div>
                         )}
 
-                        {/* Job Execution Details */}
+                        {/* Source Execution Details */}
                         {jobExecutions.length > 0 && (
                           <details open={execution.status === 'failed' || execution.status === 'running'}>
                             <summary className="cursor-pointer text-sm font-medium text-foreground-muted hover:text-foreground transition-colors mb-3">
-                              Job Details ({jobExecutions.length} jobs)
+                              Source Details ({jobExecutions.length} sources)
                             </summary>
                             <div className="space-y-3 ml-2">
                               {jobExecutions.map((jobExec: any) => {
                                 const job = workflow?.jobs.find((j: any) => j.id === jobExec.jobId)
-                                const jobName = job?.name || `Job ${jobExec.jobId}`
+                                const jobName = job?.name || `Source ${jobExec.jobId}`
 
                                 return (
                                   <details key={jobExec.id} className="border border-border rounded-lg">
@@ -1044,12 +1044,12 @@ export default function WorkflowDetailPage() {
                                         </>
                                       )}
 
-                                      {/* Job Error */}
+                                      {/* Source Error */}
                                       {jobExec.error && (
                                         <div className="p-2 bg-red-50 border border-red-200 rounded-md">
                                           <div className="flex items-center gap-2 text-red-700">
                                             <AlertCircle className="w-4 h-4" />
-                                            <span className="text-xs font-medium">Job Error</span>
+                                            <span className="text-xs font-medium">Source Error</span>
                                           </div>
                                           <p className="text-xs text-red-600 mt-1 font-mono">{jobExec.error}</p>
                                         </div>
@@ -1162,7 +1162,7 @@ export default function WorkflowDetailPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h4 className="font-semibold mb-3">Workflow Settings</h4>
+                <h4 className="font-semibold mb-3">Pipeline Settings</h4>
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-foreground-muted">Execution Type</span>
@@ -1223,16 +1223,16 @@ export default function WorkflowDetailPage() {
             </div>
             
             <div className="mt-6 pt-6 border-t border-border">
-              <h4 className="font-semibold mb-3">Workflow Description</h4>
+              <h4 className="font-semibold mb-3">Pipeline Description</h4>
               <p className="text-foreground-muted leading-relaxed">
-                {workflow.description || 'No description provided for this workflow.'}
+                {workflow.description || 'No description provided for this pipeline.'}
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Create Job Modal */}
+      {/* Create Source Modal */}
       <CreateJobModal
         open={createJobModalOpen}
         onOpenChange={(open) => {
@@ -1259,7 +1259,7 @@ export default function WorkflowDetailPage() {
             }
             toast({
               type: 'success',
-              title: 'Job Updated',
+              title: 'Source Updated',
               description: `"${jobData.name}" has been successfully updated.`
             })
           } else {
@@ -1274,7 +1274,7 @@ export default function WorkflowDetailPage() {
             }
             toast({
               type: 'success',
-              title: 'Job Created',
+              title: 'Source Created',
               description: `"${jobData.name}" has been successfully created.`
             })
           }
@@ -1284,7 +1284,7 @@ export default function WorkflowDetailPage() {
         }}
       />
 
-      {/* Job Execution Results Modal */}
+      {/* Source Execution Results Modal */}
       {selectedExecution && (
         <JobExecutionModal
           open={executionModalOpen}
@@ -1300,8 +1300,8 @@ export default function WorkflowDetailPage() {
         onOpenChange={setMetadataCatalogOpen}
       />
 
-      {/* Edit Workflow Modal */}
-      <CreateWorkflowModal
+      {/* Edit Pipeline Modal */}
+      <CreatePipelineModal
         mode="edit"
         workflowId={workflowId}
         initialData={editWorkflowData}

@@ -49,7 +49,7 @@ const links: NavLink[] = [
     icon: Workflow,
     subLinks: [
       { href: '/pipelines/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/workflows', label: 'Workflows', icon: GitBranch },
+      { href: '/pipelines', label: 'All Pipelines', icon: GitBranch },
       { href: '/pipelines/executions', label: 'Executions', icon: Activity },
     ]
   },

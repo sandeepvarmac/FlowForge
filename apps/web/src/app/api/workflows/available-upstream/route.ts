@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         description,
         type,
         status
-      FROM workflows
+      FROM pipelines
       WHERE 1=1
     `
 

@@ -48,7 +48,7 @@ export async function PATCH(
 
     // Check if trigger exists
     const existing = db.prepare(`
-      SELECT * FROM workflow_triggers WHERE id = ? AND workflow_id = ?
+      SELECT * FROM pipeline_triggers WHERE id = ? AND pipeline_id = ?
     `).get(triggerId, workflowId)
 
     if (!existing) {
@@ -60,9 +60,9 @@ export async function PATCH(
 
     // Enable the trigger
     db.prepare(`
-      UPDATE workflow_triggers
+      UPDATE pipeline_triggers
       SET enabled = 1, updated_at = ?
-      WHERE id = ? AND workflow_id = ?
+      WHERE id = ? AND pipeline_id = ?
     `).run(Date.now(), triggerId, workflowId)
 
     // Fetch updated trigger
@@ -71,9 +71,9 @@ export async function PATCH(
         t.*,
         w.name as depends_on_workflow_name,
         wf.name as workflow_name
-      FROM workflow_triggers t
-      LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
-      JOIN workflows wf ON t.workflow_id = wf.id
+      FROM pipeline_triggers t
+      LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
+      JOIN pipelines wf ON t.pipeline_id = wf.id
       WHERE t.id = ?
     `).get(triggerId) as any
 

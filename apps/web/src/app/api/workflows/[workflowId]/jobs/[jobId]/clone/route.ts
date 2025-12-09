@@ -20,8 +20,8 @@ export async function POST(
 
     // Fetch the original job
     const originalRow = db.prepare(`
-      SELECT * FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      SELECT * FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).get(jobId, workflowId) as any
 
     if (!originalRow) {
@@ -33,8 +33,8 @@ export async function POST(
 
     // Get the highest order in the workflow
     const maxOrderRow = db.prepare(`
-      SELECT MAX(order_index) as max_order FROM jobs
-      WHERE workflow_id = ?
+      SELECT MAX(order_index) as max_order FROM sources
+      WHERE pipeline_id = ?
     `).get(workflowId) as any
 
     const newOrder = (maxOrderRow?.max_order || 0) + 1
@@ -48,8 +48,8 @@ export async function POST(
     let copyNumber = 1
     while (true) {
       const existingJob = db.prepare(`
-        SELECT id FROM jobs
-        WHERE workflow_id = ? AND name = ?
+        SELECT id FROM sources
+        WHERE pipeline_id = ? AND name = ?
       `).get(workflowId, clonedName)
 
       if (!existingJob) break
@@ -59,8 +59,8 @@ export async function POST(
 
     // Insert cloned job
     db.prepare(`
-      INSERT INTO jobs (
-        id, workflow_id, name, description, type, order_index, status,
+      INSERT INTO sources (
+        id, pipeline_id, name, description, type, order_index, status,
         source_config, destination_config, transformation_config, validation_config,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -82,13 +82,13 @@ export async function POST(
 
     // Fetch the newly created job
     const newRow = db.prepare(`
-      SELECT * FROM jobs
+      SELECT * FROM sources
       WHERE id = ?
     `).get(newJobId) as any
 
     const clonedJob: Job = {
       id: newRow.id,
-      workflowId: newRow.workflow_id,
+      workflowId: newRow.pipeline_id,
       name: newRow.name,
       description: newRow.description,
       type: newRow.type,

@@ -28,9 +28,9 @@ export async function POST(
       SELECT
         wt.*,
         w.name as workflow_name
-      FROM workflow_triggers wt
-      JOIN workflows w ON w.id = wt.workflow_id
-      WHERE wt.id = ? AND wt.workflow_id = ?
+      FROM pipeline_triggers wt
+      JOIN pipelines w ON w.id = wt.pipeline_id
+      WHERE wt.id = ? AND wt.pipeline_id = ?
     `).get(triggerId, workflowId) as any
 
     if (!trigger) {
@@ -95,7 +95,7 @@ export async function POST(
       // Update trigger with next_run_at if provided
       if (result.next_run_timestamp) {
         db.prepare(`
-          UPDATE workflow_triggers
+          UPDATE pipeline_triggers
           SET next_run_at = ?, updated_at = ?
           WHERE id = ?
         `).run(result.next_run_timestamp, Math.floor(Date.now() / 1000), triggerId)

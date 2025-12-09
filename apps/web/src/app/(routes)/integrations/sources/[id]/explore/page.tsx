@@ -163,8 +163,8 @@ export default function SourceExplorerPage() {
       databaseType: connection.type
     }))
 
-    // Navigate to workflows page
-    router.push('/workflows')
+    // Navigate to pipelines page
+    router.push('/pipelines')
   }
 
   if (isLoadingConnection) {

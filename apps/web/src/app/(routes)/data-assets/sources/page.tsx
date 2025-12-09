@@ -23,10 +23,14 @@ import {
   Search,
   FolderOpen,
   Code2,
-  Braces
+  Braces,
+  HardDrive,
+  Sparkles,
+  Clock
 } from 'lucide-react'
 import { DataAssetsLayout } from '@/components/data-assets'
 import { DatabaseConnection } from '@/types/database-connection'
+import { SourceStorageView } from '@/components/data-assets/SourceStorageView'
 import { cn } from '@/lib/utils'
 
 interface TableInfo {
@@ -64,6 +68,9 @@ interface TreeNode {
 
 export default function SourceDataPage() {
   const router = useRouter()
+
+  // Source type tab state
+  const [activeSourceType, setActiveSourceType] = React.useState<'databases' | 'storage'>('databases')
 
   // Connections state
   const [connections, setConnections] = React.useState<DatabaseConnection[]>([])
@@ -363,7 +370,7 @@ export default function SourceDataPage() {
       databaseType: connection.type
     }))
 
-    router.push('/workflows')
+    router.push('/pipelines')
   }
 
   const filteredTreeNodes = React.useMemo(() => {
@@ -765,6 +772,9 @@ export default function SourceDataPage() {
                     <TabsTrigger value="dependencies" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
                       Dependencies
                     </TabsTrigger>
+                    <TabsTrigger value="insights" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary">
+                      AI Insights
+                    </TabsTrigger>
                   </TabsList>
                 </div>
 
@@ -925,6 +935,104 @@ export default function SourceDataPage() {
                     </div>
                   </div>
                 </TabsContent>
+
+                {/* AI Insights Tab */}
+                <TabsContent value="insights" className="flex-1 min-h-0 m-0 p-4 overflow-auto data-[state=inactive]:hidden">
+                  <div className="space-y-4">
+                    {/* Primary Key Candidates */}
+                    <div className="border rounded-md p-4">
+                      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Primary Key Candidates
+                      </h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Columns that appear to uniquely identify each row
+                      </p>
+                      {(() => {
+                        const pkCandidates = tablePreview.schema.filter((col, idx) =>
+                          col.name.toLowerCase() === 'id' ||
+                          (col.name.toLowerCase().endsWith('_id') && idx === 0)
+                        )
+                        return pkCandidates.length > 0 ? (
+                          <div className="space-y-2">
+                            {pkCandidates.map((col) => (
+                              <div key={col.name} className="flex items-center gap-2 p-2 bg-muted/30 rounded text-sm">
+                                <span className="font-mono text-foreground">{col.name}</span>
+                                <Badge variant="outline" className="ml-auto text-xs">AI Detected</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-sm text-muted-foreground">
+                            <p>No primary key candidates detected</p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Temporal Columns */}
+                    <div className="border rounded-md p-4">
+                      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        Temporal Columns
+                      </h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Date and timestamp columns detected in the table
+                      </p>
+                      {(() => {
+                        const temporalKeywords = ['date', 'time', 'created', 'updated', 'modified', 'timestamp']
+                        const temporalTypes = ['date', 'datetime', 'timestamp', 'timestamptz']
+                        const temporalColumns = tablePreview.schema.filter(col =>
+                          temporalKeywords.some(k => col.name.toLowerCase().includes(k)) ||
+                          temporalTypes.some(t => col.type.toLowerCase().includes(t))
+                        )
+                        return temporalColumns.length > 0 ? (
+                          <div className="space-y-2">
+                            {temporalColumns.map((col) => (
+                              <div key={col.name} className="flex items-center gap-2 p-2 bg-muted/30 rounded text-sm">
+                                <span className="font-mono text-foreground">{col.name}</span>
+                                <span className="text-xs text-muted-foreground">({col.type})</span>
+                                <Badge variant="outline" className="ml-auto text-xs">AI Detected</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-sm text-muted-foreground">
+                            <p>No temporal columns detected</p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Table Metadata */}
+                    <div className="border rounded-md p-4">
+                      <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <Table2 className="w-4 h-4" />
+                        Table Information
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-2 bg-muted/30 rounded">
+                          <p className="text-xs text-muted-foreground">Row Count</p>
+                          <p className="text-sm font-medium text-foreground">{tablePreview.total_rows?.toLocaleString() || 'Unknown'}</p>
+                        </div>
+                        <div className="p-2 bg-muted/30 rounded">
+                          <p className="text-xs text-muted-foreground">Column Count</p>
+                          <p className="text-sm font-medium text-foreground">{tablePreview.schema.length}</p>
+                        </div>
+                        <div className="p-2 bg-muted/30 rounded">
+                          <p className="text-xs text-muted-foreground">Nullable Columns</p>
+                          <p className="text-sm font-medium text-foreground">{tablePreview.schema.filter(c => c.nullable).length}</p>
+                        </div>
+                        <div className="p-2 bg-muted/30 rounded">
+                          <p className="text-xs text-muted-foreground">Foreign Keys (Inferred)</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {tablePreview.schema.filter(col => col.name.toLowerCase().endsWith('_id') && col.name.toLowerCase() !== 'id').length}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
               </Tabs>
             </div>
           </div>
@@ -935,110 +1043,154 @@ export default function SourceDataPage() {
     return null
   }
 
+  // Render Database Explorer content
+  const renderDatabaseExplorer = () => (
+    <div className="h-full flex overflow-hidden bg-background min-h-0">
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center w-full h-full">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-sm text-muted-foreground">Loading connections...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && !isLoading && (
+        <div className="flex items-center justify-center w-full h-full p-6">
+          <div className="text-center max-w-md">
+            <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">Error Loading Connections</h2>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <Button onClick={fetchConnections} variant="outline">
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && !error && connections.length === 0 && (
+        <div className="flex items-center justify-center w-full h-full p-6">
+          <div className="text-center max-w-md">
+            <Database className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold text-foreground mb-2">
+              No Database Connections
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              Create your first database connection to start exploring source data.
+              Connect to PostgreSQL, SQL Server, MySQL, or Oracle databases.
+            </p>
+            <Button
+              onClick={() => router.push('/integrations/sources')}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Connection
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content - Tree View + Detail Panel */}
+      {!isLoading && !error && connections.length > 0 && (
+        <>
+          {/* Left Panel - Tree Navigation */}
+          <div className="w-80 border-r bg-card flex flex-col">
+            <div className="p-4 border-b">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-foreground">Database Explorer</h3>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => router.push('/integrations/sources')}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2">
+              {filteredTreeNodes.length === 0 ? (
+                <div className="text-center py-8 px-4">
+                  <p className="text-sm text-muted-foreground">
+                    {searchQuery ? 'No matching items found' : 'No connected databases'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredTreeNodes.map(node => renderTreeNode(node))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t bg-muted/30">
+              <div className="text-xs text-muted-foreground">
+                {connections.filter(c => c.lastTestStatus === 'success').length} active {connections.filter(c => c.lastTestStatus === 'success').length === 1 ? 'connection' : 'connections'}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Panel - Details */}
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            {renderMainPanel()}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   return (
     <DataAssetsLayout>
-      <div className="h-full flex overflow-hidden bg-background min-h-0">
-        {/* Loading State */}
-        {isLoading && (
-          <div className="flex items-center justify-center w-full h-full">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-              <p className="text-sm text-muted-foreground">Loading connections...</p>
-            </div>
+      <div className="h-full flex flex-col overflow-hidden bg-background min-h-0">
+        {/* Source Type Tabs */}
+        <div className="border-b bg-card px-4 flex-shrink-0">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveSourceType('databases')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                activeSourceType === 'databases'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
+              )}
+            >
+              <Database className="w-4 h-4" />
+              Databases
+            </button>
+            <button
+              onClick={() => setActiveSourceType('storage')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+                activeSourceType === 'storage'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-gray-300'
+              )}
+            >
+              <HardDrive className="w-4 h-4" />
+              Storage
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* Error State */}
-        {error && !isLoading && (
-          <div className="flex items-center justify-center w-full h-full p-6">
-            <div className="text-center max-w-md">
-              <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
-              <h2 className="text-lg font-semibold text-foreground mb-2">Error Loading Connections</h2>
-              <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={fetchConnections} variant="outline">
-                Retry
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && !error && connections.length === 0 && (
-          <div className="flex items-center justify-center w-full h-full p-6">
-            <div className="text-center max-w-md">
-              <Database className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h2 className="text-xl font-semibold text-foreground mb-2">
-                No Database Connections
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                Create your first database connection to start exploring source data.
-                Connect to PostgreSQL, SQL Server, MySQL, or Oracle databases.
-              </p>
-              <Button
-                onClick={() => router.push('/integrations/sources')}
-                className="flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Create Connection
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content - Tree View + Detail Panel */}
-        {!isLoading && !error && connections.length > 0 && (
-          <>
-            {/* Left Panel - Tree Navigation */}
-            <div className="w-80 border-r bg-card flex flex-col">
-              <div className="p-4 border-b">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-foreground">Database Explorer</h3>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => router.push('/integrations/sources')}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-2">
-                {filteredTreeNodes.length === 0 ? (
-                  <div className="text-center py-8 px-4">
-                    <p className="text-sm text-muted-foreground">
-                      {searchQuery ? 'No matching items found' : 'No connected databases'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {filteredTreeNodes.map(node => renderTreeNode(node))}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 border-t bg-muted/30">
-                <div className="text-xs text-muted-foreground">
-                  {connections.filter(c => c.lastTestStatus === 'success').length} active {connections.filter(c => c.lastTestStatus === 'success').length === 1 ? 'connection' : 'connections'}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Panel - Details */}
-            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-              {renderMainPanel()}
-            </div>
-          </>
-        )}
+        {/* Content based on active tab */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {activeSourceType === 'databases' ? (
+            renderDatabaseExplorer()
+          ) : (
+            <SourceStorageView searchTerm={searchQuery} />
+          )}
+        </div>
       </div>
     </DataAssetsLayout>
   )

@@ -8,7 +8,7 @@ import { X, Menu } from 'lucide-react'
 
 const links = [
   { href: '/', label: 'Dashboard' },
-  { href: '/workflows', label: 'Workflows' },
+  { href: '/pipelines', label: 'Pipelines' },
   { href: '/monitoring', label: 'Monitoring' },
   { href: '/catalog', label: 'Data Catalog' },
   { href: '/admin', label: 'Admin' },
@@ -43,7 +43,7 @@ export function MobileNav() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-bold text-primary">FlowForge</div>
-            <div className="text-xs text-foreground-muted">Workflow Management</div>
+            <div className="text-xs text-foreground-muted">Data Pipeline Platform</div>
           </div>
           <button 
             onClick={() => setIsOpen(true)}
@@ -71,7 +71,7 @@ export function MobileNav() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xl font-bold text-primary">FlowForge</div>
-                  <div className="text-sm text-foreground-muted mt-1">Workflow Management</div>
+                  <div className="text-sm text-foreground-muted mt-1">Data Pipeline Platform</div>
                 </div>
                 <button
                   onClick={() => setIsOpen(false)}

@@ -18,8 +18,8 @@ export async function GET(
 
     const db = getDatabase()
     const row = db.prepare(`
-      SELECT * FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      SELECT * FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).get(jobId, workflowId) as any
 
     if (!row) {
@@ -31,7 +31,7 @@ export async function GET(
 
     const job: Job = {
       id: row.id,
-      workflowId: row.workflow_id,
+      workflowId: row.pipeline_id,
       name: row.name,
       description: row.description,
       type: row.type,
@@ -73,8 +73,8 @@ export async function PATCH(
 
     // Check if job exists
     const existing = db.prepare(`
-      SELECT id FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      SELECT id FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).get(jobId, workflowId)
 
     if (!existing) {
@@ -88,7 +88,7 @@ export async function PATCH(
 
     // Update job
     db.prepare(`
-      UPDATE jobs SET
+      UPDATE sources SET
         name = ?,
         description = ?,
         type = ?,
@@ -98,7 +98,7 @@ export async function PATCH(
         transformation_config = ?,
         validation_config = ?,
         updated_at = ?
-      WHERE id = ? AND workflow_id = ?
+      WHERE id = ? AND pipeline_id = ?
     `).run(
       body.name,
       body.description || '',
@@ -115,13 +115,13 @@ export async function PATCH(
 
     // Fetch updated job
     const row = db.prepare(`
-      SELECT * FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      SELECT * FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).get(jobId, workflowId) as any
 
     const job: Job = {
       id: row.id,
-      workflowId: row.workflow_id,
+      workflowId: row.pipeline_id,
       name: row.name,
       description: row.description,
       type: row.type,
@@ -164,8 +164,8 @@ export async function DELETE(
 
     // Check if job exists
     const existing = db.prepare(`
-      SELECT id FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      SELECT id FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).get(jobId, workflowId)
 
     if (!existing) {
@@ -177,21 +177,21 @@ export async function DELETE(
 
     // Remove job execution history tied to this job
     db.prepare(`
-      DELETE FROM job_executions
-      WHERE job_id = ?
+      DELETE FROM source_executions
+      WHERE source_id = ?
     `).run(jobId)
 
     // Clean up orphaned executions
     db.prepare(`
       DELETE FROM executions
-      WHERE workflow_id = ?
-        AND id NOT IN (SELECT DISTINCT execution_id FROM job_executions)
+      WHERE pipeline_id = ?
+        AND id NOT IN (SELECT DISTINCT execution_id FROM source_executions)
     `).run(workflowId)
 
     db.prepare(`
       DELETE FROM executions
-      WHERE workflow_id = ?
-        AND id NOT IN (SELECT DISTINCT execution_id FROM job_executions)
+      WHERE pipeline_id = ?
+        AND id NOT IN (SELECT DISTINCT execution_id FROM source_executions)
     `).run(workflowId)
 
     // Remove quality rules and downstream quality data for this job
@@ -208,8 +208,8 @@ export async function DELETE(
 
     // Delete job
     db.prepare(`
-      DELETE FROM jobs
-      WHERE id = ? AND workflow_id = ?
+      DELETE FROM sources
+      WHERE id = ? AND pipeline_id = ?
     `).run(jobId, workflowId)
 
     console.log(`✅ Deleted job ${jobId} from workflow ${workflowId}`)

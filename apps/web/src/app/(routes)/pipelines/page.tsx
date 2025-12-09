@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Input, useToast, DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui'
-import { CreateWorkflowModal } from '@/components/workflows/create-workflow-modal'
+import { CreatePipelineModal } from '@/components/workflows/create-workflow-modal'
 import { DeleteConfirmationModal } from '@/components/common/delete-confirmation-modal'
 import { useAppContext } from '@/lib/context/app-context'
 import { useWorkflowActions } from '@/hooks'
@@ -264,22 +264,22 @@ const formatRows = (value?: number) => {
   }).format(value)
 }
 
-export default function WorkflowsPage() {
+export default function PipelinesPage() {
   const router = useRouter()
   const { state, dispatch } = useAppContext()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, deleteWorkflow, isLoading, error } = useWorkflowActions()
   const { toast } = useToast()
   const [createModalOpen, setCreateModalOpen] = React.useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = React.useState(false)
-  const [workflowToDelete, setWorkflowToDelete] = React.useState<{ id: string; name: string } | null>(null)
+  const [pipelineToDelete, setPipelineToDelete] = React.useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState<string>('all')
-  const [workflowTriggers, setWorkflowTriggers] = React.useState<Record<string, WorkflowTrigger[]>>({})
+  const [pipelineTriggers, setPipelineTriggers] = React.useState<Record<string, WorkflowTrigger[]>>({})
   const [loadingTriggers, setLoadingTriggers] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
-  const workflowsPerPage = 20
-  const [workflowMetrics, setWorkflowMetrics] = React.useState<Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }>>({})
+  const pipelinesPerPage = 20
+  const [pipelineMetrics, setPipelineMetrics] = React.useState<Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }>>({})
 
   // Filter panel state
   const [filterPanelOpen, setFilterPanelOpen] = React.useState(false)
@@ -288,22 +288,22 @@ export default function WorkflowsPage() {
   const [dataClassificationFilters, setDataClassificationFilters] = React.useState<string[]>([])
 
   React.useEffect(() => {
-    // Load triggers and metrics for all workflows
+    // Load triggers and metrics for all pipelines
     const loadAllData = async () => {
       try {
         setLoadingTriggers(true)
-        const triggersByWorkflow: Record<string, WorkflowTrigger[]> = {}
-        const metricsByWorkflow: Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }> = {}
+        const triggersByPipeline: Record<string, WorkflowTrigger[]> = {}
+        const metricsByPipeline: Record<string, { successRate: number; totalRuns: number; health: 'excellent' | 'good' | 'fair' | 'poor' | 'unknown' }> = {}
 
         await Promise.all(
-          state.workflows.map(async (workflow) => {
+          state.workflows.map(async (pipeline) => {
             try {
               // Load triggers
-              const triggers = await TriggersService.getTriggers(workflow.id)
-              triggersByWorkflow[workflow.id] = triggers
+              const triggers = await TriggersService.getTriggers(pipeline.id)
+              triggersByPipeline[pipeline.id] = triggers
 
               // Load execution history to calculate metrics
-              const response = await fetch(`/api/workflows/${workflow.id}/executions`)
+              const response = await fetch(`/api/workflows/${pipeline.id}/executions`)
               if (response.ok) {
                 const data = await response.json()
                 const executions = data.executions || []
@@ -328,22 +328,22 @@ export default function WorkflowsPage() {
                   health = 'poor'
                 }
 
-                metricsByWorkflow[workflow.id] = {
+                metricsByPipeline[pipeline.id] = {
                   successRate,
                   totalRuns: executions.length,
                   health
                 }
               } else {
-                metricsByWorkflow[workflow.id] = {
+                metricsByPipeline[pipeline.id] = {
                   successRate: 0,
                   totalRuns: 0,
                   health: 'unknown'
                 }
               }
             } catch (error) {
-              console.error(`Failed to load data for workflow ${workflow.id}:`, error)
-              triggersByWorkflow[workflow.id] = []
-              metricsByWorkflow[workflow.id] = {
+              console.error(`Failed to load data for pipeline ${pipeline.id}:`, error)
+              triggersByPipeline[pipeline.id] = []
+              metricsByPipeline[pipeline.id] = {
                 successRate: 0,
                 totalRuns: 0,
                 health: 'unknown'
@@ -352,10 +352,10 @@ export default function WorkflowsPage() {
           })
         )
 
-        setWorkflowTriggers(triggersByWorkflow)
-        setWorkflowMetrics(metricsByWorkflow)
+        setPipelineTriggers(triggersByPipeline)
+        setPipelineMetrics(metricsByPipeline)
       } catch (error) {
-        console.error('Failed to load workflow data:', error)
+        console.error('Failed to load pipeline data:', error)
       } finally {
         setLoadingTriggers(false)
       }
@@ -366,19 +366,19 @@ export default function WorkflowsPage() {
     }
   }, [state.workflows])
 
-  // Filter workflows based on search, status, and advanced filters
-  const filteredWorkflows = state.workflows.filter(workflow => {
-    const matchesSearch = workflow.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         workflow.application.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || workflow.status === statusFilter
+  // Filter pipelines based on search, status, and advanced filters
+  const filteredPipelines = state.workflows.filter(pipeline => {
+    const matchesSearch = pipeline.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         pipeline.application.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = statusFilter === 'all' || pipeline.status === statusFilter
 
     // Advanced filters
     const matchesEnvironment = environmentFilters.length === 0 ||
-      (workflow.environment && environmentFilters.includes(workflow.environment))
+      (pipeline.environment && environmentFilters.includes(pipeline.environment))
     const matchesPriority = priorityFilters.length === 0 ||
-      (workflow.priority && priorityFilters.includes(workflow.priority))
+      (pipeline.priority && priorityFilters.includes(pipeline.priority))
     const matchesDataClassification = dataClassificationFilters.length === 0 ||
-      (workflow.dataClassification && dataClassificationFilters.includes(workflow.dataClassification))
+      (pipeline.dataClassification && dataClassificationFilters.includes(pipeline.dataClassification))
 
     return matchesSearch && matchesStatus && matchesEnvironment && matchesPriority && matchesDataClassification
   })
@@ -392,11 +392,11 @@ export default function WorkflowsPage() {
   }, [searchQuery, statusFilter, environmentFilters, priorityFilters, dataClassificationFilters])
 
   // Calculate pagination
-  const totalWorkflows = filteredWorkflows.length
-  const totalPages = Math.ceil(totalWorkflows / workflowsPerPage)
-  const startIndex = (currentPage - 1) * workflowsPerPage
-  const endIndex = startIndex + workflowsPerPage
-  const paginatedWorkflows = filteredWorkflows.slice(startIndex, endIndex)
+  const totalPipelines = filteredPipelines.length
+  const totalPages = Math.ceil(totalPipelines / pipelinesPerPage)
+  const startIndex = (currentPage - 1) * pipelinesPerPage
+  const endIndex = startIndex + pipelinesPerPage
+  const paginatedPipelines = filteredPipelines.slice(startIndex, endIndex)
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
@@ -448,24 +448,24 @@ export default function WorkflowsPage() {
     toggleFilterValue(filterType, value)
   }
 
-  const handleWorkflowAction = async (workflowId: string, action: 'run' | 'pause' | 'resume' | 'view' | 'delete') => {
+  const handlePipelineAction = async (pipelineId: string, action: 'run' | 'pause' | 'resume' | 'view' | 'delete') => {
     switch (action) {
       case 'run':
-        await runWorkflow(workflowId)
+        await runWorkflow(pipelineId)
         break
       case 'pause':
-        await pauseWorkflow(workflowId)
+        await pauseWorkflow(pipelineId)
         break
       case 'resume':
-        await resumeWorkflow(workflowId)
+        await resumeWorkflow(pipelineId)
         break
       case 'view':
-        router.push(`/workflows/${workflowId}`)
+        router.push(`/pipelines/${pipelineId}`)
         break
       case 'delete':
-        const workflow = state.workflows.find(w => w.id === workflowId)
-        if (workflow) {
-          setWorkflowToDelete({ id: workflow.id, name: workflow.name })
+        const pipeline = state.workflows.find(w => w.id === pipelineId)
+        if (pipeline) {
+          setPipelineToDelete({ id: pipeline.id, name: pipeline.name })
           setDeleteModalOpen(true)
         }
         break
@@ -473,49 +473,49 @@ export default function WorkflowsPage() {
   }
 
   const handleConfirmDelete = async () => {
-    if (!workflowToDelete) return
+    if (!pipelineToDelete) return
 
     setIsDeleting(true)
     try {
-      await deleteWorkflow(workflowToDelete.id)
+      await deleteWorkflow(pipelineToDelete.id)
       toast({
         type: 'success',
-        title: 'Workflow Deleted',
-        description: `"${workflowToDelete.name}" has been permanently deleted along with all associated jobs and execution history.`
+        title: 'Pipeline Deleted',
+        description: `"${pipelineToDelete.name}" has been permanently deleted along with all associated sources and execution history.`
       })
       setDeleteModalOpen(false)
-      setWorkflowToDelete(null)
+      setPipelineToDelete(null)
     } catch (error) {
       toast({
         type: 'error',
         title: 'Delete Failed',
-        description: error instanceof Error ? error.message : 'Failed to delete workflow'
+        description: error instanceof Error ? error.message : 'Failed to delete pipeline'
       })
     } finally {
       setIsDeleting(false)
     }
   }
 
-  const handleCloneWorkflow = async (workflowId: string, workflowName: string) => {
+  const handleClonePipeline = async (pipelineId: string, pipelineName: string) => {
     toast({
       type: 'info',
-      title: 'Cloning Workflow',
-      description: `Creating a copy of "${workflowName}"...`
+      title: 'Cloning Pipeline',
+      description: `Creating a copy of "${pipelineName}"...`
     })
     // TODO: Implement clone functionality
   }
 
-  const handleExportWorkflow = async (workflowId: string, workflowName: string) => {
+  const handleExportPipeline = async (pipelineId: string, pipelineName: string) => {
     toast({
       type: 'info',
-      title: 'Exporting Workflow',
-      description: `Preparing export for "${workflowName}"...`
+      title: 'Exporting Pipeline',
+      description: `Preparing export for "${pipelineName}"...`
     })
     // TODO: Implement export functionality
   }
 
-  const handleViewLineage = (workflowId: string) => {
-    router.push(`/data-assets/lineage?workflowId=${workflowId}`)
+  const handleViewLineage = (pipelineId: string) => {
+    router.push(`/data-assets/lineage?workflowId=${pipelineId}`)
   }
 
   return (
@@ -529,17 +529,17 @@ export default function WorkflowsPage() {
       
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="border-l-4 border-primary pl-6">
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground">Workflows</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground">Pipelines</h1>
           <p className="text-foreground-secondary mt-2 text-base md:text-lg">
-            Manage and monitor your data workflows
+            Manage and monitor your data pipelines
           </p>
         </div>
-        <Button 
+        <Button
           className="shadow-corporate-lg self-start md:self-auto"
           onClick={() => setCreateModalOpen(true)}
         >
           <span className="mr-2">+</span>
-          Create New Workflow
+          Create New Pipeline
         </Button>
       </div>
 
@@ -548,7 +548,7 @@ export default function WorkflowsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-foreground-muted" />
           <Input
-            placeholder="Search workflows..."
+            placeholder="Search pipelines..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -748,10 +748,10 @@ export default function WorkflowsPage() {
       )}
 
       {/* Results Summary */}
-      {filteredWorkflows.length > 0 && (
+      {filteredPipelines.length > 0 && (
         <div className="flex items-center justify-between text-sm text-foreground-muted">
           <p>
-            Showing {startIndex + 1} to {Math.min(endIndex, totalWorkflows)} of {totalWorkflows} workflow{totalWorkflows !== 1 ? 's' : ''}
+            Showing {startIndex + 1} to {Math.min(endIndex, totalPipelines)} of {totalPipelines} pipeline{totalPipelines !== 1 ? 's' : ''}
           </p>
           {totalPages > 1 && (
             <p>
@@ -761,110 +761,110 @@ export default function WorkflowsPage() {
         </div>
       )}
 
-      {/* Workflows List */}
+      {/* Pipelines List */}
       <div className="grid gap-4">
-        {paginatedWorkflows.length === 0 ? (
+        {paginatedPipelines.length === 0 ? (
           <Card className="p-8 text-center">
             <div className="text-foreground-muted">
               {state.workflows.length === 0 ? (
                 <>
-                  <h3 className="text-lg font-medium mb-2">No workflows yet</h3>
-                  <p className="text-sm mb-4">Create your first workflow to get started</p>
+                  <h3 className="text-lg font-medium mb-2">No pipelines yet</h3>
+                  <p className="text-sm mb-4">Create your first pipeline to get started</p>
                   <Button onClick={() => setCreateModalOpen(true)}>
-                    Create New Workflow
+                    Create New Pipeline
                   </Button>
                 </>
               ) : (
                 <>
-                  <h3 className="text-lg font-medium mb-2">No workflows found</h3>
+                  <h3 className="text-lg font-medium mb-2">No pipelines found</h3>
                   <p className="text-sm">Try adjusting your search or filter criteria</p>
                 </>
               )}
             </div>
           </Card>
         ) : (
-          paginatedWorkflows.map((workflow) => {
-            const completedJobs = workflow.jobs.filter(job => job.status === 'completed').length
-            const failedJobs = workflow.jobs.filter(job => job.status === 'failed').length
-            const runningJobs = workflow.jobs.filter(job => job.status === 'running').length
-            const totalJobs = workflow.jobs.length
-            const jobSummaryParts: string[] = []
-            if (completedJobs) {
-              jobSummaryParts.push(`${completedJobs} completed`)
+          paginatedPipelines.map((pipeline) => {
+            const completedSources = pipeline.jobs.filter(source => source.status === 'completed').length
+            const failedSources = pipeline.jobs.filter(source => source.status === 'failed').length
+            const runningSources = pipeline.jobs.filter(source => source.status === 'running').length
+            const totalSources = pipeline.jobs.length
+            const sourceSummaryParts: string[] = []
+            if (completedSources) {
+              sourceSummaryParts.push(`${completedSources} completed`)
             }
-            if (runningJobs) {
-              jobSummaryParts.push(`${runningJobs} running`)
+            if (runningSources) {
+              sourceSummaryParts.push(`${runningSources} running`)
             }
-            if (failedJobs) {
-              jobSummaryParts.push(`${failedJobs} failed`)
+            if (failedSources) {
+              sourceSummaryParts.push(`${failedSources} failed`)
             }
-            const jobSummary = totalJobs === 0
-              ? 'No jobs configured yet'
-              : jobSummaryParts.length > 0
-                ? jobSummaryParts.join(' | ')
-                : 'Jobs ready | awaiting next run'
+            const sourceSummary = totalSources === 0
+              ? 'No sources configured yet'
+              : sourceSummaryParts.length > 0
+                ? sourceSummaryParts.join(' | ')
+                : 'Sources ready | awaiting next run'
 
             return (
-              <Card key={workflow.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
+              <Card key={pipeline.id} className="group hover:shadow-corporate-xl hover:border-primary-200 transition-all duration-300">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-4 mb-3">
                         <CardTitle className="text-lg text-foreground group-hover:text-primary-700 transition-colors">
-                          {workflow.name}
+                          {pipeline.name}
                         </CardTitle>
                         <div className="flex items-center gap-2">
-                          <Badge variant={getStatusVariant(workflow.status)}>
-                            {workflow.status}
+                          <Badge variant={getStatusVariant(pipeline.status)}>
+                            {pipeline.status}
                           </Badge>
-                          {workflow.status === 'running' && (
+                          {pipeline.status === 'running' && (
                             <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
                           )}
                         </div>
                       </div>
 
-                      {workflow.description && (
+                      {pipeline.description && (
                         <p className="text-sm text-foreground-muted mb-3 line-clamp-1">
-                          {workflow.description}
+                          {pipeline.description}
                         </p>
                       )}
 
                       {/* Enterprise Metadata Badges */}
                       <div className="flex items-center gap-2 flex-wrap mt-2">
-                        {workflow.environment && (
-                          <Badge variant={getEnvironmentVariant(workflow.environment)} className="text-xs font-medium">
-                            {getEnvironmentLabel(workflow.environment)}
+                        {pipeline.environment && (
+                          <Badge variant={getEnvironmentVariant(pipeline.environment)} className="text-xs font-medium">
+                            {getEnvironmentLabel(pipeline.environment)}
                           </Badge>
                         )}
-                        {workflow.priority && (
-                          <Badge variant={getPriorityVariant(workflow.priority)} className="text-xs font-medium">
-                            Priority: {workflow.priority.charAt(0).toUpperCase() + workflow.priority.slice(1)}
+                        {pipeline.priority && (
+                          <Badge variant={getPriorityVariant(pipeline.priority)} className="text-xs font-medium">
+                            Priority: {pipeline.priority.charAt(0).toUpperCase() + pipeline.priority.slice(1)}
                           </Badge>
                         )}
                         {/* SLA Status Indicator */}
-                        {workflow.priority && workflow.lastExecution && (() => {
-                          const slaStatus = calculateSLAStatus(workflow.lastExecution, workflow.priority)
+                        {pipeline.priority && pipeline.lastExecution && (() => {
+                          const slaStatus = calculateSLAStatus(pipeline.lastExecution, pipeline.priority)
                           return slaStatus.status !== 'unknown' && (
                             <Badge variant={getSLAVariant(slaStatus.status)} className="text-xs font-medium">
                               SLA: {slaStatus.message}
                             </Badge>
                           )
                         })()}
-                        {workflow.dataClassification && (
-                          <Badge variant={getDataClassificationVariant(workflow.dataClassification)} className="text-xs font-medium">
-                            Data Classification: {getDataClassificationLabel(workflow.dataClassification)}
+                        {pipeline.dataClassification && (
+                          <Badge variant={getDataClassificationVariant(pipeline.dataClassification)} className="text-xs font-medium">
+                            Data Classification: {getDataClassificationLabel(pipeline.dataClassification)}
                           </Badge>
                         )}
-                        {workflow.tags && workflow.tags.length > 0 && (
+                        {pipeline.tags && pipeline.tags.length > 0 && (
                           <>
-                            {workflow.tags.slice(0, 3).map((tag: string) => (
+                            {pipeline.tags.slice(0, 3).map((tag: string) => (
                               <Badge key={tag} variant="outline" className="text-xs">
                                 {tag}
                               </Badge>
                             ))}
-                            {workflow.tags.length > 3 && (
+                            {pipeline.tags.length > 3 && (
                               <Badge variant="outline" className="text-xs">
-                                +{workflow.tags.length - 3} more
+                                +{pipeline.tags.length - 3} more
                               </Badge>
                             )}
                           </>
@@ -880,16 +880,16 @@ export default function WorkflowsPage() {
                           </Button>
                         }
                       >
-                        <DropdownMenuItem onClick={() => handleWorkflowAction(workflow.id, 'view')}>
+                        <DropdownMenuItem onClick={() => handlePipelineAction(pipeline.id, 'view')}>
                           <Eye className="w-4 h-4" />
-                          View Workflow
+                          View Pipeline
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {(workflow.status === 'manual' || workflow.status === 'completed' || workflow.status === 'failed') && (
+                        {(pipeline.status === 'manual' || pipeline.status === 'completed' || pipeline.status === 'failed') && (
                           <DropdownMenuItem
-                            onClick={() => !isLoading(workflow.id, 'run') && handleWorkflowAction(workflow.id, 'run')}
+                            onClick={() => !isLoading(pipeline.id, 'run') && handlePipelineAction(pipeline.id, 'run')}
                           >
-                            {isLoading(workflow.id, 'run') ? (
+                            {isLoading(pipeline.id, 'run') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Play className="w-4 h-4" />
@@ -897,11 +897,11 @@ export default function WorkflowsPage() {
                             Run Now
                           </DropdownMenuItem>
                         )}
-                        {workflow.status === 'scheduled' && (
+                        {pipeline.status === 'scheduled' && (
                           <DropdownMenuItem
-                            onClick={() => !isLoading(workflow.id, 'pause') && handleWorkflowAction(workflow.id, 'pause')}
+                            onClick={() => !isLoading(pipeline.id, 'pause') && handlePipelineAction(pipeline.id, 'pause')}
                           >
-                            {isLoading(workflow.id, 'pause') ? (
+                            {isLoading(pipeline.id, 'pause') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Pause className="w-4 h-4" />
@@ -909,11 +909,11 @@ export default function WorkflowsPage() {
                             Pause Schedule
                           </DropdownMenuItem>
                         )}
-                        {workflow.status === 'paused' && (
+                        {pipeline.status === 'paused' && (
                           <DropdownMenuItem
-                            onClick={() => !isLoading(workflow.id, 'resume') && handleWorkflowAction(workflow.id, 'resume')}
+                            onClick={() => !isLoading(pipeline.id, 'resume') && handlePipelineAction(pipeline.id, 'resume')}
                           >
-                            {isLoading(workflow.id, 'resume') ? (
+                            {isLoading(pipeline.id, 'resume') ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Play className="w-4 h-4" />
@@ -924,10 +924,10 @@ export default function WorkflowsPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           destructive
-                          onClick={() => handleWorkflowAction(workflow.id, 'delete')}
+                          onClick={() => handlePipelineAction(pipeline.id, 'delete')}
                         >
                           <Trash2 className="w-4 h-4" />
-                          Delete Workflow
+                          Delete Pipeline
                         </DropdownMenuItem>
                       </DropdownMenu>
                     </div>
@@ -935,26 +935,26 @@ export default function WorkflowsPage() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   {/* Health Metrics Bar */}
-                  {workflowMetrics[workflow.id] && workflowMetrics[workflow.id].health !== 'unknown' && (
+                  {pipelineMetrics[pipeline.id] && pipelineMetrics[pipeline.id].health !== 'unknown' && (
                     <div className="mb-4 p-3 rounded-lg bg-background-secondary/40 border border-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium uppercase text-foreground-muted">Health</span>
-                            <Badge variant={getHealthVariant(workflowMetrics[workflow.id].health)} className="text-xs">
-                              {getHealthIcon(workflowMetrics[workflow.id].health)} {getHealthLabel(workflowMetrics[workflow.id].health)}
+                            <Badge variant={getHealthVariant(pipelineMetrics[pipeline.id].health)} className="text-xs">
+                              {getHealthIcon(pipelineMetrics[pipeline.id].health)} {getHealthLabel(pipelineMetrics[pipeline.id].health)}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium uppercase text-foreground-muted">Success Rate</span>
                             <span className="text-sm font-semibold text-foreground">
-                              {workflowMetrics[workflow.id].successRate.toFixed(1)}%
+                              {pipelineMetrics[pipeline.id].successRate.toFixed(1)}%
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium uppercase text-foreground-muted">Total Runs</span>
                             <span className="text-sm font-semibold text-foreground">
-                              {workflowMetrics[workflow.id].totalRuns}
+                              {pipelineMetrics[pipeline.id].totalRuns}
                             </span>
                           </div>
                         </div>
@@ -963,12 +963,12 @@ export default function WorkflowsPage() {
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full transition-all ${
-                                workflowMetrics[workflow.id].successRate >= 95 ? 'bg-green-500' :
-                                workflowMetrics[workflow.id].successRate >= 80 ? 'bg-blue-500' :
-                                workflowMetrics[workflow.id].successRate >= 60 ? 'bg-yellow-500' :
+                                pipelineMetrics[pipeline.id].successRate >= 95 ? 'bg-green-500' :
+                                pipelineMetrics[pipeline.id].successRate >= 80 ? 'bg-blue-500' :
+                                pipelineMetrics[pipeline.id].successRate >= 60 ? 'bg-yellow-500' :
                                 'bg-red-500'
                               }`}
-                              style={{ width: `${workflowMetrics[workflow.id].successRate}%` }}
+                              style={{ width: `${pipelineMetrics[pipeline.id].successRate}%` }}
                             />
                           </div>
                         </div>
@@ -979,15 +979,15 @@ export default function WorkflowsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6 text-sm border-t border-border pt-4">
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Application</span>
-                      <p className="font-semibold text-foreground mt-1">{workflow.application}</p>
+                      <p className="font-semibold text-foreground mt-1">{pipeline.application}</p>
                     </div>
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Owner</span>
-                      <p className="font-semibold text-foreground mt-1">{workflow.owner}</p>
+                      <p className="font-semibold text-foreground mt-1">{pipeline.owner}</p>
                     </div>
                     <div>
-                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Jobs</span>
-                      <p className="font-semibold text-foreground mt-1">{workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''}</p>
+                      <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Sources</span>
+                      <p className="font-semibold text-foreground mt-1">{pipeline.jobs.length} source{pipeline.jobs.length !== 1 ? 's' : ''}</p>
                     </div>
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Triggers</span>
@@ -998,7 +998,7 @@ export default function WorkflowsPage() {
                           <>
                             <Zap className="w-4 h-4 text-primary" />
                             <p className="font-semibold text-foreground">
-                              {workflowTriggers[workflow.id]?.length || 0}
+                              {pipelineTriggers[pipeline.id]?.length || 0}
                             </p>
                           </>
                         )}
@@ -1007,14 +1007,14 @@ export default function WorkflowsPage() {
                     <div>
                       <span className="text-foreground-muted text-xs uppercase tracking-wide font-medium">Next Run</span>
                       <div className="flex items-center gap-2 mt-1">
-                        {workflow.nextRun ? (
+                        {pipeline.nextRun ? (
                           <>
                             <Calendar className="w-4 h-4 text-green-600" />
                             <p className="font-semibold text-foreground text-xs">
-                              {formatDistanceToNow(workflow.nextRun, { addSuffix: true })}
+                              {formatDistanceToNow(pipeline.nextRun, { addSuffix: true })}
                             </p>
                           </>
-                        ) : workflow.status === 'dependency' ? (
+                        ) : pipeline.status === 'dependency' ? (
                           <p className="text-xs text-foreground-muted">On dependency</p>
                         ) : (
                           <p className="text-xs text-foreground-muted">Manual only</p>
@@ -1024,7 +1024,7 @@ export default function WorkflowsPage() {
                   </div>
 
                   {/* Last Execution Summary */}
-                  {workflow.lastExecution && (
+                  {pipeline.lastExecution && (
                     <details className="mt-4 rounded-lg border border-border bg-background-secondary/60 overflow-hidden">
                       <summary className="p-4 cursor-pointer list-none hover:bg-background-secondary transition-colors">
                         <div className="flex items-center justify-between">
@@ -1033,15 +1033,15 @@ export default function WorkflowsPage() {
                             <span className="text-xs font-medium uppercase text-foreground-muted">
                               Last Execution
                             </span>
-                            <Badge variant={getStatusVariant(workflow.lastExecution.status)}>
-                              {workflow.lastExecution.status}
+                            <Badge variant={getStatusVariant(pipeline.lastExecution.status)}>
+                              {pipeline.lastExecution.status}
                             </Badge>
                           </div>
                           <div className="text-xs text-foreground-muted">
-                            {workflow.lastExecution.endTime
-                              ? formatDistanceToNow(workflow.lastExecution.endTime, { addSuffix: true })
-                              : workflow.lastExecution.startTime
-                              ? `Started ${formatDistanceToNow(workflow.lastExecution.startTime, { addSuffix: true })}`
+                            {pipeline.lastExecution.endTime
+                              ? formatDistanceToNow(pipeline.lastExecution.endTime, { addSuffix: true })
+                              : pipeline.lastExecution.startTime
+                              ? `Started ${formatDistanceToNow(pipeline.lastExecution.startTime, { addSuffix: true })}`
                               : 'In progress'}
                           </div>
                         </div>
@@ -1050,23 +1050,23 @@ export default function WorkflowsPage() {
                         <div className="grid grid-cols-3 gap-4 text-xs">
                           <div>
                             <span className="text-foreground-muted">Status</span>
-                            <p className="font-semibold text-foreground mt-1">{workflow.lastExecution.status}</p>
+                            <p className="font-semibold text-foreground mt-1">{pipeline.lastExecution.status}</p>
                           </div>
                           <div>
                             <span className="text-foreground-muted">Duration</span>
                             <p className="font-semibold text-foreground mt-1">
-                              {formatDuration(workflow.lastExecution.duration)}
+                              {formatDuration(pipeline.lastExecution.duration)}
                             </p>
                           </div>
                           <div>
-                            <span className="text-foreground-muted">Jobs</span>
+                            <span className="text-foreground-muted">Sources</span>
                             <p className="font-semibold text-foreground mt-1">
-                              {workflow.lastExecution.completedJobs}/{workflow.lastExecution.totalJobs} completed
-                              {workflow.lastExecution.failedJobs > 0 && ` • ${workflow.lastExecution.failedJobs} failed`}
+                              {pipeline.lastExecution.completedJobs}/{pipeline.lastExecution.totalJobs} completed
+                              {pipeline.lastExecution.failedJobs > 0 && ` • ${pipeline.lastExecution.failedJobs} failed`}
                             </p>
                           </div>
                         </div>
-                        {workflow.lastExecution.endTime && (
+                        {pipeline.lastExecution.endTime && (
                           <div className="text-xs text-foreground-muted pt-2">
                             Finished: {new Intl.DateTimeFormat('en-US', {
                               month: 'short',
@@ -1074,7 +1074,7 @@ export default function WorkflowsPage() {
                               hour: '2-digit',
                               minute: '2-digit',
                               second: '2-digit'
-                            }).format(workflow.lastExecution.endTime)}
+                            }).format(pipeline.lastExecution.endTime)}
                           </div>
                         )}
                       </div>
@@ -1082,14 +1082,14 @@ export default function WorkflowsPage() {
                   )}
 
                   {/* No execution history */}
-                  {!workflow.lastExecution && (
+                  {!pipeline.lastExecution && (
                     <div className="mt-4 rounded-lg border border-border bg-background-secondary/60 p-4">
                       <div className="flex items-center gap-2 text-xs font-medium text-foreground-muted">
                         <Clock className="h-4 w-4 text-primary" />
                         <span className="uppercase">Last Execution</span>
                       </div>
                       <p className="mt-2 text-sm text-foreground-muted">
-                        Awaiting first run • {workflow.jobs.length} job{workflow.jobs.length !== 1 ? 's' : ''} configured
+                        Awaiting first run • {pipeline.jobs.length} source{pipeline.jobs.length !== 1 ? 's' : ''} configured
                       </p>
                     </div>
                   )}
@@ -1103,7 +1103,7 @@ export default function WorkflowsPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-xs"
-                          onClick={() => handleCloneWorkflow(workflow.id, workflow.name)}
+                          onClick={() => handleClonePipeline(pipeline.id, pipeline.name)}
                         >
                           <Copy className="w-3 h-3 mr-1" />
                           Clone
@@ -1112,7 +1112,7 @@ export default function WorkflowsPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-xs"
-                          onClick={() => handleExportWorkflow(workflow.id, workflow.name)}
+                          onClick={() => handleExportPipeline(pipeline.id, pipeline.name)}
                         >
                           <Download className="w-3 h-3 mr-1" />
                           Export
@@ -1121,7 +1121,7 @@ export default function WorkflowsPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-xs"
-                          onClick={() => handleViewLineage(workflow.id)}
+                          onClick={() => handleViewLineage(pipeline.id)}
                         >
                           <GitBranch className="w-3 h-3 mr-1" />
                           Lineage
@@ -1214,22 +1214,22 @@ export default function WorkflowsPage() {
         </div>
       )}
 
-      {/* Create Workflow Modal */}
-      <CreateWorkflowModal
+      {/* Create Pipeline Modal */}
+      <CreatePipelineModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
       />
 
       {/* Delete Confirmation Modal */}
-      {workflowToDelete && (
+      {pipelineToDelete && (
         <DeleteConfirmationModal
           open={deleteModalOpen}
           onOpenChange={setDeleteModalOpen}
           onConfirm={handleConfirmDelete}
-          title="Delete Workflow"
-          description="Are you sure you want to delete this workflow? This action cannot be undone and will permanently delete all associated jobs and execution history."
-          itemName={workflowToDelete.name}
-          itemType="workflow"
+          title="Delete Pipeline"
+          description="Are you sure you want to delete this pipeline? This action cannot be undone and will permanently delete all associated sources and execution history."
+          itemName={pipelineToDelete.name}
+          itemType="pipeline"
           isDeleting={isDeleting}
         />
       )}

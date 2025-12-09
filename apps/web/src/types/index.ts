@@ -1,5 +1,10 @@
-export * from './workflow'
+// Primary exports - new terminology
+export * from './pipeline'
 export * from './dashboard'
+
+// Legacy exports for backward compatibility
+// TODO: Remove after full migration
+export * from './workflow'
 
 export interface User {
   id: string

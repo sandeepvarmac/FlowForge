@@ -168,7 +168,7 @@ export default function MonitorPage() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Execution Monitor</h1>
           <p className="text-foreground-muted mt-1">
-            Real-time monitoring and performance analytics for all workflow executions
+            Real-time monitoring and performance analytics for all pipeline executions
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -224,7 +224,7 @@ export default function MonitorPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
                     <input
                       type="text"
-                      placeholder="Search by workflow name or execution ID..."
+                      placeholder="Search by pipeline name or execution ID..."
                       value={filters.search}
                       onChange={(e) => handleFilterChange('search', e.target.value)}
                       className="w-full pl-10 pr-4 py-2 border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
@@ -292,9 +292,9 @@ export default function MonitorPage() {
                     </div>
                   </div>
 
-                  {/* Workflow Filter */}
+                  {/* Pipeline Filter */}
                   <div>
-                    <label className="text-sm font-medium text-foreground block mb-2">Workflows</label>
+                    <label className="text-sm font-medium text-foreground block mb-2">Pipelines</label>
                     <div className="max-h-32 overflow-y-auto space-y-2">
                       {workflows.map((workflow: any) => (
                         <label key={workflow.id} className="flex items-center gap-2 cursor-pointer">
@@ -808,7 +808,7 @@ function PerformanceDashboard({ metrics, timeRange, onTimeRangeChange }: any) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5" />
-            Duration by Workflow
+            Duration by Pipeline
           </CardTitle>
         </CardHeader>
         <CardContent>

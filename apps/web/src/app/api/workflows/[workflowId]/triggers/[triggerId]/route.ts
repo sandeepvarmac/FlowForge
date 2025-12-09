@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 function mapTrigger(row: any) {
   return {
     id: row.id,
-    workflowId: row.workflow_id,
+    workflowId: row.pipeline_id,
     triggerType: row.trigger_type,
     enabled: Boolean(row.enabled),
     triggerName: row.trigger_name,
@@ -20,7 +20,7 @@ function mapTrigger(row: any) {
     nextRunAt: row.next_run_at,
     lastRunAt: row.last_run_at,
     // Dependency trigger fields
-    dependsOnWorkflowId: row.depends_on_workflow_id,
+    dependsOnWorkflowId: row.depends_on_pipeline_id,
     dependsOnWorkflowName: row.depends_on_workflow_name,
     dependencyCondition: row.dependency_condition,
     delayMinutes: row.delay_minutes,
@@ -49,9 +49,9 @@ export async function GET(
       SELECT
         t.*,
         w.name as depends_on_workflow_name
-      FROM workflow_triggers t
-      LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
-      WHERE t.id = ? AND t.workflow_id = ?
+      FROM pipeline_triggers t
+      LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
+      WHERE t.id = ? AND t.pipeline_id = ?
     `).get(triggerId, workflowId)
 
     if (!trigger) {
@@ -88,7 +88,7 @@ export async function PUT(
 
     // Check if trigger exists
     const existing = db.prepare(`
-      SELECT * FROM workflow_triggers WHERE id = ? AND workflow_id = ?
+      SELECT * FROM pipeline_triggers WHERE id = ? AND pipeline_id = ?
     `).get(triggerId, workflowId)
 
     if (!existing) {
@@ -132,7 +132,7 @@ export async function PUT(
     if (body.dependsOnWorkflowId !== undefined) {
       // Validate upstream workflow exists
       const upstreamWorkflow = db.prepare(`
-        SELECT id FROM workflows WHERE id = ?
+        SELECT id FROM pipelines WHERE id = ?
       `).get(body.dependsOnWorkflowId)
 
       if (!upstreamWorkflow) {
@@ -150,7 +150,7 @@ export async function PUT(
         )
       }
 
-      updates.push('depends_on_workflow_id = ?')
+      updates.push('depends_on_pipeline_id = ?')
       values.push(body.dependsOnWorkflowId)
     }
 
@@ -188,8 +188,8 @@ export async function PUT(
         SELECT
           t.*,
           w.name as depends_on_workflow_name
-        FROM workflow_triggers t
-        LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
+        FROM pipeline_triggers t
+        LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
         WHERE t.id = ?
       `).get(triggerId)
 
@@ -208,9 +208,9 @@ export async function PUT(
 
     // Execute update
     db.prepare(`
-      UPDATE workflow_triggers
+      UPDATE pipeline_triggers
       SET ${updates.join(', ')}
-      WHERE id = ? AND workflow_id = ?
+      WHERE id = ? AND pipeline_id = ?
     `).run(...values)
 
     // Fetch updated trigger
@@ -218,8 +218,8 @@ export async function PUT(
       SELECT
         t.*,
         w.name as depends_on_workflow_name
-      FROM workflow_triggers t
-      LEFT JOIN workflows w ON t.depends_on_workflow_id = w.id
+      FROM pipeline_triggers t
+      LEFT JOIN pipelines w ON t.depends_on_pipeline_id = w.id
       WHERE t.id = ?
     `).get(triggerId)
 
@@ -250,8 +250,8 @@ export async function DELETE(
     const db = getDatabase()
 
     const result = db.prepare(`
-      DELETE FROM workflow_triggers
-      WHERE id = ? AND workflow_id = ?
+      DELETE FROM pipeline_triggers
+      WHERE id = ? AND pipeline_id = ?
     `).run(triggerId, workflowId)
 
     if (result.changes === 0) {

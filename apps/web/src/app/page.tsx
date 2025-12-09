@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button, Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { ArrowRight, Zap, Database, GitBranch, Sparkles, Shield, BarChart3, CheckCircle2, Clock, Eye, Search } from 'lucide-react'
 import Image from 'next/image'
-import { CreateWorkflowModal } from '@/components/workflows'
+import { CreatePipelineModal } from '@/components/workflows/create-workflow-modal'
 
 export default function HomePage() {
   const router = useRouter()
@@ -119,7 +119,7 @@ export default function HomePage() {
                 className="bg-brand-gradient hover:shadow-brand-lg text-white px-8 py-6 text-lg transition-all w-full sm:w-auto"
                 onClick={() => setShowCreateModal(true)}
               >
-                Create a New Workflow
+                Create a New Pipeline
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
@@ -235,8 +235,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Create Workflow Modal */}
-      <CreateWorkflowModal
+      {/* Create Pipeline Modal */}
+      <CreatePipelineModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
       />

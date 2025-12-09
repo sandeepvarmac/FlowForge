@@ -23,7 +23,7 @@ export async function GET(
 
     // Check if trigger exists
     const trigger = db.prepare(`
-      SELECT * FROM workflow_triggers WHERE id = ? AND workflow_id = ?
+      SELECT * FROM pipeline_triggers WHERE id = ? AND pipeline_id = ?
     `).get(triggerId, workflowId)
 
     if (!trigger) {
@@ -41,7 +41,7 @@ export async function GET(
         started_at as triggered_at,
         duration_ms
       FROM executions
-      WHERE workflow_id = ?
+      WHERE pipeline_id = ?
         AND trigger_id = ?
       ORDER BY started_at DESC
       LIMIT ?

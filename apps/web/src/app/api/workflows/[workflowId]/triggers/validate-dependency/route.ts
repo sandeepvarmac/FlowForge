@@ -30,11 +30,11 @@ function hasCircularDependency(
 
   // Get all workflows that startWorkflowId depends on
   const dependencies = db.prepare(`
-    SELECT DISTINCT depends_on_workflow_id
-    FROM workflow_triggers
-    WHERE workflow_id = ?
+    SELECT DISTINCT depends_on_pipeline_id as depends_on_workflow_id
+    FROM pipeline_triggers
+    WHERE pipeline_id = ?
       AND trigger_type = 'dependency'
-      AND depends_on_workflow_id IS NOT NULL
+      AND depends_on_pipeline_id IS NOT NULL
   `).all(startWorkflowId) as any[]
 
   // Check each dependency recursively
@@ -81,7 +81,7 @@ export async function POST(
 
     // Check if workflows exist
     const workflow = db.prepare(`
-      SELECT id, name FROM workflows WHERE id = ?
+      SELECT id, name FROM pipelines WHERE id = ?
     `).get(workflowId) as any
 
     if (!workflow) {
@@ -92,7 +92,7 @@ export async function POST(
     }
 
     const upstreamWorkflow = db.prepare(`
-      SELECT id, name FROM workflows WHERE id = ?
+      SELECT id, name FROM pipelines WHERE id = ?
     `).get(dependsOnWorkflowId) as any
 
     if (!upstreamWorkflow) {
@@ -119,7 +119,7 @@ export async function POST(
     if (result.hasCircle) {
       // Get workflow names for the chain
       const chainWithNames = result.chain?.map(id => {
-        const w = db.prepare(`SELECT name FROM workflows WHERE id = ?`).get(id) as any
+        const w = db.prepare(`SELECT name FROM pipelines WHERE id = ?`).get(id) as any
         return `${w?.name || id}`
       }) || []
 

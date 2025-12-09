@@ -11,7 +11,7 @@ export interface DataAsset {
   layer: 'bronze' | 'silver' | 'gold';
   table_name: string;
   environment: 'dev' | 'qa' | 'uat' | 'prod';
-  job_id: string | null;
+  source_id: string | null;
 
   // Schema information
   schema: any; // JSON
@@ -31,8 +31,8 @@ export interface DataAsset {
   updated_at: number;
 
   // Computed fields
-  workflow_name?: string;
-  job_name?: string;
+  pipeline_name?: string;
+  source_name?: string;
   quality_score?: number;
   last_execution?: string;
 }
@@ -40,7 +40,7 @@ export interface DataAsset {
 export interface AssetFilters {
   layers?: ('bronze' | 'silver' | 'gold')[];
   environments?: ('dev' | 'qa' | 'uat' | 'prod')[];
-  workflowIds?: string[];
+  pipelineIds?: string[];
   assetTypes?: string[]; // parquet, csv, delta, etc.
   qualityStatus?: ('healthy' | 'issues' | 'no-rules')[];
   tags?: string[];
@@ -104,7 +104,7 @@ export class DataAssetsService {
     const {
       layers = [],
       environments = ['prod'], // Default to prod only
-      workflowIds = [],
+      pipelineIds = [],
       qualityStatus = [],
       tags = [],
       search = '',
@@ -128,10 +128,10 @@ export class DataAssetsService {
       params.push(...environments);
     }
 
-    // Workflow filter
-    if (workflowIds.length > 0) {
-      whereClauses.push(`w.id IN (${workflowIds.map(() => '?').join(', ')})`);
-      params.push(...workflowIds);
+    // Pipeline filter
+    if (pipelineIds.length > 0) {
+      whereClauses.push(`p.id IN (${pipelineIds.map(() => '?').join(', ')})`);
+      params.push(...pipelineIds);
     }
 
     // Search filter (table_name or description)
@@ -148,28 +148,28 @@ export class DataAssetsService {
 
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    // Main query with job and workflow joins
+    // Main query with source and pipeline joins
     const assetsQuery = `
       SELECT
         mc.*,
-        j.name as job_name,
-        w.id as workflow_id,
-        w.name as workflow_name,
+        s.name as source_name,
+        p.id as pipeline_id,
+        p.name as pipeline_name,
         (
           SELECT COUNT(*)
           FROM dq_rules
-          WHERE job_id = mc.job_id AND is_active = 1
+          WHERE source_id = mc.source_id AND is_active = 1
         ) as total_rules,
         (
-          SELECT je.started_at
-          FROM job_executions je
-          WHERE je.job_id = mc.job_id
-          ORDER BY je.started_at DESC
+          SELECT se.started_at
+          FROM source_executions se
+          WHERE se.source_id = mc.source_id
+          ORDER BY se.started_at DESC
           LIMIT 1
         ) as last_execution
       FROM metadata_catalog mc
-      LEFT JOIN jobs j ON mc.job_id = j.id
-      LEFT JOIN workflows w ON j.workflow_id = w.id
+      LEFT JOIN sources s ON mc.source_id = s.id
+      LEFT JOIN pipelines p ON s.pipeline_id = p.id
       ${whereClause}
       ORDER BY mc.updated_at DESC
       LIMIT ? OFFSET ?
@@ -216,8 +216,8 @@ export class DataAssetsService {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM metadata_catalog mc
-      LEFT JOIN jobs j ON mc.job_id = j.id
-      LEFT JOIN workflows w ON j.workflow_id = w.id
+      LEFT JOIN sources s ON mc.source_id = s.id
+      LEFT JOIN pipelines p ON s.pipeline_id = p.id
       ${whereClause}
     `;
 
@@ -236,13 +236,13 @@ export class DataAssetsService {
   }
 
   /**
-   * Return assets grouped by workflow and job for Explorer workflow view.
+   * Return assets grouped by pipeline and source for Explorer pipeline view.
    */
-  getWorkflowAssetGroups(filters: AssetFilters = {}) {
+  getPipelineAssetGroups(filters: AssetFilters = {}) {
     const {
       layers = [],
       environments = ['prod'],
-      workflowIds = [],
+      pipelineIds = [],
       qualityStatus = [],
       tags = [],
       search = '',
@@ -261,16 +261,16 @@ export class DataAssetsService {
       params.push(...environments);
     }
 
-    if (workflowIds.length > 0) {
-      whereClauses.push(`w.id IN (${workflowIds.map(() => '?').join(', ')})`);
-      params.push(...workflowIds);
+    if (pipelineIds.length > 0) {
+      whereClauses.push(`p.id IN (${pipelineIds.map(() => '?').join(', ')})`);
+      params.push(...pipelineIds);
     }
 
     if (search) {
       const like = `%${search}%`;
       whereClauses.push(`(
-        w.name LIKE ?
-        OR j.name LIKE ?
+        p.name LIKE ?
+        OR s.name LIKE ?
         OR mc.table_name LIKE ?
       )`);
       params.push(like, like, like);
@@ -280,25 +280,25 @@ export class DataAssetsService {
 
     const query = `
       SELECT
-        w.id AS workflow_id,
-        w.name AS workflow_name,
-        w.description AS workflow_description,
-        w.owner AS workflow_owner,
-        w.team AS workflow_team,
-        w.environment AS workflow_environment,
-        w.last_run AS workflow_last_run,
-        j.id AS job_id,
-        j.name AS job_name,
-        j.type AS job_type,
-        j.status AS job_status,
-        j.order_index AS job_order_index,
+        p.id AS pipeline_id,
+        p.name AS pipeline_name,
+        p.description AS pipeline_description,
+        p.owner AS pipeline_owner,
+        p.team AS pipeline_team,
+        p.environment AS pipeline_environment,
+        p.last_run AS pipeline_last_run,
+        s.id AS source_id,
+        s.name AS source_name,
+        s.type AS source_type,
+        s.status AS source_status,
+        s.order_index AS source_order_index,
         (
-          SELECT je.started_at
-          FROM job_executions je
-          WHERE je.job_id = j.id
-          ORDER BY je.started_at DESC
+          SELECT se.started_at
+          FROM source_executions se
+          WHERE se.source_id = s.id
+          ORDER BY se.started_at DESC
           LIMIT 1
-        ) AS last_job_execution,
+        ) AS last_source_execution,
         mc.id AS asset_id,
         mc.layer AS asset_layer,
         mc.table_name AS asset_table_name,
@@ -311,30 +311,31 @@ export class DataAssetsService {
         mc.parent_tables AS asset_parent_tables,
         mc.created_at AS asset_created_at,
         mc.updated_at AS asset_updated_at,
-        mc.job_id AS asset_job_id,
+        mc.source_id AS asset_source_id,
         (
           SELECT COUNT(*)
           FROM dq_rules
-          WHERE job_id = mc.job_id AND is_active = 1
+          WHERE source_id = mc.source_id AND is_active = 1
         ) AS total_rules
       FROM metadata_catalog mc
-      JOIN jobs j ON mc.job_id = j.id
-      JOIN workflows w ON j.workflow_id = w.id
+      JOIN sources s ON mc.source_id = s.id
+      JOIN pipelines p ON s.pipeline_id = p.id
       ${whereClause}
-      ORDER BY w.name, j.order_index, mc.layer
+      ORDER BY p.name, s.order_index, mc.layer
     `;
 
     const rows = this.db.prepare(query).all(...params) as any[];
 
     const grouped = new Map<string, any>();
 
+    type QualityStatus = 'healthy' | 'issues' | 'no-rules';
     const determineQualityStatus = (score: number, totalRules: number): QualityStatus => {
       if (totalRules === 0) return 'no-rules';
       return score >= 95 ? 'healthy' : 'issues';
     };
 
     rows.forEach((row) => {
-      const workflowId = row.workflow_id;
+      const pipelineId = row.pipeline_id;
       const tagsJson = row.asset_tags ? JSON.parse(row.asset_tags) : null;
 
       if (tags.length > 0) {
@@ -351,36 +352,36 @@ export class DataAssetsService {
         return;
       }
 
-      if (!grouped.has(workflowId)) {
-        grouped.set(workflowId, {
-          workflowId,
-          workflowName: row.workflow_name,
-          description: row.workflow_description,
-          owner: row.workflow_owner,
-          team: row.workflow_team,
-          environment: row.workflow_environment,
-          lastRun: row.workflow_last_run,
-          jobs: [] as any[],
+      if (!grouped.has(pipelineId)) {
+        grouped.set(pipelineId, {
+          pipelineId,
+          pipelineName: row.pipeline_name,
+          description: row.pipeline_description,
+          owner: row.pipeline_owner,
+          team: row.pipeline_team,
+          environment: row.pipeline_environment,
+          lastRun: row.pipeline_last_run,
+          sources: [] as any[],
         });
       }
 
-      const workflowGroup = grouped.get(workflowId);
+      const pipelineGroup = grouped.get(pipelineId);
 
-      let jobGroup = workflowGroup.jobs.find((job: any) => job.jobId === row.job_id);
-      if (!jobGroup) {
-        jobGroup = {
-          jobId: row.job_id,
-          jobName: row.job_name,
-          jobType: row.job_type,
-          jobStatus: row.job_status,
-          orderIndex: row.job_order_index,
-          lastExecution: row.last_job_execution,
+      let sourceGroup = pipelineGroup.sources.find((source: any) => source.sourceId === row.source_id);
+      if (!sourceGroup) {
+        sourceGroup = {
+          sourceId: row.source_id,
+          sourceName: row.source_name,
+          sourceType: row.source_type,
+          sourceStatus: row.source_status,
+          orderIndex: row.source_order_index,
+          lastExecution: row.last_source_execution,
           datasets: [] as any[],
         };
-        workflowGroup.jobs.push(jobGroup);
+        pipelineGroup.sources.push(sourceGroup);
       }
 
-      jobGroup.datasets.push({
+      sourceGroup.datasets.push({
         id: row.asset_id,
         layer: row.asset_layer,
         table_name: row.asset_table_name,
@@ -395,25 +396,32 @@ export class DataAssetsService {
         updated_at: row.asset_updated_at,
         quality_score: qualityScore,
         quality_status: qualityState,
-        job_id: row.asset_job_id,
-        job_name: row.job_name,
-        workflow_id: workflowId,
-        workflow_name: row.workflow_name,
+        source_id: row.asset_source_id,
+        source_name: row.source_name,
+        pipeline_id: pipelineId,
+        pipeline_name: row.pipeline_name,
         total_rules: row.total_rules || 0,
       });
     });
 
-    return Array.from(grouped.values()).map((workflow) => {
-      const datasetCount = workflow.jobs.reduce(
-        (acc: number, job: any) => acc + job.datasets.length,
+    return Array.from(grouped.values()).map((pipeline) => {
+      const datasetCount = pipeline.sources.reduce(
+        (acc: number, source: any) => acc + source.datasets.length,
         0
       );
       return {
-        ...workflow,
-        jobCount: workflow.jobs.length,
+        ...pipeline,
+        sourceCount: pipeline.sources.length,
         datasetCount,
       };
     });
+  }
+
+  /**
+   * Backward-compatible alias for pipeline groups used by the explorer view.
+   */
+  getWorkflowAssetGroups(filters: AssetFilters = {}) {
+    return this.getPipelineAssetGroups(filters);
   }
 
   /**
@@ -423,19 +431,19 @@ export class DataAssetsService {
     const query = `
       SELECT
         mc.*,
-        j.name as job_name,
-        w.id as workflow_id,
-        w.name as workflow_name,
+        s.name as source_name,
+        p.id as pipeline_id,
+        p.name as pipeline_name,
         (
-          SELECT je.started_at
-          FROM job_executions je
-          WHERE je.job_id = mc.job_id
-          ORDER BY je.started_at DESC
+          SELECT se.started_at
+          FROM source_executions se
+          WHERE se.source_id = mc.source_id
+          ORDER BY se.started_at DESC
           LIMIT 1
         ) as last_execution
       FROM metadata_catalog mc
-      LEFT JOIN jobs j ON mc.job_id = j.id
-      LEFT JOIN workflows w ON j.workflow_id = w.id
+      LEFT JOIN sources s ON mc.source_id = s.id
+      LEFT JOIN pipelines p ON s.pipeline_id = p.id
       WHERE mc.id = ?
     `;
 
@@ -520,45 +528,45 @@ export class DataAssetsService {
    */
   getAssetQualityRules(assetId: string) {
     const asset = this.getAssetById(assetId);
-    if (!asset || !asset.job_id) {
+    if (!asset || !asset.source_id) {
       return [];
     }
 
     const query = `
       SELECT *
       FROM dq_rules
-      WHERE job_id = ? AND is_active = 1
+      WHERE source_id = ? AND is_active = 1
       ORDER BY severity DESC, rule_type
     `;
 
-    return this.db.prepare(query).all(asset.job_id) as any[];
+    return this.db.prepare(query).all(asset.source_id) as any[];
   }
 
   /**
-   * Get recent job executions for an asset
+   * Get recent source executions for an asset
    */
   getAssetExecutions(assetId: string, limit: number = 10) {
     const asset = this.getAssetById(assetId);
-    if (!asset || !asset.job_id) {
+    if (!asset || !asset.source_id) {
       return [];
     }
 
     const query = `
       SELECT
-        je.*,
-        e.workflow_id,
-        w.name as workflow_name,
-        j.name as job_name
-      FROM job_executions je
-      JOIN executions e ON je.execution_id = e.id
-      JOIN workflows w ON e.workflow_id = w.id
-      JOIN jobs j ON je.job_id = j.id
-      WHERE je.job_id = ?
-      ORDER BY je.started_at DESC
+        se.*,
+        e.pipeline_id,
+        p.name as pipeline_name,
+        s.name as source_name
+      FROM source_executions se
+      JOIN executions e ON se.execution_id = e.id
+      JOIN pipelines p ON e.pipeline_id = p.id
+      JOIN sources s ON se.source_id = s.id
+      WHERE se.source_id = ?
+      ORDER BY se.started_at DESC
       LIMIT ?
     `;
 
-    return this.db.prepare(query).all(asset.job_id, limit) as any[];
+    return this.db.prepare(query).all(asset.source_id, limit) as any[];
   }
 
   /**
@@ -690,34 +698,41 @@ export class DataAssetsService {
   }
 
   /**
-   * Get all workflows for filter dropdown
+   * Get all pipelines for filter dropdown
    */
-  getWorkflows() {
+  getPipelines() {
     const query = `
-      SELECT DISTINCT w.id, w.name
-      FROM workflows w
-      JOIN jobs j ON w.id = j.workflow_id
-      JOIN metadata_catalog mc ON j.id = mc.job_id
-      ORDER BY w.name
+      SELECT DISTINCT p.id, p.name
+      FROM pipelines p
+      JOIN sources s ON p.id = s.pipeline_id
+      JOIN metadata_catalog mc ON s.id = mc.source_id
+      ORDER BY p.name
     `;
 
     return this.db.prepare(query).all() as { id: string; name: string }[];
   }
 
   /**
+   * Backward-compatible alias for pipeline dropdowns
+   */
+  getWorkflows() {
+    return this.getPipelines();
+  }
+
+  /**
    * Private helper: Calculate quality score for an asset
    */
   private calculateQualityScore(assetId: string): number {
-    const asset = this.db.prepare('SELECT job_id FROM metadata_catalog WHERE id = ?').get(assetId) as any;
+    const asset = this.db.prepare('SELECT source_id FROM metadata_catalog WHERE id = ?').get(assetId) as any;
 
-    if (!asset || !asset.job_id) {
+    if (!asset || !asset.source_id) {
       return 0;
     }
 
     // Get all active rules
     const totalRules = this.db.prepare(
-      'SELECT COUNT(*) as count FROM dq_rules WHERE job_id = ? AND is_active = 1'
-    ).get(asset.job_id) as any;
+      'SELECT COUNT(*) as count FROM dq_rules WHERE source_id = ? AND is_active = 1'
+    ).get(asset.source_id) as any;
 
     if (totalRules.count === 0) {
       return 0; // No rules = no score

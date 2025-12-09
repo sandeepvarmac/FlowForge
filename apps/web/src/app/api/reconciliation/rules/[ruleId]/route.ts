@@ -18,7 +18,7 @@ export async function GET(
         r.*,
         w.name as workflow_name
       FROM reconciliation_rules r
-      LEFT JOIN workflows w ON r.workflow_id = w.id
+      LEFT JOIN pipelines w ON r.pipeline_id = w.id
       WHERE r.id = ?
     `).get(ruleId)
 

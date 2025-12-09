@@ -56,12 +56,12 @@ export async function POST(
         t.delay_minutes,
         w.name as workflow_name,
         upstream.name as upstream_workflow_name
-      FROM workflow_triggers t
-      JOIN workflows w ON t.workflow_id = w.id
-      JOIN workflows upstream ON t.depends_on_workflow_id = upstream.id
+      FROM pipeline_triggers t
+      JOIN pipelines w ON t.pipeline_id = w.id
+      JOIN pipelines upstream ON t.depends_on_pipeline_id = upstream.id
       WHERE t.trigger_type = 'dependency'
         AND t.enabled = 1
-        AND t.depends_on_workflow_id = ?
+        AND t.depends_on_pipeline_id = ?
     `).all(workflowId) as any[]
 
     if (dependencyTriggers.length === 0) {
@@ -122,7 +122,7 @@ export async function POST(
 
         // Get the downstream workflow details
         const downstreamWorkflow = db.prepare(`
-          SELECT * FROM workflows WHERE id = ?
+          SELECT * FROM pipelines WHERE id = ?
         `).get(trigger.workflow_id) as any
 
         if (!downstreamWorkflow) {

@@ -20,7 +20,7 @@ export async function GET(
         w.business_unit,
         w.tags as workflow_tags
       FROM executions e
-      JOIN workflows w ON e.workflow_id = w.id
+      JOIN pipelines w ON e.pipeline_id = w.id
       WHERE e.id = ?
     `
     const execution = db.prepare(executionQuery).get(executionId)
