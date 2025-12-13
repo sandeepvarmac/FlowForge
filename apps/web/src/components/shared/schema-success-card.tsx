@@ -32,6 +32,9 @@ interface SchemaSuccessCardProps {
   onClear?: () => void
   expandInline?: boolean // If true, show expandable details inline instead of modal
   previewData?: any[] // Optional preview data for inline display
+  // Column exclusion props (for parity with Storage Connection)
+  excludedColumns?: string[]
+  onExcludedColumnsChange?: (excludedColumns: string[]) => void
 }
 
 export function SchemaSuccessCard({
@@ -45,7 +48,9 @@ export function SchemaSuccessCard({
   onViewDetails,
   onClear,
   expandInline = false,
-  previewData
+  previewData,
+  excludedColumns = [],
+  onExcludedColumnsChange
 }: SchemaSuccessCardProps) {
   const [isExpanded, setIsExpanded] = React.useState(false)
   const formatSize = (bytes: number) => {
@@ -189,42 +194,86 @@ export function SchemaSuccessCard({
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-64 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="bg-background-secondary/50">
+            <thead className="bg-background-secondary/50 sticky top-0">
               <tr>
-                <th className="text-left p-3 font-semibold">#</th>
-                <th className="text-left p-3 font-semibold">Column Name</th>
-                <th className="text-left p-3 font-semibold">Data Type</th>
-                <th className="text-left p-3 font-semibold">Sample Value</th>
-                <th className="text-left p-3 font-semibold">Data Quality</th>
+                {onExcludedColumnsChange && (
+                  <th className="text-left p-2 font-semibold text-foreground-muted w-16">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={excludedColumns.length === 0}
+                        onChange={(e) => {
+                          const allColumns = schema.map(c => getColumnName(c))
+                          onExcludedColumnsChange(e.target.checked ? [] : allColumns)
+                        }}
+                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                      />
+                      <span>Include</span>
+                    </div>
+                  </th>
+                )}
+                <th className="text-left p-2 font-semibold text-foreground-muted">#</th>
+                <th className="text-left p-2 font-semibold text-foreground-muted">Column Name</th>
+                <th className="text-left p-2 font-semibold text-foreground-muted">Data Type</th>
+                <th className="text-left p-2 font-semibold text-foreground-muted">Sample Value</th>
+                <th className="text-left p-2 font-semibold text-foreground-muted">Nullable</th>
               </tr>
             </thead>
             <tbody>
               {schema.map((col, index) => {
                 const colName = getColumnName(col)
-                const isPrimaryKey = colName.toLowerCase().includes('_id') || colName.toLowerCase() === 'id'
-                const isRequired = col.is_nullable === false
+                const colType = getDataType(col).toLowerCase()
+                const isExcluded = excludedColumns.includes(colName)
+                const isNullable = col.is_nullable !== false
 
                 return (
-                  <tr key={index} className="border-t hover:bg-background-secondary/50">
-                    <td className="p-3 text-foreground-muted">{index + 1}</td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {isPrimaryKey && <Key className="w-3 h-3 text-amber-600" title="Likely Primary Key" />}
-                        <span className="font-mono text-xs">{colName}</span>
-                      </div>
+                  <tr key={index} className={`border-t hover:bg-background-secondary/50 transition-colors ${isExcluded ? 'opacity-50 bg-gray-50' : ''}`}>
+                    {onExcludedColumnsChange && (
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={!isExcluded}
+                          onChange={(e) => {
+                            const newExcluded = e.target.checked
+                              ? excludedColumns.filter(c => c !== colName)
+                              : [...excludedColumns, colName]
+                            onExcludedColumnsChange(newExcluded)
+                          }}
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                      </td>
+                    )}
+                    <td className="p-2 text-foreground-muted font-mono text-xs">{index + 1}</td>
+                    <td className="p-2">
+                      <div className="font-medium text-foreground font-mono text-xs">{colName}</div>
                     </td>
-                    <td className="p-3">
-                      <Badge variant="outline" className="text-xs font-mono">
+                    <td className="p-2">
+                      <Badge
+                        variant="secondary"
+                        className={`text-xs ${
+                          colType.includes('int') || colType === 'integer' || colType === 'bigint' ? 'bg-blue-100 text-blue-800' :
+                          colType.includes('float') || colType.includes('decimal') || colType.includes('numeric') || colType === 'real' || colType === 'money' ? 'bg-green-100 text-green-800' :
+                          colType.includes('date') || colType.includes('time') ? 'bg-purple-100 text-purple-800' :
+                          colType === 'bit' || colType === 'boolean' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}
+                      >
                         {getDataType(col)}
                       </Badge>
                     </td>
-                    <td className="p-3 text-xs text-foreground-muted max-w-[200px] truncate">
-                      {col.sample || '-'}
+                    <td className="p-2 max-w-xs">
+                      <div className="truncate font-mono text-xs bg-gray-50 px-2 py-1 rounded border">
+                        {col.sample || '—'}
+                      </div>
                     </td>
-                    <td className="p-3">
-                      <span className="text-xs text-green-700">✓ {rowCount || 0} filled</span>
+                    <td className="p-2">
+                      {isNullable ? (
+                        <span className="text-amber-600 text-xs">Yes</span>
+                      ) : (
+                        <span className="text-green-600 text-xs">No</span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -276,35 +325,6 @@ export function SchemaSuccessCard({
         </div>
       )}
 
-      {/* AI-Detected Schema Intelligence */}
-      <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="w-4 h-4 text-blue-600" />
-          <h4 className="font-semibold text-sm text-blue-900">AI-Detected Schema Intelligence</h4>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <div className="text-xl font-bold text-blue-700">{schema.length}</div>
-            <div className="text-xs text-blue-600 font-medium">Columns Detected</div>
-          </div>
-          <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <div className="text-xl font-bold text-blue-700">{rowCount || 0}</div>
-            <div className="text-xs text-blue-600 font-medium">Sample Rows</div>
-          </div>
-          <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <div className="text-xl font-bold text-green-700">{typedColumns}</div>
-            <div className="text-xs text-green-600 font-medium">Typed Columns</div>
-          </div>
-          <div className="bg-white rounded-lg p-3 border border-blue-200">
-            <div className="text-xl font-bold text-purple-700">{specialTypes}</div>
-            <div className="text-xs text-purple-600 font-medium">Special Types</div>
-          </div>
-        </div>
-        <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
-          Table names have been auto-generated based on your source. You can customize them in the next step.
-        </p>
-      </div>
     </div>
   )
 }

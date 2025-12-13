@@ -49,12 +49,12 @@ export function useJobActions() {
     }
   }
 
-  const uploadFile = async (workflowId: string, jobId: string, file: File) => {
+  const uploadFile = async (workflowId: string, jobId: string, file: File, sourceName?: string) => {
     try {
       setLoading(`upload-${jobId}`)
       setError(null)
 
-      const result = await WorkflowService.uploadFile(workflowId, jobId, file)
+      const result = await WorkflowService.uploadFile(workflowId, jobId, file, sourceName)
       return result
 
     } catch (err) {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase } from '@/lib/db'
-import { listFiles } from '@/lib/storage'
+import { listFiles, generateLandingKey } from '@/lib/storage'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import path from 'path'
+import fs from 'fs'
 
 const PREFECT_API_URL = (process.env.PREFECT_API_URL || 'http://127.0.0.1:4200/api').replace(/\/$/, '')
 const WORKER_LOCALHOST_ALIAS = process.env.WORKER_LOCALHOST_ALIAS || 'host.docker.internal'
@@ -77,10 +80,10 @@ async function triggerPrefectRun(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
-    const { workflowId } = params
+    const { workflowId } = await params
     const db = getDatabase()
 
     const workflow = db.prepare(`
@@ -114,7 +117,7 @@ export async function POST(
     const startTime = new Date().toISOString()
 
     db.prepare(`
-      INSERT INTO executions (id, workflow_id, status, started_at, created_at, updated_at)
+      INSERT INTO executions (id, pipeline_id, status, started_at, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(executionId, workflowId, 'running', startTime, startTime, startTime)
 
@@ -134,6 +137,7 @@ export async function POST(
       const enrichedSourceConfig = enrichConnectionCredentials(rawSourceConfig, db)
       const sourceConfig = normalizeSourceConfigForWorker(enrichedSourceConfig)
       const transformationConfig = typeof job.transformation_config === 'string' ? JSON.parse(job.transformation_config) : job.transformation_config
+      const destinationConfig = typeof job.destination_config === 'string' ? JSON.parse(job.destination_config) : job.destination_config
       const fileConfig = sourceConfig?.fileConfig || {}
       const uploadMode = fileConfig.uploadMode || 'single'
       const prefectConfig = sourceConfig?.prefect ?? {}
@@ -171,18 +175,11 @@ export async function POST(
             file_options: null,
             primary_keys: primaryKeys,
             source_config: sourceConfig,
-            destination_config: {
-              bronzeConfig: {
-                tableName: `${workflow.slug}_${job.slug}_bronze`,
-                storageFormat: 'parquet',
-                loadStrategy: 'append',
-                auditColumns: true,
-                compression: 'snappy'
-              }
-            },
+            destination_config: destinationConfig,
             batch_id: batchId,
             execution_id: sourceExecutionId,
             source_type: 'database',
+            environment: workflowEnvironment,
           })
 
           console.log(`✅ Database ingestion flow run created: ${prefectRun.id}`)
@@ -254,11 +251,29 @@ export async function POST(
           }
         } else {
           let landingKey = sourceConfig?.landingKey
+
+          // Check if this is a Storage Connection source that needs file copy
+          if (!landingKey && fileConfig.storageConnectionId && fileConfig.filePath) {
+            console.log(`📂 Storage Connection source detected - copying file to landing zone`)
+            landingKey = await copyStorageConnectionFileToLanding(
+              fileConfig.storageConnectionId,
+              fileConfig.filePath,
+              job.name,
+              db
+            )
+
+            if (!landingKey) {
+              throw new Error(`Failed to copy file from storage connection for job ${job.name}. Check the storage connection configuration.`)
+            }
+          }
+
+          // If still no landing key, try to resolve from existing files
           if (!landingKey) {
             landingKey = await resolveLandingKey(
               workflowId,
               job.id,
-              fileConfig.filePath
+              fileConfig.filePath,
+              job.name  // Pass job name for new path pattern
             )
           }
 
@@ -281,7 +296,10 @@ export async function POST(
             primary_keys: primaryKeys,
             column_mappings: columnMappings,
             has_header: hasHeader,
-            flow_run_id: null  // Will be set by Prefect
+            flow_run_id: null,  // Will be set by Prefect
+            environment: workflowEnvironment,
+            destination_config: destinationConfig,  // Pass layer configurations
+            execution_id: sourceExecutionId,  // Pass execution ID for completion callback
           })
 
           flowRuns.push(prefectRun.id)
@@ -418,10 +436,34 @@ function enrichConnectionCredentials(config: any, db: ReturnType<typeof getDatab
   return cloned
 }
 
-async function resolveLandingKey(workflowId: string, jobId: string, originalFilePath?: string) {
-  const prefix = `landing/${workflowId}/${jobId}/`
+async function resolveLandingKey(workflowId: string, jobId: string, originalFilePath?: string, jobName?: string) {
+  // Try new path pattern first: landing/{source_name}/...
+  if (jobName) {
+    const sourceName = jobName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
+    const newPrefix = `landing/${sourceName}/`
+    try {
+      const files = await listFiles(newPrefix)
+      if (files?.length) {
+        const sorted = files
+          .filter(file => file.key && !file.key.endsWith('/'))
+          .sort(
+            (a, b) =>
+              new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+          )
+        if (sorted.length) {
+          console.log(`✅ Found landing file with new path pattern: ${sorted[0].key}`)
+          return sorted[0].key
+        }
+      }
+    } catch (error) {
+      console.warn('No files found with new path pattern, trying legacy...')
+    }
+  }
+
+  // Fallback to legacy path pattern: landing/{workflowId}/{jobId}/...
+  const legacyPrefix = `landing/${workflowId}/${jobId}/`
   try {
-    const files = await listFiles(prefix)
+    const files = await listFiles(legacyPrefix)
     if (files?.length) {
       const sorted = files
         .filter(file => file.key && !file.key.endsWith('/'))
@@ -430,6 +472,7 @@ async function resolveLandingKey(workflowId: string, jobId: string, originalFile
             new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
         )
       if (sorted.length) {
+        console.log(`✅ Found landing file with legacy path pattern: ${sorted[0].key}`)
         return sorted[0].key
       }
     }
@@ -438,8 +481,155 @@ async function resolveLandingKey(workflowId: string, jobId: string, originalFile
   }
 
   const fallbackName = extractFileName(originalFilePath)
-  if (fallbackName) {
-    return `landing/${workflowId}/${jobId}/${fallbackName}`
+  if (fallbackName && jobName) {
+    const sourceName = jobName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
+    return `landing/${sourceName}/${fallbackName}`
   }
   return null
+}
+
+/**
+ * Copy file from Storage Connection to MinIO landing zone
+ * Supports local file system and S3/MinIO storage connections
+ */
+async function copyStorageConnectionFileToLanding(
+  storageConnectionId: string,
+  filePath: string,
+  sourceName: string,
+  db: ReturnType<typeof getDatabase>
+): Promise<string | null> {
+  console.log(`📦 Copying file from Storage Connection: ${storageConnectionId}`)
+  console.log(`   File path: ${filePath}`)
+  console.log(`   Source name: ${sourceName}`)
+
+  const sanitizeSourceName = (name: string) =>
+    name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
+
+  // Fetch storage connection config
+  const connectionRow = db.prepare('SELECT * FROM storage_connections WHERE id = ?').get(storageConnectionId) as any
+  if (!connectionRow) {
+    console.error(`❌ Storage connection not found: ${storageConnectionId}`)
+    return null
+  }
+
+  const connectionConfig = JSON.parse(connectionRow.config)
+  const connectionType = connectionRow.type
+  console.log(`   Connection type: ${connectionType}`)
+
+  // Get filename from path
+  const fileName = path.basename(filePath.replace(/\\/g, '/'))
+  const sanitizedSourceName = sanitizeSourceName(sourceName)
+
+  // If a matching landing file already exists, reuse the latest one instead of copying again
+  try {
+    const existing = await listFiles(`landing/${sanitizedSourceName}/`)
+    const matching = existing
+      .filter(file => file.key && file.key.endsWith(`/${fileName}`))
+      .sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
+    if (matching.length > 0) {
+      console.log(`   \u0192o. Reusing existing landing file: ${matching[0].key}`)
+      return matching[0].key
+    }
+  } catch (err) {
+    console.warn('   ??  Could not list landing files to check for reuse:', err)
+  }
+
+  // Generate landing key using the standard pattern
+  const landingKey = generateLandingKey(sourceName, fileName)
+
+  // Initialize S3 client for MinIO upload
+  const rawEndpoint = process.env.S3_ENDPOINT_URL || 'http://localhost:9000'
+  const endpointUrl = (() => {
+    try {
+      const parsed = new URL(rawEndpoint)
+      if (parsed.hostname === 'localhost' || parsed.hostname === '::1') {
+        parsed.hostname = '127.0.0.1'
+      }
+      return parsed.toString()
+    } catch {
+      return rawEndpoint
+    }
+  })()
+
+  const s3Client = new S3Client({
+    endpoint: endpointUrl,
+    region: 'us-east-1',
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID || 'prefect',
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || 'prefect123',
+    },
+    forcePathStyle: true,
+  })
+
+  const bucketName = process.env.S3_BUCKET_NAME || 'flowforge-data'
+
+  try {
+    let fileContent: Buffer
+
+    if (connectionType === 'local') {
+      // Read from local file system
+      const fullPath = path.join(connectionConfig.basePath, filePath)
+      console.log(`   Reading local file: ${fullPath}`)
+
+      if (!fs.existsSync(fullPath)) {
+        console.error(`❌ Local file not found: ${fullPath}`)
+        return null
+      }
+
+      fileContent = fs.readFileSync(fullPath)
+      console.log(`   ✅ Read ${fileContent.length} bytes from local file`)
+
+    } else if (connectionType === 's3') {
+      // Read from S3/MinIO storage connection
+      console.log(`   Reading S3 file from bucket: ${connectionConfig.bucket}`)
+
+      const { S3Client: SourceS3Client, GetObjectCommand } = await import('@aws-sdk/client-s3')
+
+      const sourceS3Client = new SourceS3Client({
+        endpoint: connectionConfig.endpointUrl,
+        region: connectionConfig.region || 'us-east-1',
+        credentials: {
+          accessKeyId: connectionConfig.accessKeyId,
+          secretAccessKey: connectionConfig.secretAccessKey,
+        },
+        forcePathStyle: true,
+      })
+
+      const getCommand = new GetObjectCommand({
+        Bucket: connectionConfig.bucket,
+        Key: filePath,
+      })
+
+      const response = await sourceS3Client.send(getCommand)
+      const chunks: Uint8Array[] = []
+      for await (const chunk of response.Body as any) {
+        chunks.push(chunk)
+      }
+      fileContent = Buffer.concat(chunks)
+      console.log(`   ✅ Read ${fileContent.length} bytes from S3`)
+
+    } else {
+      console.error(`❌ Unsupported storage connection type: ${connectionType}`)
+      return null
+    }
+
+    // Upload to MinIO landing zone
+    console.log(`   📤 Uploading to MinIO: ${landingKey}`)
+
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: landingKey,
+        Body: fileContent,
+        ContentType: 'application/octet-stream',
+      })
+    )
+
+    console.log(`   ✅ File copied to landing zone: ${landingKey}`)
+    return landingKey
+
+  } catch (error) {
+    console.error(`❌ Failed to copy file from storage connection:`, error)
+    return null
+  }
 }

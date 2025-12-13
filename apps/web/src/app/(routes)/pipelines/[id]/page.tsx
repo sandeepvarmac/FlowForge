@@ -1252,7 +1252,8 @@ export default function PipelineDetailPage() {
             await updateJob(workflowId, editingJob.id, jobData)
             if (file) {
               // If a new file is uploaded, replace the existing one
-              await uploadFile(workflowId, editingJob.id, file)
+              // Pass source name for timestamp-based landing path
+              await uploadFile(workflowId, editingJob.id, file, jobData.name)
               setTimeout(() => {
                 loadLandingFiles()
               }, 500)
@@ -1266,7 +1267,8 @@ export default function PipelineDetailPage() {
             // Create new job
             const newJob = await createJob(workflowId, jobData)
             if (file && newJob?.id) {
-              await uploadFile(workflowId, newJob.id, file)
+              // Pass source name for timestamp-based landing path
+              await uploadFile(workflowId, newJob.id, file, jobData.name)
               // Refresh landing files after upload with a small delay to ensure file is written
               setTimeout(() => {
                 loadLandingFiles()

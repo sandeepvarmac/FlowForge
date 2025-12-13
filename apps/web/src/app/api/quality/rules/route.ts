@@ -11,7 +11,8 @@ import { v4 as uuidv4 } from 'uuid'
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
-    const jobId = searchParams.get('job_id')
+    // Accept both the new "source_id" and legacy "job_id" param for backward compatibility
+    const sourceId = searchParams.get('source_id') || searchParams.get('job_id')
     const includeInactive = searchParams.get('include_inactive') === 'true'
 
     const db = getDb()
@@ -19,9 +20,9 @@ export async function GET(request: NextRequest) {
     let query = 'SELECT * FROM dq_rules WHERE 1=1'
     const params: any[] = []
 
-    if (jobId) {
-      query += ' AND job_id = ?'
-      params.push(jobId)
+    if (sourceId) {
+      query += ' AND source_id = ?'
+      params.push(sourceId)
     }
 
     if (!includeInactive) {
@@ -54,9 +55,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const rawBody = await request.text()
+    let body: any = {}
+    try {
+      body = rawBody ? JSON.parse(rawBody) : {}
+    } catch (parseError: any) {
+      console.error('Failed to parse quality rule request body:', rawBody, parseError?.message)
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON payload' },
+        { status: 400 }
+      )
+    }
     const {
+      // Legacy: job_id, Current: source_id
       job_id,
+      source_id,
       rule_id,
       rule_name,
       column_name,
@@ -69,12 +82,15 @@ export async function POST(request: NextRequest) {
       severity
     } = body
 
+    const resolvedSourceId = source_id || job_id
+
     // Validation
-    if (!job_id || !rule_id || !rule_name || !column_name || !rule_type || !severity) {
+    if (!resolvedSourceId || !rule_id || !rule_name || !column_name || !rule_type || !severity) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Missing required fields: job_id, rule_id, rule_name, column_name, rule_type, severity'
+          error:
+            'Missing required fields: source_id (or job_id), rule_id, rule_name, column_name, rule_type, severity'
         },
         { status: 400 }
       )
@@ -103,18 +119,27 @@ export async function POST(request: NextRequest) {
     // Insert quality rule
     db.prepare(`
       INSERT INTO dq_rules (
-        id, job_id, rule_id, rule_name, column_name, rule_type, parameters,
+        id, source_id, rule_id, rule_name, column_name, rule_type, parameters,
         confidence, current_compliance, reasoning, ai_generated,
         severity, is_active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
-      job_id,
+      resolvedSourceId,
       rule_id,
       rule_name,
       column_name,
       rule_type,
-      parameters ? JSON.stringify(parameters) : null,
+      (() => {
+        if (!parameters) return null
+        // Accept both object and stringified JSON
+        if (typeof parameters === 'string') return parameters
+        try {
+          return JSON.stringify(parameters)
+        } catch {
+          return null
+        }
+      })(),
       confidence || 0,
       current_compliance || null,
       reasoning || null,
@@ -136,7 +161,7 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error: any) {
-    console.error('Failed to create quality rule:', error)
+    console.error('Failed to create quality rule:', error?.message || error, error?.stack)
 
     if (error.message?.includes('UNIQUE constraint')) {
       return NextResponse.json(
@@ -146,7 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, error: 'Failed to create quality rule' },
+      { success: false, error: error?.message || 'Failed to create quality rule' },
       { status: 500 }
     )
   }

@@ -80,7 +80,8 @@ class QualityRuleExecutor:
                     "error_message": str(e),
                     "records_checked": 0,
                     "records_passed": 0,
-                    "records_failed": 0
+                    "records_failed": 0,
+                    "pass_percentage": 0.0
                 })
                 results["failed_rules"] += 1
 

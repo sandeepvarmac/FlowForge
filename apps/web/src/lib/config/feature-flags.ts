@@ -25,6 +25,8 @@ export interface FeatureFlags {
   showStreamingSource: boolean      // Show Streaming source type (Coming Soon)
   showAPISource: boolean            // Show API source type (Coming Soon)
   showNoSQLSource: boolean          // Show NoSQL source type (Coming Soon)
+  showSilverComingSoon: boolean     // Show Silver layer Coming Soon cards (PII, Performance, etc.)
+  showGoldComingSoon: boolean       // Show Gold layer Coming Soon cards (Aggregation, Denormalization, etc.)
 
   // Advanced Features
   showGoldAnalytics: boolean        // Show Gold Analytics source type
@@ -79,6 +81,12 @@ function getFeatureFlags(): FeatureFlags {
     showNoSQLSource: demoMode
       ? false
       : parseBool(process.env.NEXT_PUBLIC_SHOW_NOSQL_SOURCE, showComingSoon),
+    showSilverComingSoon: demoMode
+      ? false
+      : parseBool(process.env.NEXT_PUBLIC_SHOW_SILVER_COMING_SOON, false), // Default hidden for cleaner demo
+    showGoldComingSoon: demoMode
+      ? false
+      : parseBool(process.env.NEXT_PUBLIC_SHOW_GOLD_COMING_SOON, false), // Default hidden for cleaner demo
 
     // Advanced Features - these are implemented, so default to true
     showGoldAnalytics: parseBool(process.env.NEXT_PUBLIC_SHOW_GOLD_ANALYTICS, true),

@@ -7,7 +7,7 @@ import tempfile
 import polars as pl
 from prefect import task, get_run_logger
 
-from utils.parquet_utils import add_audit_columns, read_csv, read_parquet, write_parquet
+from utils.parquet_utils import add_audit_columns, read_csv, write_parquet
 from utils.s3 import S3Client
 from utils.slugify import slugify, generate_run_id
 from utils.metadata_catalog import catalog_bronze_asset, update_job_execution_metrics
@@ -74,40 +74,23 @@ def _build_bronze_key(
     job_slug: str,
     run_id: str,
     source_filename: str,
-    sequence: int = 1,
-    load_strategy: str = "versioned",
-    custom_table_name: str | None = None,
+    sequence: int = 1
 ) -> tuple[str, str]:
     """
     Return (filename, s3_key) for the bronze layer object.
 
-    Load strategies:
-    - "versioned" (default) and "append": create a versioned file with run_id (consistent with database bronze)
-      Pattern: bronze/{tableName}/{yyyymmdd}/{tableName}_{runId}_v{sequence}.parquet
-    - "overwrite": use a fixed _current file
-      Pattern: bronze/{tableName}/{yyyymmdd}/{tableName}_current.parquet
+    Pattern: bronze/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}_{jobSlug}_{runId}_v{sequence}.parquet
 
     Human-friendly naming:
-    - Uses user-configured table name if provided (e.g., "loan_payments_bronze")
-    - Falls back to workflow_slug_job_slug pattern
+    - Single underscores instead of double
+    - No redundant "__bronze" suffix (layer is in path)
     - Clean version numbering: v001, v002, etc.
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
     source_stem = Path(source_filename).stem
 
-    # Use custom table name if provided, otherwise use workflow_slug_job_slug
-    base_name = custom_table_name if custom_table_name else f"{workflow_slug}_{job_slug}"
-    # Also use for folder structure (align with database bronze)
-    folder_name = base_name
-
-    if load_strategy == "overwrite":
-        # Fixed filename for overwrite mode
-        filename = f"{base_name}_current.parquet"
-    else:
-        # Versioned filename for versioned/append modes
-        filename = f"{base_name}_{run_id}_v{sequence:03d}.parquet"
-
-    s3_key = f"bronze/{folder_name}/{date_folder}/{filename}"
+    filename = f"{workflow_slug}_{job_slug}_{run_id}_v{sequence:03d}.parquet"
+    s3_key = f"bronze/{workflow_slug}/{job_slug}/{date_folder}/{filename}"
 
     return filename, s3_key
 
@@ -126,8 +109,6 @@ def bronze_ingest(
     column_mappings: list[dict] | None = None,
     has_header: bool = True,
     infer_schema_length: int | None = None,
-    environment: str = "prod",
-    destination_config: dict | None = None,
 ) -> dict:
     """Convert a landing file into a Bronze Parquet dataset.
 
@@ -146,7 +127,6 @@ def bronze_ingest(
             [{"sourceColumn": "Column_0", "targetColumn": "customer_id", "dataType": "integer"}, ...]
         has_header: Whether the CSV file has a header row (default: True) - CSV only
         infer_schema_length: Optional inference window for CSV schema - CSV only
-        destination_config: Layer configuration including bronzeConfig with loadStrategy
 
     Returns:
         Dictionary describing the created Bronze artifact.
@@ -154,25 +134,11 @@ def bronze_ingest(
     logger = get_run_logger()
     s3 = S3Client()
 
-    # Extract bronze config
-    bronze_config = destination_config.get("bronzeConfig", {}) if destination_config else {}
-    load_strategy = bronze_config.get("loadStrategy", "versioned")
-    load_mode = bronze_config.get("loadMode", "versioned")
-    custom_table_name = bronze_config.get("tableName")
-
-    # Normalize: if loadMode is set, use it; otherwise fall back to loadStrategy
-    # "overwrite" mode means replace file, "append" means add to existing
-    effective_strategy = load_mode if load_mode in ("append", "overwrite") else load_strategy
-
-    logger.info(f"Bronze config: loadStrategy={load_strategy}, loadMode={load_mode}, effective={effective_strategy}, tableName={custom_table_name}")
-
     source_filename = Path(landing_key).name
     bronze_filename, bronze_key = _build_bronze_key(
-        workflow_slug, job_slug, run_id, source_filename, sequence=1,
-        load_strategy=effective_strategy,
-        custom_table_name=custom_table_name,
+        workflow_slug, job_slug, run_id, source_filename, sequence=1
     )
-    logger.info("Starting Bronze ingest for %s (strategy: %s, table: %s)", landing_key, effective_strategy, custom_table_name or "auto")
+    logger.info("Starting Bronze ingest for %s", landing_key)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_dir_path = Path(tmp_dir)
@@ -218,18 +184,6 @@ def bronze_ingest(
 
         df = add_audit_columns(df, source_file=Path(landing_key).name)
 
-        # Handle append strategy: load existing data and concatenate
-        if effective_strategy == "append" and s3.object_exists(bronze_key):
-            logger.info(f"Append mode: Loading existing Bronze data from {bronze_key}")
-            existing_parquet = tmp_dir_path / "existing.parquet"
-            s3.download_file(bronze_key, existing_parquet)
-            existing_df = read_parquet(existing_parquet)
-            logger.info(f"Existing Bronze data: {existing_df.height} rows")
-
-            # Concatenate existing + new data
-            df = pl.concat([existing_df, df], how="diagonal")
-            logger.info(f"After append: {df.height} total rows")
-
         # Persist to Parquet locally and upload to MinIO
         local_parquet = tmp_dir_path / bronze_filename
         write_parquet(df, local_parquet)
@@ -239,8 +193,6 @@ def bronze_ingest(
 
     # Write metadata to catalog
     try:
-        # Use user-configured table name from destination_config if provided
-        custom_table_name = bronze_config.get("tableName") if bronze_config else None
         asset_id = catalog_bronze_asset(
             source_id=job_id,  # job_id is actually the source ID
             workflow_slug=workflow_slug,
@@ -248,10 +200,9 @@ def bronze_ingest(
             s3_key=bronze_key,
             row_count=df.height,
             dataframe=df,
-            environment=environment,
-            custom_table_name=custom_table_name,
+            environment="prod",
         )
-        logger.info(f"✅ Bronze metadata cataloged: {asset_id} (table: {custom_table_name or 'auto-generated'})")
+        logger.info(f"✅ Bronze metadata cataloged: {asset_id}")
     except Exception as e:
         logger.warning(f"⚠️ Failed to catalog bronze metadata: {e}")
 
@@ -270,7 +221,7 @@ def bronze_ingest(
     try:
         logger.info("🤖 Running AI Quality Profiler...")
         profiler = AIQualityProfiler()
-        table_name = custom_table_name or f"{workflow_slug}_{job_slug}"
+        table_name = f"{workflow_slug}_{job_slug}"
         profiling_result = profiler.profile_dataframe(df, table_name)
 
         logger.info(f"✅ AI Profiling complete:")
@@ -299,5 +250,4 @@ def bronze_ingest(
         "records": df.height,
         "columns": df.columns,
         "landing_key": landing_key,
-        "environment": environment,
     }

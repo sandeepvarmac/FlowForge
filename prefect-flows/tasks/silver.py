@@ -64,13 +64,13 @@ def _save_rule_execution(job_id: str, execution_data: dict, logger):
 
     try:
         payload = {
-            "rule_id": execution_data["rule_id"],
+            "rule_id": execution_data.get("rule_id"),
             "job_execution_id": job_id,  # Using job_id as execution_id for now
-            "status": execution_data["status"],
-            "records_checked": execution_data["records_checked"],
-            "records_passed": execution_data["records_passed"],
-            "records_failed": execution_data["records_failed"],
-            "pass_percentage": execution_data["pass_percentage"],
+            "status": execution_data.get("status", "failed"),
+            "records_checked": execution_data.get("records_checked", 0),
+            "records_passed": execution_data.get("records_passed", 0),
+            "records_failed": execution_data.get("records_failed", 0),
+            "pass_percentage": execution_data.get("pass_percentage", 0.0),
             "failed_records_sample": json.dumps(execution_data.get("failed_records_sample", [])),
             "error_message": execution_data.get("error_message"),
         }
@@ -156,7 +156,7 @@ def _execute_quality_rules(job_id: str, df: pl.DataFrame, logger) -> dict:
             "id": rule["id"],
             "rule_id": rule.get("rule_id", rule["id"]),
             "rule_name": rule.get("rule_name", "Unknown Rule"),
-            "column": rule["column_name"],
+            "column_name": rule["column_name"],
             "rule_type": rule["rule_type"],
             "parameters": parameters,
             "severity": rule.get("severity", "error"),
@@ -188,28 +188,43 @@ def _build_silver_keys(
     workflow_slug: str,
     job_slug: str,
     run_id: str,
+    merge_strategy: str = "versioned",
+    custom_table_name: str | None = None,
 ) -> tuple[str, str, str]:
     """
     Return (current_filename, current_key, archive_key) for the silver layer.
 
-    Pattern:
-      - Current: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/{workflowSlug}_{jobSlug}_{runId}.parquet
-      - Archive: silver/{workflowSlug}/{jobSlug}/{yyyymmdd}/archive/{timestamp}_v{sequence}.parquet
+    Merge strategies:
+    - "versioned" (default): Include run_id for unique versioned files
+      Pattern: silver/{tableName}/{yyyymmdd}/{tableName}_{runId}.parquet
+    - "merge" or "replace": Use fixed filename for merge/replace operations
+      Pattern: silver/{tableName}/{yyyymmdd}/{tableName}_current.parquet
 
     Human-friendly naming:
-    - Single underscores instead of double
-    - No redundant "__silver" or "__current" suffix (current version is the main file)
+    - Uses user-configured table name if provided (e.g., "loan_payments_silver")
+    - Falls back to workflow_slug_job_slug pattern
     - Clean version numbering in archive
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
-    current_filename = f"{workflow_slug}_{job_slug}_{run_id}.parquet"
-    current_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/{current_filename}"
+    # Use custom table name if provided, otherwise use workflow_slug_job_slug
+    base_name = custom_table_name if custom_table_name else f"{workflow_slug}_{job_slug}"
+    # Also use for folder structure
+    folder_name = custom_table_name if custom_table_name else f"{workflow_slug}/{job_slug}"
+
+    if merge_strategy in ("merge", "replace"):
+        # Fixed filename for merge/replace - enables actual merge behavior
+        current_filename = f"{base_name}_current.parquet"
+    else:
+        # Versioned filename (default) - each run creates a new file
+        current_filename = f"{base_name}_{run_id}.parquet"
+
+    current_key = f"silver/{folder_name}/{date_folder}/{current_filename}"
 
     # Archive: we'll determine version dynamically, for now use v001
     archive_filename = f"{timestamp}_v001.parquet"
-    archive_key = f"silver/{workflow_slug}/{job_slug}/{date_folder}/archive/{archive_filename}"
+    archive_key = f"silver/{folder_name}/{date_folder}/archive/{archive_filename}"
 
     return current_filename, current_key, archive_key
 
@@ -219,6 +234,8 @@ def silver_transform(
     bronze_result: dict,
     *,
     primary_keys: list[str] | None = None,
+    silver_config: dict | None = None,
+    destination_config: dict | None = None,
 ) -> dict:
     """Transform Bronze data into the Silver layer."""
     logger = get_run_logger()
@@ -230,10 +247,22 @@ def silver_transform(
     job_slug = bronze_result["job_slug"]
     run_id = bronze_result["run_id"]
     bronze_key = bronze_result["bronze_key"]
+    environment = bronze_result.get("environment", "prod")
 
-    current_filename, current_key, archive_key = _build_silver_keys(workflow_slug, job_slug, run_id)
+    # Extract silver config
+    silver_config = silver_config or {}
+    destination_config = destination_config or {}
+    merge_strategy = silver_config.get("mergeStrategy", "versioned")
+    custom_table_name = silver_config.get("tableName")
 
-    logger.info("Transforming Bronze dataset %s to Silver", bronze_key)
+    logger.info(f"Silver config: mergeStrategy={merge_strategy}, tableName={custom_table_name}")
+
+    current_filename, current_key, archive_key = _build_silver_keys(
+        workflow_slug, job_slug, run_id, merge_strategy=merge_strategy,
+        custom_table_name=custom_table_name,
+    )
+
+    logger.info("Transforming Bronze dataset %s to Silver (table: %s)", bronze_key, custom_table_name or "auto")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
@@ -278,6 +307,36 @@ def silver_transform(
             import traceback
             logger.warning(traceback.format_exc())
 
+        # Handle merge strategy: load existing Silver data and merge on primary key
+        if merge_strategy == "merge" and s3.object_exists(current_key):
+            logger.info(f"Merge mode: Loading existing Silver data from {current_key}")
+            existing_silver = tmp_path / "existing_silver.parquet"
+            s3.download_file(current_key, existing_silver)
+            existing_df = read_parquet(existing_silver)
+            logger.info(f"Existing Silver data: {existing_df.height} rows")
+
+            if primary_keys:
+                # Merge: Update existing records by primary key, add new records
+                # Remove _sk_id from existing data before merge (will be regenerated)
+                if "_sk_id" in existing_df.columns:
+                    existing_df = existing_df.drop("_sk_id")
+
+                # Use anti-join to find records in existing that are NOT in new data
+                # Then concatenate with new data (new data takes precedence)
+                existing_only = existing_df.join(
+                    df.select(primary_keys),
+                    on=primary_keys,
+                    how="anti"
+                )
+                df = pl.concat([existing_only, df], how="diagonal")
+                logger.info(f"After merge: {df.height} total rows (existing not in new: {existing_only.height}, new: {df.height - existing_only.height})")
+            else:
+                # No primary key - just append (same as append mode)
+                if "_sk_id" in existing_df.columns:
+                    existing_df = existing_df.drop("_sk_id")
+                df = pl.concat([existing_df, df], how="diagonal")
+                logger.info(f"After merge (no PK, appending): {df.height} total rows")
+
         df = add_surrogate_key(df, key_column="_sk_id", start=1)
 
         local_silver = tmp_path / "current.parquet"
@@ -296,18 +355,24 @@ def silver_transform(
 
     # Write metadata to catalog
     try:
-        parent_bronze_table = f"{workflow_slug}_{job_slug}_bronze"
+        # Get user-configured table names from silver_config
+        custom_silver_table = silver_config.get("tableName") if silver_config else None
+        # Get parent bronze table name from bronze config (passed through bronze_result or use auto-generated)
+        bronze_config = destination_config.get("bronzeConfig", {}) if destination_config else {}
+        parent_bronze_table = bronze_config.get("tableName") or f"{job_slug}_bronze"
+
         asset_id = catalog_silver_asset(
-            job_id=job_id,
+            source_id=job_id,  # job_id is actually the source ID
             workflow_slug=workflow_slug,
-            job_slug=job_slug,
+            source_slug=job_slug,
             s3_key=current_key,
             row_count=df.height,
             dataframe=df,
             parent_bronze_table=parent_bronze_table,
-            environment="prod",
+            environment=environment,
+            custom_table_name=custom_silver_table,
         )
-        logger.info(f"✅ Silver metadata cataloged: {asset_id}")
+        logger.info(f"✅ Silver metadata cataloged: {asset_id} (table: {custom_silver_table or 'auto-generated'})")
     except Exception as e:
         logger.warning(f"⚠️ Failed to catalog silver metadata: {e}")
 
@@ -337,4 +402,5 @@ def silver_transform(
         "records": df.height,
         "columns": df.columns,
         "bronze_key": bronze_key,
+        "environment": environment,
     }

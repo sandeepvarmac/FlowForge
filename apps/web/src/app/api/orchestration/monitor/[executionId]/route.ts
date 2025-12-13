@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { executionId: string } }
+  { params }: { params: Promise<{ executionId: string }> }
 ) {
   try {
-    const { executionId } = params
+    const { executionId } = await params
     const db = getDatabase()
 
     // Get execution details
@@ -32,18 +32,18 @@ export async function GET(
       )
     }
 
-    // Get job executions with job details
+    // Get source executions with source details
     const jobExecutionsQuery = `
       SELECT
-        je.*,
-        j.name as job_name,
-        j.type as job_type,
-        j.order_index,
-        j.description as job_description
-      FROM job_executions je
-      JOIN jobs j ON je.job_id = j.id
-      WHERE je.execution_id = ?
-      ORDER BY j.order_index ASC
+        se.*,
+        s.name as job_name,
+        s.type as job_type,
+        s.order_index,
+        s.description as job_description
+      FROM source_executions se
+      JOIN sources s ON se.source_id = s.id
+      WHERE se.execution_id = ?
+      ORDER BY s.order_index ASC
     `
     const jobExecutions = db.prepare(jobExecutionsQuery).all(executionId)
 

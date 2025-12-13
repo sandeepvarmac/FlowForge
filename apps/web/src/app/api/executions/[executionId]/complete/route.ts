@@ -20,10 +20,10 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { executionId: string } }
+  { params }: { params: Promise<{ executionId: string }> }
 ) {
   try {
-    const { executionId } = params
+    const { executionId } = await params
     const body = await request.json()
     const db = getDatabase()
 
@@ -45,6 +45,36 @@ export async function POST(
     }
 
     console.log(`Processing execution completion: ${executionId}, workflow: ${workflowId}, status: ${status}`)
+
+    // Update the execution status in the database
+    const now = Date.now()
+    const execution = db.prepare(`SELECT * FROM executions WHERE id = ?`).get(executionId) as any
+
+    if (execution) {
+      const startedAt = execution.started_at || execution.created_at
+      const durationMs = startedAt ? now - startedAt : null
+
+      db.prepare(`
+        UPDATE executions
+        SET status = ?, completed_at = ?, duration_ms = ?, updated_at = ?
+        WHERE id = ?
+      `).run(status, now, durationMs, now, executionId)
+
+      console.log(`Updated execution ${executionId} status to ${status}`)
+
+      // Also update any source_executions that are still 'running' for this execution
+      const sourceExecResult = db.prepare(`
+        UPDATE source_executions
+        SET status = ?, completed_at = ?, updated_at = ?
+        WHERE execution_id = ? AND status = 'running'
+      `).run(status, new Date(now).toISOString(), new Date(now).toISOString(), executionId)
+
+      if (sourceExecResult.changes > 0) {
+        console.log(`Updated ${sourceExecResult.changes} source_executions to ${status}`)
+      }
+    } else {
+      console.warn(`Execution ${executionId} not found in database`)
+    }
 
     // Find all enabled dependency triggers that depend on this workflow
     const dependencyTriggers = db.prepare(`

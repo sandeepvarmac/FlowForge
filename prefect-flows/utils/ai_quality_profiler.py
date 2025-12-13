@@ -168,6 +168,31 @@ class AIQualityProfiler:
         # Prepare prompt for the model
         prompt = self._build_ai_prompt(table_name, profile, sample_data)
 
+        # Try primary provider first
+        result = self._call_ai_provider(prompt, logger)
+
+        # If Anthropic is unavailable due to credits, switch to OpenAI and retry once
+        if result.get("_disable_anthropic"):
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key:
+                from openai import OpenAI
+                self.provider = "openai"
+                self.client = OpenAI(api_key=openai_key)
+                self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+                logger.info("Anthropic unavailable (credits); retrying with OpenAI provider...")
+                result = self._call_ai_provider(prompt, logger)
+
+        # If primary provider failed and we have a fallback, try it
+        if result.get("error") and self.provider == "anthropic":
+            openai_key = os.getenv("OPENAI_API_KEY")
+            if openai_key:
+                logger.info("Anthropic failed, attempting OpenAI fallback...")
+                result = self._call_openai_fallback(prompt, openai_key, logger)
+
+        return result
+
+    def _call_ai_provider(self, prompt: str, logger) -> Dict[str, Any]:
+        """Call the configured AI provider"""
         try:
             logger.info(f"Calling {self.provider.upper()} ({self.model}) for quality rule suggestions...")
 
@@ -199,13 +224,62 @@ class AIQualityProfiler:
             return suggestions
 
         except Exception as e:
-            logger.error(f"AI analysis failed ({self.provider}): {str(e)}")
+            message = str(e)
+
+            if self.provider == "anthropic" and "credit balance" in message.lower():
+                logger.warning("AI analysis failed (anthropic credits unavailable); will fallback to OpenAI if configured.")
+                return {
+                    "quality_rules": [],
+                    "primary_key_recommendation": None,
+                    "join_key_recommendations": [],
+                    "error": message,
+                    "_provider": self.provider,
+                    "_disable_anthropic": True
+                }
+
+            logger.warning(f"AI analysis failed ({self.provider}): {message}")
             return {
                 "quality_rules": [],
                 "primary_key_recommendation": None,
                 "join_key_recommendations": [],
-                "error": str(e),
+                "error": message,
                 "_provider": self.provider
+            }
+
+    def _call_openai_fallback(self, prompt: str, api_key: str, logger) -> Dict[str, Any]:
+        """Fallback to OpenAI when Anthropic fails"""
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+            logger.info(f"Calling OPENAI fallback ({model}) for quality rule suggestions...")
+
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=4096,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            response_text = response.choices[0].message.content if response.choices else ""
+
+            logger.info(f"AI response received ({len(response_text)} chars) from OpenAI fallback")
+
+            # Extract JSON from response
+            suggestions = self._parse_ai_response(response_text)
+            suggestions["_provider"] = "openai_fallback"
+
+            return suggestions
+
+        except Exception as e:
+            logger.error(f"OpenAI fallback also failed: {str(e)}")
+            return {
+                "quality_rules": [],
+                "primary_key_recommendation": None,
+                "join_key_recommendations": [],
+                "error": f"Both Anthropic and OpenAI failed. OpenAI error: {str(e)}",
+                "_provider": "openai_fallback"
             }
 
     def _build_ai_prompt(

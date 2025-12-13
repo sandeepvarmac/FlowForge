@@ -48,14 +48,14 @@ export function JobActionsMenu({
           className="h-8 w-8 p-0"
         >
           <MoreVertical className="h-4 w-4" />
-          <span className="sr-only">Open job actions menu</span>
+          <span className="sr-only">Open source actions menu</span>
         </Button>
       }
     >
       {onEdit && (
         <DropdownMenuItem onClick={onEdit}>
           <Edit className="w-4 h-4" />
-          <span>Edit Job</span>
+          <span>Edit Source</span>
         </DropdownMenuItem>
       )}
       {onRun && (
@@ -67,7 +67,7 @@ export function JobActionsMenu({
       {onClone && (
         <DropdownMenuItem onClick={onClone}>
           <Copy className="w-4 h-4" />
-          <span>Clone Job</span>
+          <span>Clone Source</span>
         </DropdownMenuItem>
       )}
       {(onEdit || onRun || onClone) && onDelete && (
@@ -79,7 +79,7 @@ export function JobActionsMenu({
           destructive
         >
           <Trash2 className="w-4 h-4" />
-          <span>Delete Job</span>
+          <span>Delete Source</span>
         </DropdownMenuItem>
       )}
     </DropdownMenu>

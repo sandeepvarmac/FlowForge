@@ -30,7 +30,8 @@ def ingest_from_database(
     source_config: Dict[str, Any],
     destination_config: Optional[Dict[str, Any]],
     batch_id: str,
-    execution_id: Optional[str] = None
+    execution_id: Optional[str] = None,
+    environment: str = "prod"
 ) -> Dict[str, Any]:
     """
     Ingest data from database to Bronze layer Parquet files
@@ -148,10 +149,10 @@ def ingest_from_database(
             print(f"   Added 5 audit columns")
 
         # Prepare output path
-        bronze_table_name = bronze_config.get('tableName') or f"{workflow_slug}_{job_slug}_bronze"
+        bronze_table_name = bronze_config.get('tableName') or table_name or f"{workflow_slug}_{job_slug}_bronze"
         date_folder = datetime.utcnow().strftime("%Y%m%d")
-        output_filename = bronze_config.get('fileName') or f"{workflow_slug}_{job_slug}_{run_id}_v001.parquet"
-        s3_key = bronze_config.get('s3Key') or f"bronze/{workflow_slug}/{job_slug}/{date_folder}/{output_filename}"
+        output_filename = bronze_config.get('fileName') or f"{bronze_table_name}_{run_id}_v001.parquet"
+        s3_key = bronze_config.get('s3Key') or f"bronze/{bronze_table_name}/{date_folder}/{output_filename}"
 
         # Write to Parquet locally first
         print(f"\n4. Writing to Parquet...")
@@ -219,6 +220,7 @@ def ingest_from_database(
             ],
             "compression": compression,
             "table_name": bronze_table_name,
+            "environment": environment,
         }
 
         if watermark_value:
@@ -230,13 +232,14 @@ def ingest_from_database(
         # Catalog dataset in FlowForge metadata store
         try:
             asset_id = catalog_bronze_asset(
-                job_id=job_id,
+                source_id=job_id,  # job_id is actually the source ID
                 workflow_slug=workflow_slug,
-                job_slug=job_slug,
+                source_slug=job_slug,
                 s3_key=s3_key,
                 row_count=row_count,
                 dataframe=df_polars,
-                environment=os.getenv("FLOWFORGE_ENVIRONMENT", "prod"),
+                environment=environment,
+                custom_table_name=bronze_table_name,
             )
             print(f"   Cataloged bronze asset: {asset_id}")
         except Exception as e:

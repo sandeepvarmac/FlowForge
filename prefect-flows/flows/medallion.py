@@ -53,6 +53,7 @@ def medallion_pipeline(
     source_config: Optional[dict] = None,
     destination_config: Optional[dict] = None,
     batch_id: Optional[str] = None,
+    environment: str = "prod",
 ) -> dict:
     """Execute the Bronze → Silver → Gold pipeline with human-readable S3 keys.
 
@@ -85,10 +86,11 @@ def medallion_pipeline(
     run_id = generate_run_id(flow_run_id)
 
     logger.info(
-        "Starting medallion pipeline for workflow=%s job=%s source_type=%s (slugs: %s/%s, run: %s, execution: %s)",
+        "Starting medallion pipeline for workflow=%s job=%s source_type=%s environment=%s (slugs: %s/%s, run: %s, execution: %s)",
         workflow_id,
         job_id,
         source_type,
+        environment,
         workflow_slug,
         job_slug,
         run_id,
@@ -113,6 +115,7 @@ def medallion_pipeline(
                 destination_config=destination_config,
                 batch_id=batch_id or run_id,
                 execution_id=execution_id,
+                environment=environment,
             )
         else:
             logger.info("File job detected - using bronze_ingest task")
@@ -127,10 +130,31 @@ def medallion_pipeline(
                 file_options=file_options,
                 column_mappings=column_mappings,
                 has_header=has_header,
+                environment=environment,
+                destination_config=destination_config,
             )
 
-        silver_result = silver_transform(bronze_result, primary_keys=primary_keys)
-        gold_result = gold_publish(silver_result)
+        # Extract layer-specific configs
+        bronze_config = destination_config.get("bronzeConfig", {}) if destination_config else {}
+        silver_config = destination_config.get("silverConfig", {}) if destination_config else {}
+        gold_config = destination_config.get("goldConfig", {}) if destination_config else {}
+
+        # Pass silver config with primary key from config if not explicitly provided
+        effective_primary_keys = primary_keys
+        if not effective_primary_keys and silver_config.get("primaryKey"):
+            effective_primary_keys = [silver_config["primaryKey"]]
+
+        silver_result = silver_transform(
+            bronze_result,
+            primary_keys=effective_primary_keys,
+            silver_config=silver_config,
+            destination_config=destination_config,
+        )
+        gold_result = gold_publish(
+            silver_result,
+            gold_config=gold_config,
+            destination_config=destination_config,
+        )
 
         result = {
             "bronze": bronze_result,

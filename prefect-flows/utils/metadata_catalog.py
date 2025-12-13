@@ -59,6 +59,24 @@ def get_database_connection() -> sqlite3.Connection:
     return conn
 
 
+def normalize_environment(env: str) -> str:
+    """
+    Normalize environment values to match database constraint.
+
+    UI sends: development, qa, uat, production
+    DB expects: dev, qa, uat, prod
+    """
+    env_mapping = {
+        'development': 'dev',
+        'production': 'prod',
+        'dev': 'dev',
+        'qa': 'qa',
+        'uat': 'uat',
+        'prod': 'prod',
+    }
+    return env_mapping.get(env.lower(), 'dev')
+
+
 def generate_asset_id(layer: str, workflow_slug: str, job_slug: str) -> str:
     """Generate a unique asset ID for the metadata catalog."""
     timestamp_ms = int(datetime.now().timestamp() * 1000)
@@ -132,7 +150,7 @@ def get_schema_from_dataframe(df: Any) -> List[Dict[str, Any]]:
 def upsert_metadata_catalog_entry(
     layer: str,
     table_name: str,
-    job_id: str,
+    source_id: str,
     file_path: str,
     schema: List[Dict[str, Any]],
     row_count: int,
@@ -149,7 +167,7 @@ def upsert_metadata_catalog_entry(
     Args:
         layer: bronze, silver, or gold
         table_name: Human-readable table name
-        job_id: Job ID that created this asset
+        source_id: Source ID that created this asset
         file_path: S3 path to the file
         schema: List of column definitions
         row_count: Number of rows in the dataset
@@ -185,7 +203,7 @@ def upsert_metadata_catalog_entry(
             cursor.execute(
                 """
                 UPDATE metadata_catalog
-                SET job_id = ?,
+                SET source_id = ?,
                     table_name = ?,
                     schema = ?,
                     row_count = ?,
@@ -199,7 +217,7 @@ def upsert_metadata_catalog_entry(
                 WHERE id = ?
                 """,
                 (
-                    job_id,
+                    source_id,
                     table_name,
                     json.dumps(schema),
                     row_count,
@@ -215,13 +233,13 @@ def upsert_metadata_catalog_entry(
             )
         else:
             # Create new entry
-            asset_id = generate_asset_id(layer, table_name, job_id)
+            asset_id = generate_asset_id(layer, table_name, source_id)
             logger.info(f"Creating new {layer} catalog entry: {asset_id}")
 
             cursor.execute(
                 """
                 INSERT INTO metadata_catalog (
-                    id, layer, table_name, job_id, environment,
+                    id, layer, table_name, source_id, environment,
                     schema, row_count, file_size, file_path,
                     parent_tables, description, tags, owner,
                     created_at, updated_at
@@ -231,7 +249,7 @@ def upsert_metadata_catalog_entry(
                     asset_id,
                     layer,
                     table_name,
-                    job_id,
+                    source_id,
                     environment,
                     json.dumps(schema),
                     row_count,
@@ -259,132 +277,141 @@ def upsert_metadata_catalog_entry(
 
 
 def catalog_bronze_asset(
-    job_id: str,
+    source_id: str,
     workflow_slug: str,
-    job_slug: str,
+    source_slug: str,
     s3_key: str,
     row_count: int,
     dataframe: Any,
     environment: str = "prod",
+    custom_table_name: Optional[str] = None,
 ) -> str:
     """
     Convenience function to catalog a Bronze layer asset.
 
     Args:
-        job_id: Job ID
+        source_id: Source ID
         workflow_slug: Workflow slug
-        job_slug: Job slug
+        source_slug: Source slug
         s3_key: S3 key for the file
         row_count: Number of rows
         dataframe: Polars DataFrame to extract schema from
         environment: Environment
+        custom_table_name: User-configured table name from UI (e.g., "loan_payments_bronze")
 
     Returns:
         Asset ID
     """
-    table_name = f"{workflow_slug}_{job_slug}_bronze"
+    # Use custom table name if provided, otherwise generate from source_slug
+    table_name = custom_table_name if custom_table_name else f"{source_slug}_bronze"
     schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(
         layer="bronze",
         table_name=table_name,
-        job_id=job_id,
+        source_id=source_id,
         file_path=f"s3://flowforge-data/{s3_key}",
         schema=schema,
         row_count=row_count,
         file_size=file_size,
         parent_tables=None,  # Bronze has no parents
-        environment=environment,
-        description=f"Bronze layer for {job_slug}",
+        environment=normalize_environment(environment),
+        description=f"Bronze layer for {source_slug}",
     )
 
 
 def catalog_silver_asset(
-    job_id: str,
+    source_id: str,
     workflow_slug: str,
-    job_slug: str,
+    source_slug: str,
     s3_key: str,
     row_count: int,
     dataframe: Any,
     parent_bronze_table: str,
     environment: str = "prod",
+    custom_table_name: Optional[str] = None,
 ) -> str:
     """
     Convenience function to catalog a Silver layer asset.
 
     Args:
-        job_id: Job ID
+        source_id: Source ID
         workflow_slug: Workflow slug
-        job_slug: Job slug
+        source_slug: Source slug
         s3_key: S3 key for the file
         row_count: Number of rows
         dataframe: Polars DataFrame to extract schema from
         parent_bronze_table: Name of the parent Bronze table
         environment: Environment
+        custom_table_name: User-configured table name from UI (e.g., "loan_payments_silver")
 
     Returns:
         Asset ID
     """
-    table_name = f"{workflow_slug}_{job_slug}_silver"
+    # Use custom table name if provided, otherwise generate from source_slug
+    table_name = custom_table_name if custom_table_name else f"{source_slug}_silver"
     schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(
         layer="silver",
         table_name=table_name,
-        job_id=job_id,
+        source_id=source_id,
         file_path=f"s3://flowforge-data/{s3_key}",
         schema=schema,
         row_count=row_count,
         file_size=file_size,
         parent_tables=[parent_bronze_table],
-        environment=environment,
-        description=f"Silver layer for {job_slug}",
+        environment=normalize_environment(environment),
+        description=f"Silver layer for {source_slug}",
     )
 
 
 def catalog_gold_asset(
-    job_id: str,
+    source_id: str,
     workflow_slug: str,
-    job_slug: str,
+    source_slug: str,
     s3_key: str,
     row_count: int,
     dataframe: Any,
     parent_silver_table: str,
     environment: str = "prod",
+    custom_table_name: Optional[str] = None,
 ) -> str:
     """
     Convenience function to catalog a Gold layer asset.
 
     Args:
-        job_id: Job ID
+        source_id: Source ID
         workflow_slug: Workflow slug
-        job_slug: Job slug
+        source_slug: Source slug
         s3_key: S3 key for the file
         row_count: Number of rows
         dataframe: Polars DataFrame to extract schema from
         parent_silver_table: Name of the parent Silver table
         environment: Environment
+        custom_table_name: User-configured table name from UI (e.g., "loan_payments_gold")
 
     Returns:
         Asset ID
     """
-    table_name = f"{workflow_slug}_{job_slug}_gold"
+    # Use custom table name if provided, otherwise generate from source_slug
+    table_name = custom_table_name if custom_table_name else f"{source_slug}_gold"
     schema = get_schema_from_dataframe(dataframe)
     file_size = get_file_size_from_s3(s3_key)
 
     return upsert_metadata_catalog_entry(
         layer="gold",
         table_name=table_name,
-        job_id=job_id,
+        source_id=source_id,
         file_path=f"s3://flowforge-data/{s3_key}",
         schema=schema,
         row_count=row_count,
         file_size=file_size,
         parent_tables=[parent_silver_table],
-        environment=environment,
-        description=f"Gold layer for {job_slug}",
+        environment=normalize_environment(environment),
+        description=f"Gold layer for {source_slug}",
     )
 
 
@@ -396,13 +423,13 @@ def update_job_execution_metrics(
     quarantined_records: Optional[int] = None,
 ) -> None:
     """
-    Update record counts for a job execution in the database.
+    Update record counts for a source execution in the database.
 
-    This function finds the most recent job_execution for the given job_id
+    This function finds the most recent source_execution for the given source_id (job_id)
     and updates the bronze_records, silver_records, gold_records, and/or quarantined_records columns.
 
     Args:
-        job_id: Job ID
+        job_id: Source ID (job_id parameter name kept for backward compatibility)
         bronze_records: Number of bronze records (optional)
         silver_records: Number of silver records (optional)
         gold_records: Number of gold records (optional)
@@ -413,11 +440,11 @@ def update_job_execution_metrics(
     cursor = conn.cursor()
 
     try:
-        # Find the most recent job_execution for this job_id
+        # Find the most recent source_execution for this source_id
         cursor.execute(
             """
-            SELECT id FROM job_executions
-            WHERE job_id = ?
+            SELECT id FROM source_executions
+            WHERE source_id = ?
             ORDER BY created_at DESC
             LIMIT 1
             """,
@@ -426,10 +453,10 @@ def update_job_execution_metrics(
         result = cursor.fetchone()
 
         if not result:
-            logger.warning(f"No job_execution found for job_id={job_id}")
+            logger.warning(f"No source_execution found for source_id={job_id}")
             return
 
-        job_execution_id = result[0]
+        source_execution_id = result[0]
 
         # Build UPDATE query dynamically based on which metrics are provided
         updates = []
@@ -459,19 +486,19 @@ def update_job_execution_metrics(
         updates.append("updated_at = ?")
         params.append(datetime.now().isoformat())
 
-        # Add job_execution_id to params
-        params.append(job_execution_id)
+        # Add source_execution_id to params
+        params.append(source_execution_id)
 
         # Execute UPDATE
-        query = f"UPDATE job_executions SET {', '.join(updates)} WHERE id = ?"
+        query = f"UPDATE source_executions SET {', '.join(updates)} WHERE id = ?"
         cursor.execute(query, params)
         conn.commit()
 
-        logger.info(f"✅ Updated job_execution metrics for job_id={job_id}: bronze={bronze_records}, silver={silver_records}, gold={gold_records}")
+        logger.info(f"✅ Updated source_execution metrics for source_id={job_id}: bronze={bronze_records}, silver={silver_records}, gold={gold_records}")
 
     except Exception as e:
         conn.rollback()
-        logger.error(f"❌ Failed to update job_execution metrics: {e}")
+        logger.error(f"❌ Failed to update source_execution metrics: {e}")
         raise
     finally:
         conn.close()

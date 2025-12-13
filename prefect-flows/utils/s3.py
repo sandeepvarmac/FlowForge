@@ -172,3 +172,37 @@ class S3Client:
             if e.response['Error']['Code'] == '404':
                 return False
             raise
+
+    def copy_file(self, source_key: str, dest_key: str) -> str:
+        """Copy an object within the same bucket.
+
+        Args:
+            source_key: Source S3 object key
+            dest_key: Destination S3 object key
+
+        Returns:
+            S3 URI of copied file
+        """
+        try:
+            copy_source = {'Bucket': self.bucket, 'Key': source_key}
+            self.s3_client.copy_object(
+                CopySource=copy_source,
+                Bucket=self.bucket,
+                Key=dest_key
+            )
+
+            s3_uri = f"s3://{self.bucket}/{dest_key}"
+            logger.info(f"Copied s3://{self.bucket}/{source_key} -> {s3_uri}")
+            return s3_uri
+
+        except ClientError as e:
+            logger.error(f"Failed to copy {source_key} to {dest_key}: {e}")
+            raise
+
+    def delete_file(self, s3_key: str) -> None:
+        """Delete an object from S3/MinIO (alias for delete_object).
+
+        Args:
+            s3_key: S3 object key to delete
+        """
+        self.delete_object(s3_key)

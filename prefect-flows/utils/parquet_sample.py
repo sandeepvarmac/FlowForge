@@ -44,7 +44,20 @@ def get_sample_data(s3_key: str, limit: int = 100) -> Dict[str, Any]:
         df = pl.read_parquet(local_file, n_rows=limit)
 
         # Convert to list of dictionaries for JSON serialization
-        rows = df.to_dicts()
+        rows = []
+        for row in df.to_dicts():
+            cleaned = {}
+            for key, value in row.items():
+                # Handle datetime/date types from Polars
+                if hasattr(value, "isoformat"):
+                    cleaned[key] = value.isoformat()
+                # Leave simple types as-is
+                elif isinstance(value, (int, float, str, bool)) or value is None:
+                    cleaned[key] = value
+                else:
+                    # Fallback to string to keep JSON serializable
+                    cleaned[key] = str(value)
+            rows.append(cleaned)
 
         # Get column names and types
         schema = [

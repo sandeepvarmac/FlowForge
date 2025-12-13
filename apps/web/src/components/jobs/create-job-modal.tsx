@@ -7,7 +7,7 @@ import { FormField, FormLabel, FormError, Select, Textarea } from '@/components/
 import { Input } from '@/components/ui'
 import { Job, JobType, DataSourceType, DataSourceConfig, DestinationConfig, TransformationConfig, ValidationConfig } from '@/types/workflow'
 import { StorageConnection, StorageFile } from '@/types/storage-connection'
-import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe, RefreshCw, Layers, FolderOpen, Server, Folder, Link2, BarChart3, Loader2 } from 'lucide-react'
+import { FileText, Database, Cloud, ArrowRight, ArrowLeft, CheckCircle, CheckCircle2, Upload, Settings, Shield, AlertCircle, Eye, HardDrive, Sparkles, Activity, Clock, Key, Mail, Phone, Globe, RefreshCw, Layers, FolderOpen, Server, Folder, Link2, BarChart3, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CSVFileUpload } from './csv-file-upload'
 import { DatabaseSourceConfig } from './database-source-config'
@@ -355,6 +355,22 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   // Populate form data when editing or cloning
   React.useEffect(() => {
     if (mode === 'edit' && editingJob && open) {
+      // Reconstruct _detectedSchema from stored columnMapping if available
+      const columnMapping = (editingJob.destinationConfig?.bronzeConfig as any)?.columnMapping as Array<{
+        sourceColumn: string
+        targetColumn: string
+        targetType: string
+        exclude: boolean
+      }> | undefined
+
+      const detectedSchema = columnMapping?.length
+        ? columnMapping.map(col => ({
+            name: col.sourceColumn,
+            type: col.targetType || 'String',
+            sample: undefined
+          }))
+        : undefined
+
       setFormData({
         name: editingJob.name,
         description: editingJob.description || '',
@@ -363,12 +379,50 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         sourceConfig: editingJob.sourceConfig,
         destinationConfig: editingJob.destinationConfig,
         transformationConfig: editingJob.transformationConfig,
-        validationConfig: editingJob.validationConfig
+        validationConfig: editingJob.validationConfig,
+        // Reconstruct transient fields from stored data
+        _detectedSchema: detectedSchema,
       })
+
+      // Restore database connection selection if editing a database source
+      if (editingJob.type === 'database') {
+        // Check if connectionId was stored in sourceConfig
+        const storedConnectionId = (editingJob.sourceConfig as any)?.connectionId
+        if (storedConnectionId) {
+          setSelectedConnectionId(storedConnectionId)
+        }
+      }
+
+      // Restore storage connection selection if editing a file-based source with storage
+      if (editingJob.type === 'file-based') {
+        const storedStorageConnectionId = editingJob.sourceConfig?.fileConfig?.storageConnectionId
+        if (storedStorageConnectionId) {
+          setSelectedStorageConnectionId(storedStorageConnectionId)
+          setFileSourceMode('storage')
+        }
+      }
+
       setCurrentStep(1)
     } else if (cloningJob && open) {
       // When cloning, pre-fill data with modified name
       const clonedName = `${cloningJob.name} (Copy)`
+
+      // Also reconstruct schema for cloning
+      const columnMapping = (cloningJob.destinationConfig?.bronzeConfig as any)?.columnMapping as Array<{
+        sourceColumn: string
+        targetColumn: string
+        targetType: string
+        exclude: boolean
+      }> | undefined
+
+      const detectedSchema = columnMapping?.length
+        ? columnMapping.map(col => ({
+            name: col.sourceColumn,
+            type: col.targetType || 'String',
+            sample: undefined
+          }))
+        : undefined
+
       setFormData({
         name: clonedName,
         description: cloningJob.description || '',
@@ -377,7 +431,8 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
         sourceConfig: cloningJob.sourceConfig,
         destinationConfig: cloningJob.destinationConfig,
         transformationConfig: cloningJob.transformationConfig,
-        validationConfig: cloningJob.validationConfig
+        validationConfig: cloningJob.validationConfig,
+        _detectedSchema: detectedSchema,
       })
       setCurrentStep(1)
     } else if (mode === 'create' && !cloningJob && open) {
@@ -581,6 +636,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
       setSelectedConnectionId(connectionId)
       updateSourceConfig({
         type: connection.type,
+        connectionId: connectionId, // Store connectionId for edit restoration
         connection: {
           host: connection.host,
           port: connection.port,
@@ -1538,22 +1594,40 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 1: // Select Source
-        if (!formData.name.trim()) return false
+        if (!formData.name.trim()) {
+          console.log('[isStepValid] Step 1 invalid: name is empty')
+          return false
+        }
 
         // For file-based jobs, require file upload OR storage file selection in create mode
         if (formData.type === 'file-based' && mode === 'create') {
           const hasManualUpload = fileSourceMode === 'upload' && formData._uploadedFile
           const hasStorageFile = fileSourceMode === 'storage' && selectedStorageFile
           if (!hasManualUpload && !hasStorageFile) {
+            console.log('[isStepValid] Step 1 invalid: no file uploaded or storage file selected')
             return false
           }
         }
 
         // For database jobs, require connection, table selection, AND schema detection
         if (formData.type === 'database') {
-          if (!selectedConnectionId) return false
-          if (!formData.sourceConfig.databaseConfig?.tableName) return false
-          if (!formData._detectedSchema || formData._detectedSchema.length === 0) return false
+          console.log('[isStepValid] Database validation:', {
+            selectedConnectionId,
+            tableName: formData.sourceConfig.databaseConfig?.tableName,
+            schemaLength: formData._detectedSchema?.length
+          })
+          if (!selectedConnectionId) {
+            console.log('[isStepValid] Step 1 invalid: no connection selected')
+            return false
+          }
+          if (!formData.sourceConfig.databaseConfig?.tableName) {
+            console.log('[isStepValid] Step 1 invalid: no table selected')
+            return false
+          }
+          if (!formData._detectedSchema || formData._detectedSchema.length === 0) {
+            console.log('[isStepValid] Step 1 invalid: no schema detected')
+            return false
+          }
         }
         return true
       case 2: // Load Strategy - always valid (has defaults)
@@ -2429,6 +2503,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       initialFile={formData._uploadedFile}
                       initialSchema={formData._detectedSchema}
                       initialPreview={formData._previewData}
+                      excludedColumns={(formData.destinationConfig.bronzeConfig as any)?.excludedColumns || []}
+                      onExcludedColumnsChange={(excludedColumns) => {
+                        updateDestinationConfig({
+                          bronzeConfig: {
+                            ...formData.destinationConfig.bronzeConfig!,
+                            excludedColumns
+                          } as any
+                        })
+                      }}
                     />
                   )}
                     {errors.file && <FormError>{errors.file}</FormError>}
@@ -2522,6 +2605,45 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                               <div className="text-xs text-purple-600 font-medium">Temporal</div>
                             </div>
                           </div>
+
+                          {/* Data Quality Summary */}
+                          {formData._detectedSchema.some((col: any) => col.nullPercentage !== undefined) && (
+                            <div className="bg-white rounded-lg p-3 border border-gray-200 mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <CheckCircle2 className="w-4 h-4 text-gray-600" />
+                                <span className="text-xs font-semibold text-gray-900">Data Quality Summary</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-green-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) < 5).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Good (&lt;5% null)</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-amber-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-amber-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) >= 5 && (col.nullPercentage || 0) < 20).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Moderate (5-20%)</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-red-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) >= 20).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Concerns (&gt;20%)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Detected Intelligence */}
                           <div className="space-y-3">
@@ -2750,6 +2872,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       }}
                       useSavedConnection={true}
                       connectionId={selectedConnectionId}
+                      excludedColumns={(formData.destinationConfig.bronzeConfig as any)?.excludedColumns || []}
+                      onExcludedColumnsChange={(excludedColumns) => {
+                        updateDestinationConfig({
+                          bronzeConfig: {
+                            ...formData.destinationConfig.bronzeConfig!,
+                            excludedColumns
+                          } as any
+                        })
+                      }}
                       onConnectionChange={(connection) => {
                         updateSourceConfig({ connection })
                       }}
@@ -2760,9 +2891,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                         console.log('[Step1] onSchemaDetected called with schema:', schema?.length, 'columns, tableName:', tableName)
                         console.log('[Step1] Metadata:', metadata)
 
-                        // Store detected schema and preview
+                        // Store detected schema and preview, auto-populate name from table name
                         setFormData(prev => ({
                           ...prev,
+                          name: prev.name || tableName || '', // Auto-populate source name from table name (like file uploads)
                           _detectedSchema: schema,
                           _previewData: metadata?.preview
                         }))
@@ -2834,6 +2966,265 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       }}
                     />
                   </>
+                )}
+
+                {/* Schema Intelligence Display (AI-Powered) - Database Source */}
+                {formData._detectedSchema && formData._detectedSchema.length > 0 && (
+                  <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-purple-600" />
+                          <span className="text-purple-900">Schema Intelligence</span>
+                          {isLoadingSchemaIntelligence && (
+                            <span className="text-xs text-purple-600 animate-pulse">Analyzing...</span>
+                          )}
+                          {formData._detectedMetadata?.ai_analyzed && (
+                            <Badge variant="default" className="text-xs bg-purple-100 text-purple-700 border-purple-300">
+                              AI Powered
+                            </Badge>
+                          )}
+                        </div>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {/* Loading State with Progress Bar */}
+                      {isLoadingSchemaIntelligence && (
+                        <div className="py-4 space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-purple-700 font-medium">{schemaIntelligenceStage || 'Starting analysis...'}</span>
+                            <span className="text-purple-600 font-mono">{schemaIntelligenceProgress}%</span>
+                          </div>
+                          <div className="w-full bg-purple-100 rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-purple-500 to-purple-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                              style={{ width: `${schemaIntelligenceProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-purple-500">
+                            Detecting primary keys, relationships, and data patterns
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Error State */}
+                      {schemaIntelligenceError && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                          <p className="text-xs text-red-700">{schemaIntelligenceError}</p>
+                        </div>
+                      )}
+
+                      {/* Results */}
+                      {!isLoadingSchemaIntelligence && (
+                        <>
+                          {/* Summary */}
+                          {formData._detectedMetadata?.summary && (
+                            <div className="bg-white rounded-lg p-3 border border-purple-200 mb-4">
+                              <p className="text-sm text-purple-900">{formData._detectedMetadata.summary}</p>
+                              {formData._detectedMetadata.table_type && (
+                                <Badge variant="default" className="mt-2 text-xs bg-purple-100 text-purple-700 border-purple-300">
+                                  {formData._detectedMetadata.table_type.charAt(0).toUpperCase() + formData._detectedMetadata.table_type.slice(1)} Table
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Stats Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div className="bg-white rounded-lg p-3 border border-blue-200">
+                              <div className="text-xl font-bold text-blue-700">{formData._detectedSchema.length}</div>
+                              <div className="text-xs text-blue-600 font-medium">Columns</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-green-200">
+                              <div className="text-xl font-bold text-green-700">
+                                {formData._detectedMetadata?.pk_candidates?.length || 0}
+                              </div>
+                              <div className="text-xs text-green-600 font-medium">Primary Keys</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-orange-200">
+                              <div className="text-xl font-bold text-orange-700">
+                                {formData._detectedMetadata?.foreign_keys?.length || 0}
+                              </div>
+                              <div className="text-xs text-orange-600 font-medium">Foreign Keys</div>
+                            </div>
+                            <div className="bg-white rounded-lg p-3 border border-purple-200">
+                              <div className="text-xl font-bold text-purple-700">
+                                {formData._detectedMetadata?.temporal_columns?.length || 0}
+                              </div>
+                              <div className="text-xs text-purple-600 font-medium">Temporal</div>
+                            </div>
+                          </div>
+
+                          {/* Data Quality Summary */}
+                          {formData._detectedSchema.some((col: any) => col.nullPercentage !== undefined) && (
+                            <div className="bg-white rounded-lg p-3 border border-gray-200 mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <CheckCircle2 className="w-4 h-4 text-gray-600" />
+                                <span className="text-xs font-semibold text-gray-900">Data Quality Summary</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-green-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) < 5).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Good (&lt;5% null)</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-amber-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-amber-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) >= 5 && (col.nullPercentage || 0) < 20).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Moderate (5-20%)</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></div>
+                                  <div>
+                                    <span className="font-mono text-sm text-red-700 font-bold">
+                                      {formData._detectedSchema.filter((col: any) => (col.nullPercentage || 0) >= 20).length}
+                                    </span>
+                                    <span className="text-xs text-gray-600 ml-1">Concerns (&gt;20%)</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Detected Intelligence */}
+                          <div className="space-y-3">
+                            {/* Primary Keys */}
+                            {formData._detectedMetadata?.pk_candidates && formData._detectedMetadata.pk_candidates.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-green-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Key className="w-4 h-4 text-green-600" />
+                                  <span className="text-xs font-semibold text-green-900">
+                                    Primary Key{formData._detectedMetadata.pk_candidates.length > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {formData._detectedMetadata.pk_candidates.map((col: string, idx: number) => (
+                                    <Badge key={idx} variant="success" className="text-xs font-mono">
+                                      {col}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Foreign Keys */}
+                            {formData._detectedMetadata?.foreign_keys && formData._detectedMetadata.foreign_keys.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-orange-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Link2 className="w-4 h-4 text-orange-600" />
+                                  <span className="text-xs font-semibold text-orange-900">
+                                    Foreign Keys ({formData._detectedMetadata.foreign_keys.length})
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {formData._detectedMetadata.foreign_keys.map((fk: { column: string; referencesTable: string }, idx: number) => (
+                                    <div key={idx} className="text-xs text-orange-700 flex items-center gap-1">
+                                      <Badge variant="default" className="font-mono bg-orange-100 text-orange-800 border-orange-300">
+                                        {fk.column}
+                                      </Badge>
+                                      <span className="text-orange-500">→</span>
+                                      <span className="font-medium">{fk.referencesTable}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Temporal Columns */}
+                            {formData._detectedMetadata?.temporal_columns && formData._detectedMetadata.temporal_columns.length > 0 && (
+                              <div className="bg-white rounded-lg p-3 border border-purple-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Clock className="w-4 h-4 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-900">
+                                    Temporal Columns
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {formData._detectedMetadata.temporal_columns.map((col: string, idx: number) => (
+                                    <Badge key={idx} variant="default" className="text-xs font-mono bg-purple-100 text-purple-800 border-purple-300">
+                                      {col}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-purple-600 mt-2">
+                                  Suitable for incremental loading and partitioning
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Measure & Dimension Columns */}
+                            {((formData._detectedMetadata?.measure_columns?.length || 0) > 0 ||
+                              (formData._detectedMetadata?.dimension_columns?.length || 0) > 0) && (
+                              <div className="grid grid-cols-2 gap-3">
+                                {formData._detectedMetadata?.measure_columns && formData._detectedMetadata.measure_columns.length > 0 && (
+                                  <div className="bg-white rounded-lg p-3 border border-blue-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                                      <span className="text-xs font-semibold text-blue-900">Measures</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {formData._detectedMetadata.measure_columns.slice(0, 5).map((col: string, idx: number) => (
+                                        <Badge key={idx} variant="default" className="text-xs font-mono bg-blue-100 text-blue-800 border-blue-300">
+                                          {col}
+                                        </Badge>
+                                      ))}
+                                      {formData._detectedMetadata.measure_columns.length > 5 && (
+                                        <span className="text-xs text-blue-600">+{formData._detectedMetadata.measure_columns.length - 5} more</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                {formData._detectedMetadata?.dimension_columns && formData._detectedMetadata.dimension_columns.length > 0 && (
+                                  <div className="bg-white rounded-lg p-3 border border-teal-200">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Layers className="w-4 h-4 text-teal-600" />
+                                      <span className="text-xs font-semibold text-teal-900">Dimensions</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {formData._detectedMetadata.dimension_columns.slice(0, 5).map((col: string, idx: number) => (
+                                        <Badge key={idx} variant="default" className="text-xs font-mono bg-teal-100 text-teal-800 border-teal-300">
+                                          {col}
+                                        </Badge>
+                                      ))}
+                                      {formData._detectedMetadata.dimension_columns.length > 5 && (
+                                        <span className="text-xs text-teal-600">+{formData._detectedMetadata.dimension_columns.length - 5} more</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Data Quality Hints */}
+                            {formData._detectedMetadata?.data_quality_hints && formData._detectedMetadata.data_quality_hints.length > 0 && (
+                              <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                                  <span className="text-xs font-semibold text-amber-900">AI Recommendations</span>
+                                </div>
+                                <ul className="space-y-1">
+                                  {formData._detectedMetadata.data_quality_hints.map((hint: string, idx: number) => (
+                                    <li key={idx} className="text-xs text-amber-700 flex items-start gap-2">
+                                      <span className="text-amber-500 mt-0.5">•</span>
+                                      {hint}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
               </div>
             )}
@@ -3176,7 +3567,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 mb-1">Landing Zone Configuration</h4>
                   <p className="text-sm text-slate-700">
-                    Configure how raw source files are stored before processing. The landing zone preserves original files for audit, reprocessing, and disaster recovery.
+                    Configure how raw source files are stored before processing. The landing zone preserves original files for audit, reprocessing, and disaster recovery. Use this when files are dropped externally (storage connections, scheduled feeds); manual UI uploads auto-handle landing with sensible defaults.
                   </p>
                 </div>
               </div>
@@ -3392,20 +3783,21 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                 <div className="bg-slate-100 border border-slate-200 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Eye className="w-4 h-4 text-slate-600" />
-                    <span className="text-sm font-medium text-slate-700">Preview: Generated Path</span>
+                    <span className="text-sm font-medium text-slate-700">Preview: Landing Zone Path</span>
                   </div>
                   <code className="text-xs text-slate-600 bg-slate-200 px-2 py-1 rounded block">
-                    {(formData.destinationConfig.landingZoneConfig?.pathPattern || '/landing/{source_name}/{date:yyyy/MM/dd}/')
-                      .replace('{source_name}', formData.name?.toLowerCase().replace(/\s+/g, '_') || 'my_source')
-                      .replace('{source_type}', formData.type || 'file')
-                      .replace('{date:yyyy/MM/dd}', new Date().toISOString().split('T')[0].replace(/-/g, '/'))
-                      .replace('{date:yyyy}', new Date().getFullYear().toString())
-                      .replace('{date:MM}', String(new Date().getMonth() + 1).padStart(2, '0'))
-                      .replace('{yyyy}', new Date().getFullYear().toString())
-                      .replace('{MM}', String(new Date().getMonth() + 1).padStart(2, '0'))
-                    }
-                    {formData._uploadedFile?.name || 'sample_file.csv'}
+                    {(() => {
+                      const sourceName = formData.name?.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '') || 'my_source'
+                      const now = new Date()
+                      const dateFolder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
+                      // Get filename from manual upload or storage connection selection
+                      const filename = formData._uploadedFile?.name || selectedStorageFile?.name || formData.sourceConfig?.fileConfig?.filePath?.split(/[/\\]/).pop() || 'sample_file.csv'
+                      return `landing/${sourceName}/${dateFolder}/{timestamp}_${filename}`
+                    })()}
                   </code>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Note: {'{timestamp}'} will be replaced with actual timestamp when the pipeline runs
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -3430,24 +3822,10 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
             {/* Bronze Layer - Enhanced */}
             <Card className="border-amber-300 bg-amber-50/30">
               <CardHeader className="pb-3 bg-amber-50">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                    Bronze Layer (Raw Data Ingestion)
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={resetToManualDefaults}
-                      className="text-xs h-7 border-amber-300 text-amber-700 hover:bg-amber-100"
-                    >
-                      Reset to Defaults
-                    </Button>
-                    <Badge variant="success" className="text-xs">Active</Badge>
-                  </div>
-                </div>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+                  Bronze Layer (Raw Data Ingestion)
+                </CardTitle>
                 <p className="text-xs text-foreground-muted mt-1">
                   Stores raw data exactly as received from source with minimal transformation
                 </p>
@@ -3731,9 +4109,32 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <span className="text-sm font-semibold text-amber-900">Load Mode</span>
                   </div>
                   <p className="text-xs text-amber-700 mb-3">
-                    Determines how data is written to the Bronze table based on your Load Strategy
+                    Determines how data is written to the Bronze table. Bronze is your raw data audit log.
                   </p>
                   <div className="grid grid-cols-2 gap-3">
+                    {/* Append Mode - Recommended for Bronze */}
+                    <button
+                      type="button"
+                      onClick={() => updateDestinationConfig({
+                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadMode: 'append' }
+                      })}
+                      className={cn(
+                        "p-3 border rounded-lg text-left transition-all",
+                        formData.destinationConfig.bronzeConfig?.loadMode === 'append'
+                          ? "border-amber-500 bg-amber-100 ring-2 ring-amber-300"
+                          : "border-border hover:border-amber-300 bg-white"
+                      )}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <ArrowRight className="w-4 h-4 text-amber-600" />
+                        <span className="font-medium text-sm">Append</span>
+                        <Badge variant="outline" className="text-xs ml-auto border-green-300 text-green-700 bg-green-50">Best Practice</Badge>
+                      </div>
+                      <p className="text-xs text-foreground-muted">
+                        Preserve all ingested data as immutable audit log. Enables reprocessing and compliance.
+                      </p>
+                    </button>
+
                     {/* Overwrite Mode */}
                     <button
                       type="button"
@@ -3750,44 +4151,15 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                       <div className="flex items-center gap-2 mb-1">
                         <RefreshCw className="w-4 h-4 text-amber-600" />
                         <span className="font-medium text-sm">Overwrite</span>
-                        {(formData.type === 'file-based'
-                          ? !formData.sourceConfig.fileConfig?.isIncremental
-                          : !formData.sourceConfig.databaseConfig?.isIncremental) && (
-                          <Badge variant="outline" className="text-xs ml-auto border-green-300 text-green-700 bg-green-50">Recommended</Badge>
-                        )}
                       </div>
                       <p className="text-xs text-foreground-muted">
-                        Truncate and reload entire table. Best for Full Load strategy.
-                      </p>
-                    </button>
-
-                    {/* Append Mode */}
-                    <button
-                      type="button"
-                      onClick={() => updateDestinationConfig({
-                        bronzeConfig: { ...formData.destinationConfig.bronzeConfig!, loadMode: 'append' }
-                      })}
-                      className={cn(
-                        "p-3 border rounded-lg text-left transition-all",
-                        formData.destinationConfig.bronzeConfig?.loadMode === 'append'
-                          ? "border-amber-500 bg-amber-100 ring-2 ring-amber-300"
-                          : "border-border hover:border-amber-300 bg-white"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <ArrowRight className="w-4 h-4 text-amber-600" />
-                        <span className="font-medium text-sm">Append</span>
-                        {(formData.type === 'file-based'
-                          ? formData.sourceConfig.fileConfig?.isIncremental
-                          : formData.sourceConfig.databaseConfig?.isIncremental) && (
-                          <Badge variant="outline" className="text-xs ml-auto border-green-300 text-green-700 bg-green-50">Recommended</Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-foreground-muted">
-                        Add new records to existing table. Best for Incremental Load strategy.
+                        Replace existing data each run. Use only when storage is limited or history not needed.
                       </p>
                     </button>
                   </div>
+                  <p className="text-xs text-amber-600 mt-2 italic">
+                    Tip: Append mode preserves raw ingestion history for audit trails and reprocessing if Silver/Gold logic changes.
+                  </p>
                 </div>
 
                 {/* Quarantine Configuration */}
@@ -4054,6 +4426,30 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </Select>
                 </FormField>
 
+                {/* Table Type Classification */}
+                <FormField>
+                  <FormLabel>Table Type</FormLabel>
+                  <Select
+                    value={formData.destinationConfig.silverConfig?.tableType || 'transactional'}
+                    onChange={(e) => updateDestinationConfig({
+                      silverConfig: { ...formData.destinationConfig.silverConfig!, tableType: e.target.value as any }
+                    })}
+                    disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                  >
+                    <option value="transactional">Transactional (Events/Logs)</option>
+                    <option value="dimension">Dimension (Master Data)</option>
+                    <option value="fact">Fact (Metrics/Measures)</option>
+                    <option value="reference">Reference (Lookup Data)</option>
+                  </Select>
+                  <p className="text-xs text-foreground-muted mt-1">
+                    {formData.destinationConfig.silverConfig?.tableType === 'transactional' && 'Event-driven data like orders, clicks, or logs - typically append-only'}
+                    {formData.destinationConfig.silverConfig?.tableType === 'dimension' && 'Master data like customers, products - ideal for SCD Type 2'}
+                    {formData.destinationConfig.silverConfig?.tableType === 'fact' && 'Aggregated metrics and measures - typically used in Gold layer'}
+                    {formData.destinationConfig.silverConfig?.tableType === 'reference' && 'Lookup tables like country codes, status types - rarely changes'}
+                    {!formData.destinationConfig.silverConfig?.tableType && 'Event-driven data like orders, clicks, or logs - typically append-only'}
+                  </p>
+                </FormField>
+
                 {/* Deduplication Strategy - Enhanced */}
                 <FormField>
                   <FormLabel>Deduplication Strategy</FormLabel>
@@ -4067,7 +4463,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <option value="merge">Merge/Upsert (Recommended)</option>
                     <option value="full_refresh">Full Refresh (Truncate & Reload)</option>
                     <option value="append">Append Only (No Deduplication)</option>
-                    <option value="scd_type_2" disabled>SCD Type 2 (Coming Soon)</option>
+                    <option value="scd_type_2">SCD Type 2 (Historical Tracking)</option>
                   </Select>
                   <p className="text-xs text-foreground-muted mt-1">
                     {formData.destinationConfig.silverConfig?.mergeStrategy === 'merge' && 'Updates existing records and inserts new ones based on primary key'}
@@ -4076,6 +4472,122 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     {formData.destinationConfig.silverConfig?.mergeStrategy === 'scd_type_2' && 'Tracks historical changes with effective dates'}
                   </p>
                 </FormField>
+
+                {/* SCD Type 2 Configuration - Dimension Tables Only */}
+                {formData.destinationConfig.silverConfig?.mergeStrategy === 'scd_type_2' && (
+                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <div className="text-sm font-medium text-purple-900">SCD Type 2 Configuration</div>
+                      <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 text-[10px]">
+                        Historical Tracking
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-purple-700">
+                      Slowly Changing Dimension Type 2 tracks historical changes by creating new versions of records while preserving the full history.
+                    </p>
+
+                    {/* Natural Key Selection */}
+                    <FormField>
+                      <FormLabel className="text-xs text-purple-900">Natural Key (Business Identifier)</FormLabel>
+                      <Select
+                        value={Array.isArray(formData.destinationConfig.silverConfig?.scdNaturalKey)
+                          ? formData.destinationConfig.silverConfig.scdNaturalKey[0] || ''
+                          : ''}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: {
+                            ...formData.destinationConfig.silverConfig!,
+                            scdNaturalKey: e.target.value ? [e.target.value] : []
+                          }
+                        })}
+                        className="text-xs"
+                        disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                      >
+                        <option value="">Select natural key...</option>
+                        {formData._detectedSchema?.map(col => (
+                          <option key={col.name} value={col.name}>
+                            {col.name} ({col.type})
+                          </option>
+                        ))}
+                      </Select>
+                      <p className="text-[11px] text-purple-600 mt-1">
+                        The business key that uniquely identifies the entity (e.g., customer_id, product_code)
+                      </p>
+                    </FormField>
+
+                    {/* SCD Column Names */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField>
+                        <FormLabel className="text-xs text-purple-900">Effective Date Column</FormLabel>
+                        <Input
+                          value={formData.destinationConfig.silverConfig?.scdEffectiveDateColumn || '_effective_from'}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, scdEffectiveDateColumn: e.target.value }
+                          })}
+                          placeholder="_effective_from"
+                          className="text-xs h-8"
+                          disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                        />
+                      </FormField>
+                      <FormField>
+                        <FormLabel className="text-xs text-purple-900">End Date Column</FormLabel>
+                        <Input
+                          value={formData.destinationConfig.silverConfig?.scdEndDateColumn || '_effective_to'}
+                          onChange={(e) => updateDestinationConfig({
+                            silverConfig: { ...formData.destinationConfig.silverConfig!, scdEndDateColumn: e.target.value }
+                          })}
+                          placeholder="_effective_to"
+                          className="text-xs h-8"
+                          disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                        />
+                      </FormField>
+                    </div>
+
+                    <FormField>
+                      <FormLabel className="text-xs text-purple-900">Current Flag Column</FormLabel>
+                      <Input
+                        value={formData.destinationConfig.silverConfig?.scdCurrentFlagColumn || '_is_current'}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, scdCurrentFlagColumn: e.target.value }
+                        })}
+                        placeholder="_is_current"
+                        className="text-xs h-8"
+                        disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                      />
+                      <p className="text-[11px] text-purple-600 mt-1">
+                        Boolean column indicating if this is the current/active version of the record
+                      </p>
+                    </FormField>
+
+                    {/* Track Deletes Option */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.destinationConfig.silverConfig?.scdTrackDeletes || false}
+                        onChange={(e) => updateDestinationConfig({
+                          silverConfig: { ...formData.destinationConfig.silverConfig!, scdTrackDeletes: e.target.checked }
+                        })}
+                        className="w-3 h-3 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
+                        disabled={formData.destinationConfig.silverConfig?.enabled === false}
+                      />
+                      <span className="text-xs text-purple-900">Track Soft Deletes</span>
+                      <span className="text-[10px] text-purple-600">(Mark removed records as deleted instead of physically removing)</span>
+                    </label>
+
+                    {/* SCD Type 2 Info Box */}
+                    <div className="bg-white/50 border border-purple-100 rounded p-2 mt-2">
+                      <div className="text-[11px] text-purple-800 space-y-1">
+                        <div className="font-medium">How SCD Type 2 Works:</div>
+                        <ul className="list-disc list-inside space-y-0.5 text-purple-700">
+                          <li>When a record changes, the current version is closed (end date set)</li>
+                          <li>A new version is created with the updated values</li>
+                          <li>Full history is preserved for point-in-time analysis</li>
+                          <li>Query current records with: <code className="bg-purple-100 px-1 rounded">WHERE _is_current = true</code></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Primary Key Configuration - Enhanced for Composite Keys */}
                 {formData.destinationConfig.silverConfig?.mergeStrategy === 'merge' && (
@@ -4317,7 +4829,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                   </Badge>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <Select
+                                  <select
                                     value={colTransforms.transform || 'none'}
                                     onChange={(e) => {
                                       const currentTransforms = (formData.destinationConfig.silverConfig as any)?.columnTransforms || {}
@@ -4331,7 +4843,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                         } as any
                                       })
                                     }}
-                                    className="h-7 text-xs"
+                                    className="h-7 px-2 text-xs rounded-md border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 hover:border-gray-300 transition-colors cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%236b7280%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%20010-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px_16px] bg-[right_4px_center] bg-no-repeat pr-6"
                                   >
                                     <option value="none">No Transform</option>
                                     <option value="trim">Trim Whitespace</option>
@@ -4346,7 +4858,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                     {col.type === 'date' && (
                                       <option value="iso8601">Format ISO 8601</option>
                                     )}
-                                  </Select>
+                                  </select>
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                   <input
@@ -4431,25 +4943,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     </Button>
                   </div>
                 )}
-
-                {/* SCD Type 2 Configuration - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Slowly Changing Dimension (SCD) Type 2</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Track historical changes to records with effective dates
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Natural key selection (business key)</div>
-                    <div>• Effective date column (_valid_from)</div>
-                    <div>• End date column (_valid_to)</div>
-                    <div>• Current flag column (_is_current)</div>
-                    <div>• Track deleted records with soft deletes</div>
-                    <div>• Automatic versioning and history management</div>
-                  </div>
-                </div>
 
                 {/* Data Quality Rules - AI-Powered Quick-Add */}
                 {silverAiSuggestions?.quality_rules?.suggested_rules && silverAiSuggestions.quality_rules.suggested_rules.length > 0 ? (
@@ -4650,18 +5143,20 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                         </span>
                       </label>
 
-                      <div className="border-t border-gray-200 pt-3 mt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
-                          <span className="text-xs font-medium text-gray-700">Advanced Transformations</span>
+                      {featureFlags.showSilverComingSoon && (
+                        <div className="border-t border-gray-200 pt-3 mt-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge variant="secondary" className="text-[10px]">Coming Soon</Badge>
+                            <span className="text-xs font-medium text-gray-700">Advanced Transformations</span>
+                          </div>
+                          <div className="space-y-1 text-xs text-gray-500 ml-2">
+                            <div>• Phone number formatting (international)</div>
+                            <div>• Currency rounding to 2 decimals</div>
+                            <div>• Custom regex replacements</div>
+                            <div>• Derived columns with SQL expressions</div>
+                          </div>
                         </div>
-                        <div className="space-y-1 text-xs text-gray-500 ml-2">
-                          <div>• Phone number formatting (international)</div>
-                          <div>• Currency rounding to 2 decimals</div>
-                          <div>• Custom regex replacements</div>
-                          <div>• Derived columns with SQL expressions</div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </FormField>
@@ -4760,117 +5255,122 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   )}
                 </FormField>
 
-                {/* PII Masking - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">PII Masking & Data Privacy</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Protect sensitive data with masking strategies
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>Hash:</strong> One-way hashing (irreversible)</div>
-                    <div>• <strong>Tokenize:</strong> Reversible with encryption key</div>
-                    <div>• <strong>Partial mask:</strong> Show last 4 digits (e.g., ****1234)</div>
-                    <div>• <strong>Full mask:</strong> Replace with XXXXX</div>
-                    <div>• <strong>Null out:</strong> Remove sensitive data entirely</div>
-                    <div>• Tag columns as: PII, PHI, Confidential</div>
-                    <div>• Compliance presets: GDPR, HIPAA, CCPA</div>
-                  </div>
-                </div>
+                {/* Silver Layer Coming Soon Features - Hidden by default for cleaner demo */}
+                {featureFlags.showSilverComingSoon && (
+                  <>
+                    {/* PII Masking - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">PII Masking & Data Privacy</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Protect sensitive data with masking strategies
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• <strong>Hash:</strong> One-way hashing (irreversible)</div>
+                        <div>• <strong>Tokenize:</strong> Reversible with encryption key</div>
+                        <div>• <strong>Partial mask:</strong> Show last 4 digits (e.g., ****1234)</div>
+                        <div>• <strong>Full mask:</strong> Replace with XXXXX</div>
+                        <div>• <strong>Null out:</strong> Remove sensitive data entirely</div>
+                        <div>• Tag columns as: PII, PHI, Confidential</div>
+                        <div>• Compliance presets: GDPR, HIPAA, CCPA</div>
+                      </div>
+                    </div>
 
-                {/* Performance Optimization - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Performance Optimization</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Optimize query performance for large datasets
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Partitioning by date or categorical columns</div>
-                    <div>• Clustering (Delta/Iceberg)</div>
-                    <div>• Z-ordering (Delta Lake)</div>
-                    <div>• Automatic statistics collection</div>
-                  </div>
-                </div>
+                    {/* Performance Optimization - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Performance Optimization</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Optimize query performance for large datasets
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Partitioning by date or categorical columns</div>
+                        <div>• Clustering (Delta/Iceberg)</div>
+                        <div>• Z-ordering (Delta Lake)</div>
+                        <div>• Automatic statistics collection</div>
+                      </div>
+                    </div>
 
-                {/* Reference Data Enrichment - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Reference Data Enrichment (Lookup Joins)</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Improve data quality by enriching records with lookup/reference data
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>Purpose:</strong> Add missing descriptive data for completeness</div>
-                    <div>• Lookup joins to small reference tables (countries, states, categories)</div>
-                    <div>• Example: country_code "US" → country_name "United States"</div>
-                    <div>• Left outer join with configurable null handling</div>
-                    <div>• Caching for frequently used lookups</div>
-                  </div>
-                  <p className="text-xs text-blue-600 mt-2 italic">
-                    Note: For analytics-ready wide tables with multi-table joins, use Gold Layer Denormalization
-                  </p>
-                </div>
+                    {/* Reference Data Enrichment - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Reference Data Enrichment (Lookup Joins)</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Improve data quality by enriching records with lookup/reference data
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• <strong>Purpose:</strong> Add missing descriptive data for completeness</div>
+                        <div>• Lookup joins to small reference tables (countries, states, categories)</div>
+                        <div>• Example: country_code "US" → country_name "United States"</div>
+                        <div>• Left outer join with configurable null handling</div>
+                        <div>• Caching for frequently used lookups</div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2 italic">
+                        Note: For analytics-ready wide tables with multi-table joins, use Gold Layer Denormalization
+                      </p>
+                    </div>
 
-                {/* Schema Drift Handling - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Schema Drift Handling</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Handle schema changes automatically when source structure evolves
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Detect new columns from source</div>
-                    <div>• Track removed/deprecated columns</div>
-                    <div>• Handle type changes with warnings</div>
-                    <div>• Schema version tracking</div>
-                    <div>• Breaking change alerts</div>
-                  </div>
-                </div>
+                    {/* Schema Drift Handling - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Schema Drift Handling</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Handle schema changes automatically when source structure evolves
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Detect new columns from source</div>
+                        <div>• Track removed/deprecated columns</div>
+                        <div>• Handle type changes with warnings</div>
+                        <div>• Schema version tracking</div>
+                        <div>• Breaking change alerts</div>
+                      </div>
+                    </div>
 
-                {/* Error Handling & Quarantine - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Error Handling & Quarantine</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Capture and manage invalid records for review
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Quarantine zone for invalid records</div>
-                    <div>• Error categorization (invalid email, null key, duplicate)</div>
-                    <div>• Manual fix and reprocess workflow</div>
-                    <div>• Suggested remediation actions</div>
-                  </div>
-                </div>
+                    {/* Error Handling & Quarantine - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Error Handling & Quarantine</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Capture and manage invalid records for review
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Quarantine zone for invalid records</div>
+                        <div>• Error categorization (invalid email, null key, duplicate)</div>
+                        <div>• Manual fix and reprocess workflow</div>
+                        <div>• Suggested remediation actions</div>
+                      </div>
+                    </div>
 
-                {/* Data Quality Gate - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Data Quality Gate</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Validate data before promotion to Gold layer
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Mandatory fields populated check</div>
-                    <div>• Referential integrity validation</div>
-                    <div>• Null spike detection</div>
-                    <div>• Value range checks</div>
-                    <div>• Record count variance threshold</div>
-                    <div>• Block promotion on failure with alerts</div>
-                  </div>
-                </div>
+                    {/* Data Quality Gate - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Data Quality Gate</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Validate data before promotion to Gold layer
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Mandatory fields populated check</div>
+                        <div>• Referential integrity validation</div>
+                        <div>• Null spike detection</div>
+                        <div>• Value range checks</div>
+                        <div>• Record count variance threshold</div>
+                        <div>• Block promotion on failure with alerts</div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -5109,8 +5609,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                             <th className="text-left px-3 py-2 font-medium text-yellow-900 w-10">Include</th>
                             <th className="text-left px-3 py-2 font-medium text-yellow-900">Source Column</th>
                             <th className="text-left px-3 py-2 font-medium text-yellow-900">Business Name</th>
-                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-32">Column Role</th>
-                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-28">Aggregation</th>
+                            <th className="text-left px-3 py-2 font-medium text-yellow-900 w-24">Type</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-yellow-100">
@@ -5121,20 +5620,6 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
 
                             // Skip columns excluded from Bronze
                             if (isExcludedFromBronze) return null
-
-                            // Auto-detect column role based on name and type
-                            const detectRole = () => {
-                              const nameLower = col.name.toLowerCase()
-                              if (nameLower.endsWith('_id') || nameLower === 'id') return 'dimension_key'
-                              if (col.type === 'number' || col.type === 'integer') {
-                                if (nameLower.includes('amount') || nameLower.includes('quantity') || nameLower.includes('rate') || nameLower.includes('value') || nameLower.includes('payment') || nameLower.includes('income') || nameLower.includes('score')) return 'measure'
-                              }
-                              if (col.type === 'date' || col.type === 'datetime' || nameLower.includes('date') || nameLower.includes('_at')) return 'date_dimension'
-                              return 'dimension_attribute'
-                            }
-
-                            const currentRole = goldColConfig.role || detectRole()
-                            const isMeasure = currentRole === 'measure'
 
                             return (
                               <tr key={idx} className={cn(
@@ -5182,59 +5667,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                                   />
                                 </td>
                                 <td className="px-3 py-2">
-                                  <Select
-                                    value={currentRole}
-                                    onChange={(e) => {
-                                      const currentConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig || {}
-                                      updateDestinationConfig({
-                                        goldConfig: {
-                                          ...formData.destinationConfig.goldConfig!,
-                                          columnConfig: {
-                                            ...currentConfig,
-                                            [col.name]: { ...currentConfig[col.name], role: e.target.value }
-                                          }
-                                        } as any
-                                      })
-                                    }}
-                                    className="h-7 text-xs"
-                                    disabled={formData.destinationConfig.goldConfig?.enabled === false || isExcludedFromGold}
-                                  >
-                                    <option value="dimension_key">Dimension Key</option>
-                                    <option value="dimension_attribute">Dimension Attr</option>
-                                    <option value="date_dimension">Date Dimension</option>
-                                    <option value="measure">Measure</option>
-                                    <option value="degenerate">Degenerate Dim</option>
-                                  </Select>
-                                </td>
-                                <td className="px-3 py-2">
-                                  {isMeasure ? (
-                                    <Select
-                                      value={goldColConfig.aggregation || 'sum'}
-                                      onChange={(e) => {
-                                        const currentConfig = (formData.destinationConfig.goldConfig as any)?.columnConfig || {}
-                                        updateDestinationConfig({
-                                          goldConfig: {
-                                            ...formData.destinationConfig.goldConfig!,
-                                            columnConfig: {
-                                              ...currentConfig,
-                                              [col.name]: { ...currentConfig[col.name], aggregation: e.target.value }
-                                            }
-                                          } as any
-                                        })
-                                      }}
-                                      className="h-7 text-xs"
-                                      disabled={formData.destinationConfig.goldConfig?.enabled === false || isExcludedFromGold}
-                                    >
-                                      <option value="sum">SUM</option>
-                                      <option value="avg">AVG</option>
-                                      <option value="count">COUNT</option>
-                                      <option value="min">MIN</option>
-                                      <option value="max">MAX</option>
-                                      <option value="count_distinct">COUNT DISTINCT</option>
-                                    </Select>
-                                  ) : (
-                                    <span className="text-gray-400 text-xs italic">N/A</span>
-                                  )}
+                                  <span className="text-xs text-yellow-700">{col.type}</span>
                                 </td>
                               </tr>
                             )
@@ -5245,7 +5678,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                     <div className="bg-yellow-50 px-3 py-2 border-t border-yellow-200 text-xs text-yellow-700">
                       <div className="flex items-center justify-between">
                         <span>
-                          <strong>Tip:</strong> Business names appear in reports/dashboards. Column roles determine how data is used in analytics.
+                          <strong>Tip:</strong> Business names appear in reports and dashboards for better readability.
                         </span>
                         {formData._detectedSchema && (
                           <Button
@@ -5326,117 +5759,122 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
                   </div>
                 )}
 
-                {/* Aggregation Configuration - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Aggregation Configuration</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Create pre-aggregated analytics tables for faster reporting
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Group by columns (dimensions)</div>
-                    <div>• Aggregation functions: SUM, AVG, MIN, MAX, COUNT, COUNT_DISTINCT</div>
-                    <div>• Time grain selection: Daily, Weekly, Monthly, Yearly</div>
-                    <div>• Multiple aggregation rules per table</div>
-                    <div>• Window functions for advanced analytics</div>
-                  </div>
-                </div>
+                {/* Gold Layer Coming Soon Cards - Feature Flagged */}
+                {featureFlags.showGoldComingSoon && (
+                  <>
+                    {/* Aggregation Configuration - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Aggregation Configuration</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Create pre-aggregated analytics tables for faster reporting
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Group by columns (dimensions)</div>
+                        <div>• Aggregation functions: SUM, AVG, MIN, MAX, COUNT, COUNT_DISTINCT</div>
+                        <div>• Time grain selection: Daily, Weekly, Monthly, Yearly</div>
+                        <div>• Multiple aggregation rules per table</div>
+                        <div>• Window functions for advanced analytics</div>
+                      </div>
+                    </div>
 
-                {/* Denormalization - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Denormalization (Multi-Table Joins)</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Create wide, analytics-ready tables optimized for BI and reporting
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>Purpose:</strong> Pre-join tables to eliminate runtime joins in BI tools</div>
-                    <div>• Join multiple Silver tables (orders + customers + products → fct_sales)</div>
-                    <div>• Star/snowflake schema creation with fact and dimension tables</div>
-                    <div>• Join types: INNER, LEFT, RIGHT, FULL OUTER</div>
-                    <div>• Column selection and automatic dimension flattening</div>
-                  </div>
-                  <p className="text-xs text-blue-600 mt-2 italic">
-                    Note: For simple lookup enrichment (e.g., adding country names), use Silver Layer Reference Data Enrichment
-                  </p>
-                </div>
+                    {/* Denormalization - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Denormalization (Multi-Table Joins)</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Create wide, analytics-ready tables optimized for BI and reporting
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• <strong>Purpose:</strong> Pre-join tables to eliminate runtime joins in BI tools</div>
+                        <div>• Join multiple Silver tables (orders + customers + products → fct_sales)</div>
+                        <div>• Star/snowflake schema creation with fact and dimension tables</div>
+                        <div>• Join types: INNER, LEFT, RIGHT, FULL OUTER</div>
+                        <div>• Column selection and automatic dimension flattening</div>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2 italic">
+                        Note: For simple lookup enrichment (e.g., adding country names), use Silver Layer Reference Data Enrichment
+                      </p>
+                    </div>
 
-                {/* Business Logic - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Business Logic</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Apply business rules and calculated fields
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Calculated columns with SQL expressions</div>
-                    <div>• Filter conditions (WHERE clause)</div>
-                    <div>• Custom SQL (advanced users)</div>
-                    <div>• Business KPIs and metrics</div>
-                  </div>
-                </div>
+                    {/* Business Logic - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Business Logic</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Apply business rules and calculated fields
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Calculated columns with SQL expressions</div>
+                        <div>• Filter conditions (WHERE clause)</div>
+                        <div>• Custom SQL (advanced users)</div>
+                        <div>• Business KPIs and metrics</div>
+                      </div>
+                    </div>
 
-                {/* Performance & Optimization - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Performance & Optimization</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Optimize for query performance at scale
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Partitioning by date or business dimensions</div>
-                    <div>• Indexing (Iceberg/Delta only)</div>
-                    <div>• Z-ordering for Delta Lake</div>
-                    <div>• Clustering for Snowflake/BigQuery</div>
-                    <div>• Statistics collection for query optimization</div>
-                  </div>
-                </div>
+                    {/* Performance & Optimization - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Performance & Optimization</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Optimize for query performance at scale
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Partitioning by date or business dimensions</div>
+                        <div>• Indexing (Iceberg/Delta only)</div>
+                        <div>• Z-ordering for Delta Lake</div>
+                        <div>• Clustering for Snowflake/BigQuery</div>
+                        <div>• Statistics collection for query optimization</div>
+                      </div>
+                    </div>
 
-                {/* Export Configuration - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Export to External Systems</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Automatically export Gold data to downstream systems
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• <strong>S3/Parquet:</strong> Export to S3 in Parquet format</div>
-                    <div>• <strong>Snowflake:</strong> Create external table or COPY INTO</div>
-                    <div>• <strong>Google BigQuery:</strong> Export to BigQuery table</div>
-                    <div>• <strong>Azure Synapse:</strong> Export to Synapse Analytics</div>
-                    <div>• <strong>PostgreSQL/MySQL:</strong> Export to relational databases</div>
-                    <div>• <strong>Excel/CSV:</strong> Download for business users</div>
-                    <div>• Schedule: On source completion, Daily, Weekly</div>
-                  </div>
-                </div>
+                    {/* Export Configuration - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Export to External Systems</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Automatically export Gold data to downstream systems
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• <strong>S3/Parquet:</strong> Export to S3 in Parquet format</div>
+                        <div>• <strong>Snowflake:</strong> Create external table or COPY INTO</div>
+                        <div>• <strong>Google BigQuery:</strong> Export to BigQuery table</div>
+                        <div>• <strong>Azure Synapse:</strong> Export to Synapse Analytics</div>
+                        <div>• <strong>PostgreSQL/MySQL:</strong> Export to relational databases</div>
+                        <div>• <strong>Excel/CSV:</strong> Download for business users</div>
+                        <div>• Schedule: On source completion, Daily, Weekly</div>
+                      </div>
+                    </div>
 
-                {/* Analytics Metadata - Coming Soon */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
-                    <span className="text-sm font-medium text-blue-900">Analytics Metadata</span>
-                  </div>
-                  <p className="text-xs text-blue-700 mb-2">
-                    Add business context and enable data catalog integration
-                  </p>
-                  <div className="space-y-1 text-xs text-blue-700 ml-2">
-                    <div>• Business-friendly name and description</div>
-                    <div>• Data owner and steward assignment</div>
-                    <div>• Tags: finance, marketing, operations, kpi</div>
-                    <div>• Data lineage tracking</div>
-                    <div>• Sync to data catalog (Alation, Collibra, DataHub)</div>
-                  </div>
-                </div>
+                    {/* Analytics Metadata - Coming Soon */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                        <span className="text-sm font-medium text-blue-900">Analytics Metadata</span>
+                      </div>
+                      <p className="text-xs text-blue-700 mb-2">
+                        Add business context and enable data catalog integration
+                      </p>
+                      <div className="space-y-1 text-xs text-blue-700 ml-2">
+                        <div>• Business-friendly name and description</div>
+                        <div>• Data owner and steward assignment</div>
+                        <div>• Tags: finance, marketing, operations, kpi</div>
+                        <div>• Data lineage tracking</div>
+                        <div>• Sync to data catalog (Alation, Collibra, DataHub)</div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -5900,7 +6338,7 @@ export function CreateJobModal({ open, onOpenChange, workflowId, onJobCreate, mo
               <Button variant="ghost" onClick={() => handleModalClose(false)}>
                 Cancel
               </Button>
-              {currentStep < 6 ? (
+              {currentStep < 7 ? (
                 <Button onClick={nextStep} disabled={!isStepValid(currentStep)}>
                   Next
                   <ArrowRight className="w-4 h-4 ml-2" />

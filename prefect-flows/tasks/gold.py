@@ -24,22 +24,36 @@ def _build_gold_key(
     job_slug: str,
     run_id: str,
     domain: str = "analytics",
+    build_strategy: str = "versioned",
+    custom_table_name: str | None = None,
 ) -> tuple[str, str]:
     """
     Return (filename, s3_key) for the gold layer.
 
-    Pattern: gold/{domain}/{dataset}/{yyyymmdd}/{dataset}_{runId}.parquet
+    Build strategies:
+    - "versioned" (default): Include run_id for unique versioned files
+      Pattern: gold/{domain}/{tableName}/{yyyymmdd}/{tableName}_{runId}.parquet
+    - "full_rebuild" or "incremental": Use fixed filename for rebuild operations
+      Pattern: gold/{domain}/{tableName}/{yyyymmdd}/{tableName}_current.parquet
 
     Human-friendly naming:
-    - Single underscores instead of double
-    - No redundant "__gold" or "__view" suffix (gold layer implies analytics-ready view)
-    - Dataset name from job_slug provides business context
+    - Uses user-configured table name if provided (e.g., "loan_payments_gold")
+    - Falls back to job_slug as dataset name
     """
     date_folder = datetime.utcnow().strftime("%Y%m%d")
-    dataset = job_slug  # e.g., "ingest-customers" becomes the dataset name
 
-    filename = f"{dataset}_{run_id}.parquet"
-    s3_key = f"gold/{domain}/{dataset}/{date_folder}/{filename}"
+    # Use custom table name if provided, otherwise use job_slug as dataset
+    base_name = custom_table_name if custom_table_name else job_slug
+    folder_name = custom_table_name if custom_table_name else job_slug
+
+    if build_strategy in ("full_rebuild", "incremental"):
+        # Fixed filename for rebuild strategies
+        filename = f"{base_name}_current.parquet"
+    else:
+        # Versioned filename (default) - each run creates a new file
+        filename = f"{base_name}_{run_id}.parquet"
+
+    s3_key = f"gold/{domain}/{folder_name}/{date_folder}/{filename}"
 
     return filename, s3_key
 
@@ -53,7 +67,12 @@ def _get_gold_table_name(workflow_slug: str, job_slug: str) -> str:
 
 
 @task(name="gold_publish")
-def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
+def gold_publish(
+    silver_result: dict,
+    domain: str = "analytics",
+    gold_config: dict | None = None,
+    destination_config: dict | None = None,
+) -> dict:
     """
     Publish analytics outputs to the Gold layer with DuckDB.
 
@@ -66,6 +85,8 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
     Args:
         silver_result: Output from silver_transform task
         domain: Analytics domain (default: "analytics")
+        gold_config: Gold layer configuration including buildStrategy
+        destination_config: Full destination config for table name lookups
 
     Returns:
         Dictionary with Gold layer artifact information
@@ -79,10 +100,21 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
     job_slug = silver_result["job_slug"]
     run_id = silver_result["run_id"]
     silver_key = silver_result["silver_key"]
+    environment = silver_result.get("environment", "prod")
+
+    # Extract gold config
+    gold_config = gold_config or {}
+    destination_config = destination_config or {}
+    build_strategy = gold_config.get("buildStrategy", "versioned")
+    custom_table_name = gold_config.get("tableName")
 
     logger.info(f"🏆 Starting Gold layer publish from Silver: {silver_key}")
+    logger.info(f"Gold config: buildStrategy={build_strategy}, tableName={custom_table_name}")
 
-    gold_filename, gold_key = _build_gold_key(workflow_slug, job_slug, run_id, domain)
+    gold_filename, gold_key = _build_gold_key(
+        workflow_slug, job_slug, run_id, domain, build_strategy=build_strategy,
+        custom_table_name=custom_table_name,
+    )
     gold_table_name = _get_gold_table_name(workflow_slug, job_slug)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -140,18 +172,23 @@ def gold_publish(silver_result: dict, domain: str = "analytics") -> dict:
 
         # Write metadata to catalog
         try:
-            parent_silver_table = f"{workflow_slug}_{job_slug}_silver"
+            # Get user-configured table names from destination_config
+            custom_gold_table = gold_config.get("tableName") if gold_config else None
+            silver_config = destination_config.get("silverConfig", {})
+            parent_silver_table = silver_config.get("tableName") or f"{job_slug}_silver"
+
             asset_id = catalog_gold_asset(
-                job_id=job_id,
+                source_id=job_id,  # job_id is actually the source ID
                 workflow_slug=workflow_slug,
-                job_slug=job_slug,
+                source_slug=job_slug,
                 s3_key=gold_key,
                 row_count=len(df),
                 dataframe=df,
                 parent_silver_table=parent_silver_table,
-                environment="prod",
+                environment=environment,
+                custom_table_name=custom_gold_table,
             )
-            logger.info(f"✅ Gold metadata cataloged: {asset_id}")
+            logger.info(f"✅ Gold metadata cataloged: {asset_id} (table: {custom_gold_table or 'auto-generated'})")
         except Exception as e:
             logger.warning(f"⚠️ Failed to catalog gold metadata: {e}")
 

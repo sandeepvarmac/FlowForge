@@ -373,21 +373,14 @@ export default function MonitorPage() {
             </Card>
           </div>
 
-          {/* Executions List */}
+          {/* Executions List with Inline Details */}
           <ExecutionsList
             executions={executions}
             selectedExecution={selectedExecution}
             onSelectExecution={setSelectedExecution}
+            executionDetails={executionDetails}
+            loadingDetails={loadingDetails}
           />
-
-          {/* Execution Details Panel */}
-          {selectedExecution && (
-            <ExecutionDetailsPanel
-              executionDetails={executionDetails}
-              loading={loadingDetails}
-              onClose={() => setSelectedExecution(null)}
-            />
-          )}
         </>
       ) : (
         <PerformanceDashboard
@@ -404,7 +397,7 @@ export default function MonitorPage() {
 }
 
 // Executions List Component
-function ExecutionsList({ executions, selectedExecution, onSelectExecution }: any) {
+function ExecutionsList({ executions, selectedExecution, onSelectExecution, executionDetails, loadingDetails }: any) {
   if (executions.length === 0) {
     return (
       <Card>
@@ -420,319 +413,226 @@ function ExecutionsList({ executions, selectedExecution, onSelectExecution }: an
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {executions.map((execution: any) => (
         <ExecutionCard
           key={execution.id}
           execution={execution}
           isSelected={selectedExecution === execution.id}
           onSelect={onSelectExecution}
+          executionDetails={selectedExecution === execution.id ? executionDetails : null}
+          loadingDetails={selectedExecution === execution.id ? loadingDetails : false}
         />
       ))}
     </div>
   )
 }
 
-// Execution Card Component
-function ExecutionCard({ execution, isSelected, onSelect }: any) {
+// Execution Card Component with Inline Expandable Details
+function ExecutionCard({ execution, isSelected, onSelect, executionDetails, loadingDetails }: any) {
   const statusConfig: any = {
-    running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50', spin: true },
-    completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', spin: false },
-    failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', spin: false },
-    cancelled: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-50', spin: false }
+    running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50', badge: 'default', spin: true },
+    completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', badge: 'success', spin: false },
+    failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', badge: 'destructive', spin: false },
+    cancelled: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-50', badge: 'secondary', spin: false }
   }
 
   const config = statusConfig[execution.status] || statusConfig.completed
   const StatusIcon = config.icon
 
-  const progress = execution.total_jobs > 0
-    ? (execution.completed_jobs / execution.total_jobs) * 100
-    : 0
-
   const handleClick = () => {
-    // Toggle: if already selected, deselect; otherwise select
     onSelect(isSelected ? null : execution.id)
   }
 
   return (
-    <Card
-      className={`cursor-pointer transition-all hover:shadow-lg ${
-        isSelected ? 'ring-2 ring-primary shadow-brand' : ''
-      }`}
-      onClick={handleClick}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
+    <div className="border border-border rounded-lg overflow-hidden bg-background transition-all">
+      {/* Card Header - Clickable */}
+      <div
+        className={`p-3 cursor-pointer hover:bg-background-secondary transition-colors ${isSelected ? 'bg-background-secondary' : ''}`}
+        onClick={handleClick}
+      >
+        <div className="flex items-center gap-3">
           {/* Status Icon */}
-          <div className={`p-3 rounded-lg ${config.bg}`}>
-            <StatusIcon className={`w-6 h-6 ${config.color} ${config.spin ? 'animate-spin' : ''}`} />
+          <div className={`p-2 rounded-lg ${config.bg} shrink-0`}>
+            <StatusIcon className={`w-5 h-5 ${config.color} ${config.spin ? 'animate-spin' : ''}`} />
           </div>
 
-          {/* Content */}
+          {/* Main Info */}
           <div className="flex-1 min-w-0">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground text-lg truncate">
-                  {execution.workflow_name}
-                </h3>
-                <p className="text-sm text-foreground-muted">
-                  Execution ID: {execution.id}
-                </p>
-              </div>
-              <Badge variant={execution.status === 'completed' ? 'success' : execution.status === 'failed' ? 'destructive' : 'default'}>
-                {execution.status}
-              </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-foreground truncate">
+              {execution.pipeline_name || execution.workflow_name || 'Pipeline'}
+            </span>
             </div>
-
-            {/* Metrics */}
-            <div className="flex items-center gap-4 text-sm text-foreground-muted mb-3 flex-wrap">
-              <div className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
+            <div className="flex items-center gap-3 text-xs text-foreground-muted mt-0.5 flex-wrap">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
                 {execution.started_at && formatDistanceToNow(new Date(execution.started_at), { addSuffix: true })}
-              </div>
+              </span>
               {execution.duration_ms && (
-                <div className="flex items-center gap-1">
-                  <Timer className="w-4 h-4" />
+                <span className="flex items-center gap-1">
+                  <Timer className="w-3 h-3" />
                   {formatDuration(execution.duration_ms)}
-                </div>
+                </span>
               )}
-              <div className="flex items-center gap-1">
-                <Activity className="w-4 h-4" />
+              <span className="flex items-center gap-1">
+                <Activity className="w-3 h-3" />
                 {execution.completed_jobs}/{execution.total_jobs} jobs
-              </div>
-              {execution.total_records_processed > 0 && (
-                <div className="flex items-center gap-1">
-                  <Database className="w-4 h-4" />
-                  {formatNumber(execution.total_records_processed)} records
-                </div>
-              )}
-              {/* Trigger Info */}
-              {execution.trigger_type && (
-                <div className="flex items-center gap-1">
-                  {execution.trigger_type === 'manual' && (
-                    <>
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/>
-                      </svg>
-                      <span>Manual</span>
-                    </>
-                  )}
-                  {execution.trigger_type === 'scheduled' && (
-                    <>
-                      <Clock className="w-4 h-4" />
-                      <span>Scheduled{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
-                    </>
-                  )}
-                  {execution.trigger_type === 'dependency' && (
-                    <>
-                      <GitBranch className="w-4 h-4" />
-                      <span>Triggered{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
-                    </>
-                  )}
-                  {execution.trigger_type === 'event' && (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      <span>Event{execution.trigger_name ? `: ${execution.trigger_name}` : ''}</span>
-                    </>
-                  )}
-                </div>
-              )}
+              </span>
             </div>
-
-            {/* Progress Bar */}
-            {execution.status === 'running' && execution.total_jobs > 0 && (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-xs text-foreground-muted">
-                  <span>Progress</span>
-                  <span>{Math.round(progress)}%</span>
-                </div>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Failed Jobs Indicator */}
-            {execution.failed_jobs > 0 && (
-              <div className="mt-2 flex items-center gap-2 text-sm text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                {execution.failed_jobs} job{execution.failed_jobs > 1 ? 's' : ''} failed
-              </div>
-            )}
           </div>
 
-          {/* Expand Icon */}
-          <ChevronRight className={`w-5 h-5 text-foreground-muted transition-transform ${isSelected ? 'rotate-90' : ''}`} />
+          {/* Status Badge & Chevron */}
+          <Badge variant={config.badge} className="shrink-0">
+            {execution.status}
+          </Badge>
+          <ChevronDown className={`w-4 h-4 text-foreground-muted transition-transform shrink-0 ${isSelected ? 'rotate-180' : ''}`} />
         </div>
-      </CardContent>
-    </Card>
-  )
-}
+      </div>
 
-// Execution Details Panel Component
-function ExecutionDetailsPanel({ executionDetails, loading, onClose }: any) {
-  if (loading || !executionDetails) {
-    return (
-      <Card>
-        <CardContent className="p-12 text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-foreground-muted">Loading execution details...</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const { execution, jobExecutions, metrics } = executionDetails
-
-  return (
-    <Card>
-      <CardHeader className="border-b border-border">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-xl">Execution Details</CardTitle>
-            <p className="text-sm text-foreground-muted mt-1">
-              {execution.workflow_name} • {execution.id}
-            </p>
-          </div>
-          <div className="text-xs text-foreground-muted">
-            Click the execution card to collapse
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-6 space-y-6">
-        {/* Aggregate Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-lg bg-background-tertiary">
-            <div className="text-2xl font-bold text-foreground">{metrics.totalJobs}</div>
-            <div className="text-sm text-foreground-muted">Total Jobs</div>
-          </div>
-          <div className="p-4 rounded-lg bg-green-50">
-            <div className="text-2xl font-bold text-green-600">{metrics.completedJobs}</div>
-            <div className="text-sm text-foreground-muted">Completed</div>
-          </div>
-          <div className="p-4 rounded-lg bg-red-50">
-            <div className="text-2xl font-bold text-red-600">{metrics.failedJobs}</div>
-            <div className="text-sm text-foreground-muted">Failed</div>
-          </div>
-          <div className="p-4 rounded-lg bg-background-tertiary">
-            <div className="text-2xl font-bold text-foreground">{formatNumber(metrics.totalRecordsProcessed)}</div>
-            <div className="text-sm text-foreground-muted">Records</div>
-          </div>
-        </div>
-
-        {/* Medallion Metrics */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="p-4 rounded-lg border-2 border-yellow-300 bg-yellow-50">
-            <div className="flex items-center gap-2 mb-2">
-              <Layers className="w-4 h-4 text-yellow-700" />
-              <span className="text-sm font-medium text-yellow-700">Bronze</span>
+      {/* Inline Expanded Details */}
+      {isSelected && (
+        <div className="border-t border-border bg-background-secondary">
+          {loadingDetails ? (
+            <div className="p-4 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm text-foreground-muted">Loading details...</span>
             </div>
-            <div className="text-xl font-bold text-yellow-700">{formatNumber(metrics.totalBronzeRecords)}</div>
-            <div className="text-xs text-yellow-600">Raw records</div>
-          </div>
-          <div className="p-4 rounded-lg border-2 border-blue-300 bg-blue-50">
-            <div className="flex items-center gap-2 mb-2">
-              <Layers className="w-4 h-4 text-blue-700" />
-              <span className="text-sm font-medium text-blue-700">Silver</span>
-            </div>
-            <div className="text-xl font-bold text-blue-700">{formatNumber(metrics.totalSilverRecords)}</div>
-            <div className="text-xs text-blue-600">Cleaned records</div>
-          </div>
-          <div className="p-4 rounded-lg border-2 border-purple-300 bg-purple-50">
-            <div className="flex items-center gap-2 mb-2">
-              <Layers className="w-4 h-4 text-purple-700" />
-              <span className="text-sm font-medium text-purple-700">Gold</span>
-            </div>
-            <div className="text-xl font-bold text-purple-700">{formatNumber(metrics.totalGoldRecords)}</div>
-            <div className="text-xs text-purple-600">Curated records</div>
-          </div>
-        </div>
-
-        {/* Job Executions Timeline */}
-        <div>
-          <h3 className="text-lg font-semibold text-foreground mb-4">Job Execution Timeline</h3>
-          <div className="space-y-3">
-            {jobExecutions.map((jobExec: any) => (
-              <JobExecutionItem key={jobExec.id} jobExecution={jobExec} />
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// Job Execution Item Component
-function JobExecutionItem({ jobExecution }: any) {
-  const statusConfig: any = {
-    completed: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-    failed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
-    running: { icon: Loader2, color: 'text-blue-600', bg: 'bg-blue-50' },
-    pending: { icon: Clock, color: 'text-gray-600', bg: 'bg-gray-50' }
-  }
-
-  const config = statusConfig[jobExecution.status] || statusConfig.pending
-  const StatusIcon = config.icon
-
-  return (
-    <div className={`p-4 rounded-lg border-2 ${jobExecution.status === 'failed' ? 'border-red-200 bg-red-50' : 'border-border bg-background-secondary'}`}>
-      <div className="flex items-start gap-3">
-        <div className={`p-2 rounded-lg ${config.bg}`}>
-          <StatusIcon className={`w-5 h-5 ${config.color}`} />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h4 className="font-medium text-foreground">{jobExecution.job_name}</h4>
-              <p className="text-sm text-foreground-muted">{jobExecution.job_type}</p>
-            </div>
-            <Badge variant={jobExecution.status === 'completed' ? 'success' : jobExecution.status === 'failed' ? 'destructive' : 'default'}>
-              {jobExecution.status}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-            {jobExecution.duration_ms && (
-              <div>
-                <span className="text-foreground-muted">Duration:</span>
-                <span className="ml-1 font-medium text-foreground">{formatDuration(jobExecution.duration_ms)}</span>
-              </div>
-            )}
-            {jobExecution.records_processed > 0 && (
-              <div>
-                <span className="text-foreground-muted">Records:</span>
-                <span className="ml-1 font-medium text-foreground">{formatNumber(jobExecution.records_processed)}</span>
-              </div>
-            )}
-            {jobExecution.bronze_records > 0 && (
-              <div>
-                <span className="text-foreground-muted">Bronze:</span>
-                <span className="ml-1 font-medium text-foreground">{formatNumber(jobExecution.bronze_records)}</span>
-              </div>
-            )}
-            {jobExecution.silver_records > 0 && (
-              <div>
-                <span className="text-foreground-muted">Silver:</span>
-                <span className="ml-1 font-medium text-foreground">{formatNumber(jobExecution.silver_records)}</span>
-              </div>
-            )}
-          </div>
-
-          {jobExecution.error_message && (
-            <div className="mt-2 p-2 rounded bg-red-100 border border-red-200">
-              <p className="text-sm text-red-700 font-mono">{jobExecution.error_message}</p>
+          ) : executionDetails ? (
+            <InlineExecutionDetails details={executionDetails} />
+          ) : (
+            <div className="p-4 text-center text-sm text-foreground-muted">
+              No details available
             </div>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// Compact Inline Execution Details
+function InlineExecutionDetails({ details }: { details: any }) {
+  const { execution, jobExecutions, metrics } = details
+  const [expandedJob, setExpandedJob] = React.useState<string | null>(null)
+
+  return (
+    <div className="p-3 space-y-3">
+      {/* Compact Metrics Row */}
+      <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-background text-xs">
+          <span className="text-foreground-muted">Jobs:</span>
+          <span className="font-medium text-green-600">{metrics.completedJobs}</span>
+          <span className="text-foreground-muted">/</span>
+          <span className="font-medium">{metrics.totalJobs}</span>
+          {metrics.failedJobs > 0 && (
+            <span className="text-red-600">({metrics.failedJobs} failed)</span>
+          )}
+        </div>
+
+        {/* Medallion Layer Stats - Compact with Labels */}
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-200 text-xs">
+          <Layers className="w-3 h-3 text-amber-600" />
+          <span className="text-amber-600 font-medium">Bronze:</span>
+          <span className="text-amber-700 font-semibold">{formatNumber(metrics.totalBronzeRecords)}</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100 border border-slate-300 text-xs">
+          <Layers className="w-3 h-3 text-slate-500" />
+          <span className="text-slate-500 font-medium">Silver:</span>
+          <span className="text-slate-700 font-semibold">{formatNumber(metrics.totalSilverRecords)}</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-50 border border-yellow-400 text-xs">
+          <Layers className="w-3 h-3 text-yellow-600" />
+          <span className="text-yellow-600 font-medium">Gold:</span>
+          <span className="text-yellow-700 font-semibold">{formatNumber(metrics.totalGoldRecords)}</span>
+        </div>
+      </div>
+
+      {/* Job Executions - Compact List */}
+      <div className="space-y-1">
+        <div className="text-xs font-medium text-foreground-muted uppercase tracking-wide">Source Executions</div>
+        {jobExecutions.map((jobExec: any) => (
+          <CompactJobItem
+            key={jobExec.id}
+            jobExecution={jobExec}
+            isExpanded={expandedJob === jobExec.id}
+            onToggle={() => setExpandedJob(expandedJob === jobExec.id ? null : jobExec.id)}
+          />
+        ))}
       </div>
     </div>
   )
 }
+
+// Compact Job Execution Item
+function CompactJobItem({ jobExecution, isExpanded, onToggle }: { jobExecution: any, isExpanded: boolean, onToggle: () => void }) {
+  const statusConfig: any = {
+    completed: { color: 'text-green-600', bg: 'bg-green-500' },
+    failed: { color: 'text-red-600', bg: 'bg-red-500' },
+    running: { color: 'text-blue-600', bg: 'bg-blue-500' },
+    pending: { color: 'text-gray-500', bg: 'bg-gray-400' }
+  }
+  const config = statusConfig[jobExecution.status] || statusConfig.pending
+
+  return (
+    <div className={`rounded border ${jobExecution.status === 'failed' ? 'border-red-200 bg-red-50/50' : 'border-border bg-background'}`}>
+      {/* Job Header */}
+      <div
+        className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-background-tertiary"
+        onClick={onToggle}
+      >
+        <div className={`w-2 h-2 rounded-full ${config.bg}`} />
+        <span className="text-sm font-medium text-foreground flex-1 truncate">{jobExecution.job_name}</span>
+
+        {/* Inline stats */}
+        <div className="flex items-center gap-2 text-xs text-foreground-muted">
+          {jobExecution.duration_ms && (
+            <span>{formatDuration(jobExecution.duration_ms)}</span>
+          )}
+          {jobExecution.bronze_records > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium">{formatNumber(jobExecution.bronze_records)} Bronze</span>
+          )}
+          {jobExecution.silver_records > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">{formatNumber(jobExecution.silver_records)} Silver</span>
+          )}
+          {jobExecution.gold_records > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-700 font-medium">{formatNumber(jobExecution.gold_records)} Gold</span>
+          )}
+        </div>
+
+        <Badge variant={jobExecution.status === 'completed' ? 'success' : jobExecution.status === 'failed' ? 'destructive' : 'default'} className="text-[10px] px-1.5 py-0">
+          {jobExecution.status}
+        </Badge>
+        <ChevronRight className={`w-3 h-3 text-foreground-muted transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+      </div>
+
+      {/* Expanded Details */}
+      {isExpanded && (
+        <div className="px-2 pb-2 pt-1 border-t border-border text-xs space-y-1">
+          {jobExecution.error_message && (
+            <div className="p-1.5 rounded bg-red-100 text-red-700 font-mono text-[11px] break-all">
+              {jobExecution.error_message}
+            </div>
+          )}
+          {jobExecution.logs && jobExecution.logs.length > 0 && (
+            <div className="space-y-0.5">
+              <span className="text-foreground-muted">Logs:</span>
+              {jobExecution.logs.slice(-5).map((log: string, i: number) => (
+                <div key={i} className="text-foreground-muted font-mono text-[11px] truncate">
+                  {log}
+                </div>
+              ))}
+            </div>
+          )}
+          {!jobExecution.error_message && (!jobExecution.logs || jobExecution.logs.length === 0) && (
+            <div className="text-foreground-muted">No additional details</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 // Performance Dashboard Component (continued in next part due to length)
 function PerformanceDashboard({ metrics, timeRange, onTimeRangeChange }: any) {

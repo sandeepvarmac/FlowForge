@@ -119,6 +119,7 @@ export interface DataSourceConfig {
   name: string
   type: DataSourceType
   connection: ConnectionConfig
+  connectionId?: string // Reference to saved database connection (for edit restoration)
   fileConfig?: FileSourceConfig
   databaseConfig?: DatabaseSourceConfig
   apiConfig?: ApiSourceConfig

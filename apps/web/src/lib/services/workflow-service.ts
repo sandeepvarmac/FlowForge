@@ -229,11 +229,16 @@ export class WorkflowService {
   }
 
   // Upload file with AI analysis
-  static async uploadFile(workflowId: string, jobId: string, file: File): Promise<any> {
+  // Uses source name for landing path: landing/{source_name}/{yyyy/MM/dd}/{timestamp}_{filename}
+  static async uploadFile(workflowId: string, jobId: string, file: File, sourceName?: string): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('workflowId', workflowId)
     formData.append('jobId', jobId)
+    // Use sourceName for the new timestamp-based landing path
+    if (sourceName) {
+      formData.append('sourceName', sourceName)
+    }
 
     const response = await fetch(`${this.baseUrl}/upload`, {
       method: 'POST',

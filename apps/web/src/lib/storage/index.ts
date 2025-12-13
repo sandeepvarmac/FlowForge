@@ -31,50 +31,96 @@ const s3Client = new S3Client({
 const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'flowforge-data'
 
 /**
+ * Generate landing zone path following best practices:
+ * landing/{source_name}/{yyyy/MM/dd}/{timestamp}_{filename}
+ *
+ * This provides:
+ * - Human-readable source name for easy browsing
+ * - Date-partitioned for daily processing and cleanup
+ * - Timestamp prefix prevents filename collisions
+ */
+export function generateLandingKey(sourceName: string, filename: string): string {
+  const now = new Date()
+  const dateFolder = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`
+  const timestamp = now.getTime()
+  const sanitizedSourceName = sourceName.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '')
+
+  return `landing/${sanitizedSourceName}/${dateFolder}/${timestamp}_${filename}`
+}
+
+/**
  * Upload file to MinIO landing folder
+ *
+ * @param sourceName - Human-readable source name (e.g., "loan_payments")
+ * @param file - File to upload
+ * @param bufferOverride - Optional pre-read buffer
+ * @returns Object with s3Uri and landingKey
  */
 export async function saveUploadedFile(
-  workflowId: string,
-  jobId: string,
+  sourceName: string,
   file: File,
   bufferOverride?: Buffer
-): Promise<string> {
+): Promise<{ s3Uri: string; landingKey: string }> {
   console.log(`🔵 === STORAGE FUNCTION CALLED ===`)
-  console.log(`🔵 Workflow ID: ${workflowId}`)
-  console.log(`🔵 Job ID: ${jobId}`)
+  console.log(`🔵 Source Name: ${sourceName}`)
   console.log(`🔵 File name: ${file.name}`)
   console.log(`🔵 File size: ${file.size} bytes`)
 
   const buffer =
     bufferOverride ?? Buffer.from(await file.arrayBuffer())
 
-  const key = `landing/${workflowId}/${jobId}/${file.name}`
+  const key = generateLandingKey(sourceName, file.name)
 
   console.log(`📤 Uploading to S3: ${key} (${buffer.length} bytes)`)
   console.log(`   Endpoint: ${process.env.S3_ENDPOINT_URL || 'http://localhost:9000'}`)
   console.log(`   Bucket: ${BUCKET_NAME}`)
-  console.log(`   Access Key: ${(process.env.S3_ACCESS_KEY_ID || 'prefect').substring(0, 3)}***`)
 
   try {
-    console.log(`🔵 About to call S3Client.send()...`)
     const result = await s3Client.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: key,
         Body: buffer,
-        ContentType: file.type,
+        ContentType: file.type || 'text/csv',
       })
     )
 
-    console.log(`✅ S3Client.send() returned successfully!`)
     console.log(`✅ Upload successful! ETag: ${result.ETag}`)
     console.log(`✅ Uploaded to MinIO: s3://${BUCKET_NAME}/${key}`)
 
-    return `s3://${BUCKET_NAME}/${key}`
+    return {
+      s3Uri: `s3://${BUCKET_NAME}/${key}`,
+      landingKey: key,
+    }
   } catch (error) {
     console.error(`❌ S3 upload failed:`, error)
     throw error
   }
+}
+
+/**
+ * Legacy upload function for backward compatibility
+ * @deprecated Use saveUploadedFile(sourceName, file) instead
+ */
+export async function saveUploadedFileLegacy(
+  workflowId: string,
+  jobId: string,
+  file: File,
+  bufferOverride?: Buffer
+): Promise<string> {
+  const buffer = bufferOverride ?? Buffer.from(await file.arrayBuffer())
+  const key = `landing/${workflowId}/${jobId}/${file.name}`
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: buffer,
+      ContentType: file.type || 'text/csv',
+    })
+  )
+
+  return `s3://${BUCKET_NAME}/${key}`
 }
 
 /**

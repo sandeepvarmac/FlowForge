@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { saveUploadedFile, getFileHash, readFile } from '@/lib/storage'
+import { saveUploadedFile, getFileHash, generateLandingKey } from '@/lib/storage'
 import { analyzeSchemaWithAI } from '@/lib/ai/anthropic-client'
 // Note: Primary key analysis moved to /api/ai/analyze-schema (AI-powered Schema Intelligence)
 import { getDatabase } from '@/lib/db'
@@ -11,11 +11,16 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/upload
  * Upload CSV file and get AI-powered schema analysis
+ *
+ * Now uses source name based landing path:
+ * landing/{source_name}/{yyyy/MM/dd}/{timestamp}_{filename}
  */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const sourceName = formData.get('sourceName') as string
+    // Legacy params for backward compatibility
     const workflowId = formData.get('workflowId') as string
     const jobId = formData.get('jobId') as string
 
@@ -23,21 +28,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!workflowId || !jobId) {
-      return NextResponse.json(
-        { error: 'workflowId and jobId are required' },
-        { status: 400 }
-      )
-    }
+    // Use sourceName if provided, fall back to jobId or derive from filename
+    const effectiveSourceName = sourceName || jobId || file.name.replace(/\.[^/.]+$/, '')
 
-    console.log(`📁 Uploading file: ${file.name} for job ${jobId}`)
+    console.log(`📁 Uploading file: ${file.name} for source "${effectiveSourceName}"`)
 
     // Read file once to reuse across operations
     const arrayBuffer = await file.arrayBuffer()
     const fileBuffer = Buffer.from(arrayBuffer)
 
-    // Save file to storage
-    const filepath = await saveUploadedFile(workflowId, jobId, file, fileBuffer)
+    // Save file to storage with new timestamp-based path
+    const { s3Uri: filepath, landingKey } = await saveUploadedFile(effectiveSourceName, file, fileBuffer)
 
     // Parse CSV for analysis (use same buffer to avoid duplicate reads)
     const fileContent = fileBuffer.toString('utf-8')
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       filepath,
+      landingKey,
       rowCount: data.length,
       columnCount: columns.length,
       columns,

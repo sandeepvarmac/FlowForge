@@ -88,15 +88,15 @@ export async function GET(request: NextRequest) {
     const efficiencyQuery = `
       SELECT
         COUNT(*) as total_executions,
-        SUM(je.records_processed) as total_records,
-        AVG(je.records_processed * 1000.0 / NULLIF(je.duration_ms, 0)) as avg_records_per_second,
-        SUM(je.bronze_records) as total_bronze_records,
-        SUM(je.silver_records) as total_silver_records,
-        SUM(je.gold_records) as total_gold_records,
-        AVG(je.duration_ms) as avg_job_duration
-      FROM job_executions je
-      JOIN executions e ON je.execution_id = e.id
-      WHERE e.started_at >= ? AND je.duration_ms > 0
+        SUM(se.records_processed) as total_records,
+        AVG(se.records_processed * 1000.0 / NULLIF(se.duration_ms, 0)) as avg_records_per_second,
+        SUM(se.bronze_records) as total_bronze_records,
+        SUM(se.silver_records) as total_silver_records,
+        SUM(se.gold_records) as total_gold_records,
+        AVG(se.duration_ms) as avg_job_duration
+      FROM source_executions se
+      JOIN executions e ON se.execution_id = e.id
+      WHERE e.started_at >= ? AND se.duration_ms > 0
     `
     const efficiency = db.prepare(efficiencyQuery).get(startTime)
 

@@ -25,6 +25,9 @@ interface CSVFileUploadProps {
   initialPreview?: any[]
   // Reset callback
   onReset?: () => void
+  // Column exclusion for Bronze layer (matching Storage Connection feature)
+  excludedColumns?: string[]
+  onExcludedColumnsChange?: (excludedColumns: string[]) => void
 }
 
 interface UploadState {
@@ -70,7 +73,9 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
     initialFile,
     initialSchema,
     initialPreview,
-    onReset
+    onReset,
+    excludedColumns = [],
+    onExcludedColumnsChange
   }, ref) {
   const [state, setState] = React.useState<UploadState>({
     isDragging: false,
@@ -881,18 +886,52 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
+                      {onExcludedColumnsChange && (
+                        <th className="text-left p-3 font-semibold text-foreground-muted w-16">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={excludedColumns.length === 0}
+                              onChange={(e) => {
+                                const allColumns = state.schema?.map(c => c.name) || []
+                                onExcludedColumnsChange(e.target.checked ? [] : allColumns)
+                              }}
+                              className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                            />
+                            <span>Include</span>
+                          </div>
+                        </th>
+                      )}
                       <th className="text-left p-3 font-semibold text-foreground-muted">#</th>
                       <th className="text-left p-3 font-semibold text-foreground-muted">Column Name</th>
                       <th className="text-left p-3 font-semibold text-foreground-muted">Data Type</th>
                       <th className="text-left p-3 font-semibold text-foreground-muted">Sample Value</th>
-                      <th className="text-left p-3 font-semibold text-foreground-muted">Data Quality</th>
+                      <th className="text-left p-3 font-semibold text-foreground-muted">Nullable</th>
                     </tr>
                   </thead>
                   <tbody>
                     {state.schema.map((col, index) => {
                       const typedCol = col as any
+                      const isExcluded = excludedColumns.includes(col.name)
+                      // A column is nullable if it has any null values (nullPercentage > 0)
+                      const isNullable = typedCol.nullPercentage > 0
                       return (
-                        <tr key={index} className="border-b border-border hover:bg-background-secondary transition-colors">
+                        <tr key={index} className={`border-b border-border hover:bg-background-secondary transition-colors ${isExcluded ? 'opacity-50 bg-gray-50' : ''}`}>
+                          {onExcludedColumnsChange && (
+                            <td className="p-3">
+                              <input
+                                type="checkbox"
+                                checked={!isExcluded}
+                                onChange={(e) => {
+                                  const newExcluded = e.target.checked
+                                    ? excludedColumns.filter(c => c !== col.name)
+                                    : [...excludedColumns, col.name]
+                                  onExcludedColumnsChange(newExcluded)
+                                }}
+                                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                              />
+                            </td>
+                          )}
                           <td className="p-3 text-foreground-muted font-mono">{index + 1}</td>
                           <td className="p-3">
                             <div className="font-medium text-foreground font-mono">{col.name}</div>
@@ -918,22 +957,11 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
                             </div>
                           </td>
                           <td className="p-3">
-                            <div className="text-xs space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-600">✓ {typedCol.nonEmptyCount} filled</span>
-                              </div>
-                              {typedCol.nullPercentage > 0 && (
-                                <div className="flex items-center gap-2">
-                                  <span className={`${
-                                    typedCol.nullPercentage > 20 ? 'text-red-600' :
-                                    typedCol.nullPercentage > 10 ? 'text-amber-600' :
-                                    'text-gray-600'
-                                  }`}>
-                                    {typedCol.nullPercentage > 20 ? '⚠' : '○'} {typedCol.nullPercentage}% null
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                            {isNullable ? (
+                              <span className="text-amber-600 text-xs">Yes</span>
+                            ) : (
+                              <span className="text-green-600 text-xs">No</span>
+                            )}
                           </td>
                         </tr>
                       )
@@ -1015,66 +1043,6 @@ export const CSVFileUpload = React.forwardRef<{ reset: () => void }, CSVFileUplo
                         })}
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Data Quality Summary */}
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-semibold text-sm mb-3 text-foreground">Quick Data Quality Summary</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 px-3 font-medium text-gray-700">Quality Level</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-700">Column Count</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-700">Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                          <span className="font-medium text-green-700">Good Quality</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-3 font-mono text-green-700">
-                        {state.schema?.filter(col => (col as any).nullPercentage < 5).length}
-                      </td>
-                      <td className="py-2 px-3 text-gray-600">
-                        Columns with &lt;5% missing values
-                      </td>
-                    </tr>
-                    <tr className="border-b border-gray-100">
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                          <span className="font-medium text-amber-700">Moderate Issues</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-3 font-mono text-amber-700">
-                        {state.schema?.filter(col => (col as any).nullPercentage >= 5 && (col as any).nullPercentage < 20).length}
-                      </td>
-                      <td className="py-2 px-3 text-gray-600">
-                        Columns with 5-20% missing values
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                          <span className="font-medium text-red-700">Data Concerns</span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-3 font-mono text-red-700">
-                        {state.schema?.filter(col => (col as any).nullPercentage >= 20).length}
-                      </td>
-                      <td className="py-2 px-3 text-gray-600">
-                        Columns with &gt;20% missing values
-                      </td>
-                    </tr>
                   </tbody>
                 </table>
               </div>

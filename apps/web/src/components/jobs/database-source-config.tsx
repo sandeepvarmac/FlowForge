@@ -23,6 +23,9 @@ interface DatabaseSourceConfigProps {
   ) => void
   useSavedConnection?: boolean // When true, hide connection form and only show table selection
   connectionId?: string // ID of saved connection (for password lookup)
+  // Column exclusion props (for parity with Storage Connection)
+  excludedColumns?: string[]
+  onExcludedColumnsChange?: (excludedColumns: string[]) => void
 }
 
 interface ConnectionState {
@@ -68,7 +71,9 @@ export function DatabaseSourceConfig({
   onDatabaseConfigChange,
   onSchemaDetected,
   useSavedConnection = false,
-  connectionId
+  connectionId,
+  excludedColumns = [],
+  onExcludedColumnsChange
 }: DatabaseSourceConfigProps) {
   const [state, setState] = React.useState<ConnectionState>({
     isConnecting: false,
@@ -550,6 +555,8 @@ export function DatabaseSourceConfig({
               showAiBadge={true}
               expandInline={true}
               previewData={state.previewData || undefined}
+              excludedColumns={excludedColumns}
+              onExcludedColumnsChange={onExcludedColumnsChange}
               onClear={() => {
                 onDatabaseConfigChange({ ...databaseConfig, tableName: '' })
                 setState(prev => ({
