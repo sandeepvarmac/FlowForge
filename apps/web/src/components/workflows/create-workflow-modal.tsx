@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { FormField, FormLabel, FormError, Textarea, Select } from "@/components/ui/form"
 import { WorkflowFormData } from "@/types"
 import { useWorkflowActions } from "@/hooks"
-import { Info, X } from "lucide-react"
+import { useFeatureFlags } from "@/lib/config/feature-flags"
+import { Info, X, Layers, Database } from "lucide-react"
 
 interface CreatePipelineModalProps {
   mode?: 'create' | 'edit'
@@ -30,7 +31,8 @@ const defaultFormData: WorkflowFormData = {
   priority: 'medium',
   notificationEmail: '',
   tags: [],
-  retentionDays: 90
+  retentionDays: 90,
+  pipelineMode: 'source-centric'
 }
 
 export function CreatePipelineModal({
@@ -43,6 +45,7 @@ export function CreatePipelineModal({
 }: CreatePipelineModalProps) {
   const router = useRouter()
   const { createWorkflow } = useWorkflowActions()
+  const { showLayerCentricMode } = useFeatureFlags()
   const [loading, setLoading] = React.useState(false)
   const [errors, setErrors] = React.useState<Partial<WorkflowFormData>>({})
   const [tagInput, setTagInput] = React.useState('')
@@ -284,6 +287,64 @@ export function CreatePipelineModal({
               <FormError>{errors.application}</FormError>
             </FormField>
           </div>
+
+          {/* Pipeline Mode - Only shown when feature flag is enabled */}
+          {showLayerCentricMode && mode === 'create' && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-foreground border-b pb-2">Pipeline Architecture</h3>
+
+              <FormField>
+                <FormLabel>Pipeline Mode</FormLabel>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  {/* Source-Centric Mode */}
+                  <button
+                    type="button"
+                    onClick={() => updateField('pipelineMode', 'source-centric')}
+                    className={`relative flex flex-col items-start p-4 rounded-lg border-2 transition-all duration-200 ${
+                      formData.pipelineMode === 'source-centric'
+                        ? 'border-primary bg-primary/5 shadow-corporate'
+                        : 'border-border hover:border-border-secondary hover:bg-background-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Database className={`w-5 h-5 ${formData.pipelineMode === 'source-centric' ? 'text-primary' : 'text-foreground-muted'}`} />
+                      <span className="font-medium">Source-Centric</span>
+                      <Badge variant="secondary" className="text-xs">Default</Badge>
+                    </div>
+                    <p className="text-xs text-foreground-muted text-left">
+                      Each source flows through all layers independently (Landing → Bronze → Silver → Gold)
+                    </p>
+                  </button>
+
+                  {/* Layer-Centric Mode */}
+                  <button
+                    type="button"
+                    onClick={() => updateField('pipelineMode', 'layer-centric')}
+                    className={`relative flex flex-col items-start p-4 rounded-lg border-2 transition-all duration-200 ${
+                      formData.pipelineMode === 'layer-centric'
+                        ? 'border-primary bg-primary/5 shadow-corporate'
+                        : 'border-border hover:border-border-secondary hover:bg-background-secondary'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Layers className={`w-5 h-5 ${formData.pipelineMode === 'layer-centric' ? 'text-primary' : 'text-foreground-muted'}`} />
+                      <span className="font-medium">Layer-Centric</span>
+                      <Badge variant="outline" className="text-xs border-blue-300 text-blue-600">Beta</Badge>
+                    </div>
+                    <p className="text-xs text-foreground-muted text-left">
+                      Dataset Jobs can combine multiple sources at Silver/Gold layers (cross-source joins)
+                    </p>
+                  </button>
+                </div>
+                <p className="text-xs text-foreground-muted mt-2">
+                  <Info className="w-3 h-3 inline mr-1" />
+                  {formData.pipelineMode === 'layer-centric'
+                    ? 'Layer-centric pipelines use Dataset Jobs that can reference outputs from any source in the catalog.'
+                    : 'Source-centric pipelines maintain separate data lineage per source through all medallion layers.'}
+                </p>
+              </FormField>
+            </div>
+          )}
 
           {/* Ownership */}
           <div className="space-y-4">

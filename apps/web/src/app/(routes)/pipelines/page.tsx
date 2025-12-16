@@ -112,6 +112,26 @@ const getDataClassificationLabel = (classification: string) => {
   }
 }
 
+const safeDistanceToNow = (value?: Date | string | number) => {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (isNaN(date.getTime())) return null
+  return formatDistanceToNow(date, { addSuffix: true })
+}
+
+const safeFormatDateTime = (value?: Date | string | number) => {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).format(date)
+}
+
 const getHealthVariant = (health: string) => {
   switch (health) {
     case 'excellent':
@@ -1011,7 +1031,7 @@ export default function PipelinesPage() {
                           <>
                             <Calendar className="w-4 h-4 text-green-600" />
                             <p className="font-semibold text-foreground text-xs">
-                              {formatDistanceToNow(pipeline.nextRun, { addSuffix: true })}
+                              {safeDistanceToNow(pipeline.nextRun) || 'Unknown'}
                             </p>
                           </>
                         ) : pipeline.status === 'dependency' ? (
@@ -1039,9 +1059,9 @@ export default function PipelinesPage() {
                           </div>
                           <div className="text-xs text-foreground-muted">
                             {pipeline.lastExecution.endTime
-                              ? formatDistanceToNow(pipeline.lastExecution.endTime, { addSuffix: true })
+                              ? (safeDistanceToNow(pipeline.lastExecution.endTime) || '—')
                               : pipeline.lastExecution.startTime
-                              ? `Started ${formatDistanceToNow(pipeline.lastExecution.startTime, { addSuffix: true })}`
+                              ? `Started ${safeDistanceToNow(pipeline.lastExecution.startTime) || 'unknown'}`
                               : 'In progress'}
                           </div>
                         </div>
@@ -1068,13 +1088,7 @@ export default function PipelinesPage() {
                         </div>
                         {pipeline.lastExecution.endTime && (
                           <div className="text-xs text-foreground-muted pt-2">
-                            Finished: {new Intl.DateTimeFormat('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
-                            }).format(pipeline.lastExecution.endTime)}
+                            Finished: {safeFormatDateTime(pipeline.lastExecution.endTime) || '—'}
                           </div>
                         )}
                       </div>
@@ -1236,4 +1250,3 @@ export default function PipelinesPage() {
     </div>
   )
 }
-

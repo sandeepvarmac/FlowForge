@@ -22,6 +22,7 @@ function mapWorkflow(row: any, jobs: any[]) {
     jobs,
     lastRun: row.last_run ? new Date(row.last_run) : undefined,
     nextRun: row.next_run ? new Date(row.next_run) : undefined,
+    pipelineMode: row.pipeline_mode || 'source-centric',
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   }

@@ -33,6 +33,9 @@ export interface FeatureFlags {
   showReconciliation: boolean       // Show Reconciliation rules
   showDataLineage: boolean          // Show Data Lineage visualization
 
+  // Layer-Centric Mode (Beta)
+  showLayerCentricMode: boolean     // Enable layer-centric pipeline mode with Dataset Jobs
+
   // Demo Mode
   demoMode: boolean                 // Enable demo-optimized UI (hides all Coming Soon)
 }
@@ -92,6 +95,9 @@ function getFeatureFlags(): FeatureFlags {
     showGoldAnalytics: parseBool(process.env.NEXT_PUBLIC_SHOW_GOLD_ANALYTICS, true),
     showReconciliation: parseBool(process.env.NEXT_PUBLIC_SHOW_RECONCILIATION, true),
     showDataLineage: parseBool(process.env.NEXT_PUBLIC_SHOW_DATA_LINEAGE, true),
+
+    // Layer-Centric Mode - Beta feature, default to true for development
+    showLayerCentricMode: parseBool(process.env.NEXT_PUBLIC_SHOW_LAYER_CENTRIC_MODE, true),
 
     // Demo Mode
     demoMode,

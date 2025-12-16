@@ -6,6 +6,9 @@
  * - Source: An individual data ingestion task (formerly "Job")
  */
 
+// Pipeline Mode - determines how sources/jobs are organized
+export type PipelineMode = 'source-centric' | 'layer-centric'
+
 export interface Pipeline {
   id: string
   name: string
@@ -14,6 +17,7 @@ export interface Pipeline {
   owner: string
   status: PipelineStatus
   type: PipelineType
+  mode: PipelineMode // Pipeline architecture mode
   sources: Source[]
   lastRun?: Date
   nextRun?: Date
@@ -62,6 +66,7 @@ export interface PipelineFormData {
   businessUnit: string
   team: string
   pipelineType: PipelineType
+  pipelineMode?: PipelineMode // Optional, defaults to 'source-centric'
   environment?: 'dev' | 'qa' | 'prod'
   dataClassification?: 'public' | 'internal' | 'confidential' | 'pii'
   priority?: 'critical' | 'high' | 'medium' | 'low'
@@ -88,6 +93,35 @@ export type ExecutionStatus =
   | 'failed'
   | 'cancelled'
 
+// =============================================================================
+// LAYER-CENTRIC MODE TYPES (Dataset Jobs)
+// =============================================================================
+
+// Dataset status in the metadata catalog (for dependency tracking)
+export type DatasetStatus = 'pending' | 'running' | 'ready' | 'failed'
+
+// Target layer for dataset jobs
+export type TargetLayer = 'bronze' | 'silver' | 'gold'
+
+// Input dataset reference (for Silver/Gold dataset jobs)
+export interface InputDatasetRef {
+  tableName: string // Name in metadata catalog
+  layer: TargetLayer // Source layer (bronze for Silver jobs, silver for Gold jobs)
+  catalogId?: string // Optional catalog ID for direct reference
+}
+
+// Dataset Job configuration (for layer-centric mode)
+export interface DatasetJobConfig {
+  targetLayer: TargetLayer // Which layer this job produces
+  inputDatasets?: InputDatasetRef[] // Input datasets (for Silver/Gold jobs)
+  transformSql?: string // SQL transform definition
+  outputTableName: string // Output table name in the target layer
+}
+
+// =============================================================================
+// SOURCE TYPES
+// =============================================================================
+
 // Source Types for EDP Architecture (formerly Job)
 export interface Source {
   id: string
@@ -104,6 +138,9 @@ export interface Source {
   lastRun?: Date
   createdAt: Date
   updatedAt: Date
+  // Layer-centric / Dataset Job fields
+  isDatasetJob?: boolean // True if this is a layer-centric dataset job
+  datasetJobConfig?: DatasetJobConfig // Configuration for dataset jobs
 }
 
 export type SourceType =
@@ -112,6 +149,7 @@ export type SourceType =
   | 'nosql'
   | 'api'
   | 'gold-analytics' // Special type for Gold layer that reads from multiple Silver tables
+  | 'dataset-job' // Layer-centric mode: Dataset Job that operates on a specific layer
 
 export type SourceStatus =
   | 'configured'

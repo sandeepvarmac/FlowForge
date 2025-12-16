@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS pipelines (
   owner TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('manual', 'scheduled', 'running', 'completed', 'failed', 'paused')),
   type TEXT NOT NULL CHECK(type IN ('manual', 'scheduled', 'event-driven')),
+  pipeline_mode TEXT DEFAULT 'source-centric' CHECK(pipeline_mode IN ('source-centric', 'layer-centric')), -- Pipeline architecture mode
   business_unit TEXT,
   team TEXT, -- Team responsible for this pipeline
   environment TEXT, -- development, qa, uat, production
@@ -107,12 +108,13 @@ CREATE TABLE IF NOT EXISTS pipeline_triggers (
 );
 
 -- Sources table (formerly Jobs) - Individual data ingestion tasks
+-- In layer-centric mode, these become "Dataset Jobs" that operate on specific layers
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   pipeline_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
-  type TEXT NOT NULL CHECK(type IN ('file-based', 'database', 'api', 'gold-analytics', 'nosql')),
+  type TEXT NOT NULL CHECK(type IN ('file-based', 'database', 'api', 'gold-analytics', 'nosql', 'dataset-job')),
   order_index INTEGER NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('configured', 'ready', 'running', 'completed', 'failed', 'disabled')),
 
@@ -121,6 +123,12 @@ CREATE TABLE IF NOT EXISTS sources (
   destination_config TEXT NOT NULL, -- JSON
   transformation_config TEXT, -- JSON (optional)
   validation_config TEXT, -- JSON (optional)
+
+  -- Layer-centric / Dataset Job fields
+  is_dataset_job INTEGER DEFAULT 0, -- 1 if this is a layer-centric dataset job
+  target_layer TEXT CHECK(target_layer IN ('bronze', 'silver', 'gold')), -- Target layer for dataset jobs
+  input_datasets TEXT, -- JSON array: [{table_name, layer, catalog_id}] for Silver/Gold dataset jobs
+  transform_sql TEXT, -- SQL transform definition for dataset jobs
 
   last_run INTEGER, -- Unix timestamp
   created_at INTEGER NOT NULL,
@@ -315,6 +323,10 @@ CREATE TABLE IF NOT EXISTS metadata_catalog (
   -- Lineage
   parent_tables TEXT, -- JSON array
 
+  -- Dataset status (for layer-centric mode dependency tracking)
+  dataset_status TEXT DEFAULT 'ready' CHECK(dataset_status IN ('pending', 'running', 'ready', 'failed')),
+  last_execution_id TEXT, -- Reference to the execution that last updated this dataset
+
   -- Metadata
   description TEXT,
   tags TEXT, -- JSON array
@@ -336,6 +348,71 @@ CREATE TABLE IF NOT EXISTS ai_schema_analysis (
   ai_suggestions TEXT, -- JSON
   confidence_score REAL,
   created_at INTEGER NOT NULL
+);
+
+-- Layer-Centric Ingest Jobs table (Landing → Bronze ingestion)
+CREATE TABLE IF NOT EXISTS layer_centric_ingest_jobs (
+  id TEXT PRIMARY KEY,
+  pipeline_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+
+  -- Source configuration
+  source_type TEXT NOT NULL CHECK(source_type IN ('upload', 's3', 'local')),
+  source_path TEXT, -- S3 URI, local path, or upload key
+  file_format TEXT NOT NULL CHECK(file_format IN ('csv', 'parquet', 'json')),
+
+  -- File parsing options (JSON)
+  options TEXT, -- {delimiter, header, date_columns, encoding, quote_char, etc.}
+
+  -- Target configuration
+  target_table TEXT NOT NULL, -- Bronze table name (e.g., "customers_bronze")
+  environment TEXT DEFAULT 'dev' CHECK(environment IN ('dev', 'qa', 'uat', 'prod')),
+
+  -- Schema (detected or specified)
+  detected_schema TEXT, -- JSON schema from file analysis
+
+  -- Status
+  status TEXT DEFAULT 'configured' CHECK(status IN ('configured', 'ready', 'running', 'completed', 'failed')),
+
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (pipeline_id) REFERENCES pipelines(id) ON DELETE CASCADE
+);
+
+-- Layer-Centric Ingest Runs table (execution history for ingest jobs)
+CREATE TABLE IF NOT EXISTS layer_centric_ingest_runs (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+
+  -- Execution status
+  status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'succeeded', 'failed', 'cancelled')),
+
+  -- Prefect integration
+  prefect_flow_run_id TEXT,
+
+  -- Results
+  row_count INTEGER DEFAULT 0,
+  file_size INTEGER DEFAULT 0, -- bytes
+  output_key TEXT, -- Bronze S3/storage key
+
+  -- Schema captured at runtime
+  actual_schema TEXT, -- JSON
+
+  -- Error handling
+  error_message TEXT,
+  error_details TEXT, -- JSON for stack trace, etc.
+
+  -- Timing
+  started_at INTEGER,
+  finished_at INTEGER,
+  duration_ms INTEGER,
+
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+
+  FOREIGN KEY (job_id) REFERENCES layer_centric_ingest_jobs(id) ON DELETE CASCADE
 );
 
 -- Audit Log table
@@ -366,6 +443,9 @@ CREATE INDEX IF NOT EXISTS idx_source_executions_status ON source_executions(sta
 CREATE INDEX IF NOT EXISTS idx_metadata_layer ON metadata_catalog(layer);
 CREATE INDEX IF NOT EXISTS idx_metadata_source_id ON metadata_catalog(source_id);
 CREATE INDEX IF NOT EXISTS idx_metadata_environment ON metadata_catalog(environment);
+CREATE INDEX IF NOT EXISTS idx_metadata_dataset_status ON metadata_catalog(dataset_status);
+CREATE INDEX IF NOT EXISTS idx_sources_is_dataset_job ON sources(is_dataset_job);
+CREATE INDEX IF NOT EXISTS idx_sources_target_layer ON sources(target_layer);
 CREATE INDEX IF NOT EXISTS idx_dq_rules_source_id ON dq_rules(source_id);
 CREATE INDEX IF NOT EXISTS idx_dq_rules_active ON dq_rules(is_active);
 CREATE INDEX IF NOT EXISTS idx_dq_rule_executions_rule_id ON dq_rule_executions(rule_id);
@@ -376,4 +456,11 @@ CREATE INDEX IF NOT EXISTS idx_reconciliation_rules_active ON reconciliation_rul
 CREATE INDEX IF NOT EXISTS idx_reconciliation_executions_rule ON reconciliation_executions(rule_id);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_executions_exec ON reconciliation_executions(execution_id);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity_type, entity_id);
+
+-- Layer-Centric Ingest indexes
+CREATE INDEX IF NOT EXISTS idx_ingest_jobs_pipeline_id ON layer_centric_ingest_jobs(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status ON layer_centric_ingest_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_job_id ON layer_centric_ingest_runs(job_id);
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_status ON layer_centric_ingest_runs(status);
+CREATE INDEX IF NOT EXISTS idx_ingest_runs_started_at ON layer_centric_ingest_runs(started_at);
 `;

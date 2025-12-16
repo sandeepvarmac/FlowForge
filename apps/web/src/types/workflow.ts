@@ -20,6 +20,8 @@ export interface Workflow {
   notificationEmail?: string
   tags?: string[]
   retentionDays?: number
+  // Layer-Centric Mode
+  pipelineMode?: 'source-centric' | 'layer-centric'
   // Execution summary
   lastExecution?: {
     id: string
@@ -60,6 +62,8 @@ export interface WorkflowFormData {
   notificationEmail?: string
   tags?: string[]
   retentionDays?: number
+  // Layer-Centric Mode
+  pipelineMode?: 'source-centric' | 'layer-centric'
 }
 
 export interface WorkflowExecution {

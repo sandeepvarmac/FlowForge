@@ -415,6 +415,336 @@ def catalog_gold_asset(
     )
 
 
+# =============================================================================
+# LAYER-CENTRIC MODE (Dataset Jobs) FUNCTIONS
+# =============================================================================
+
+# Valid dataset status values (matches TypeScript DatasetStatus type)
+DATASET_STATUS_PENDING = "pending"
+DATASET_STATUS_RUNNING = "running"
+DATASET_STATUS_READY = "ready"
+DATASET_STATUS_FAILED = "failed"
+
+VALID_DATASET_STATUSES = [
+    DATASET_STATUS_PENDING,
+    DATASET_STATUS_RUNNING,
+    DATASET_STATUS_READY,
+    DATASET_STATUS_FAILED,
+]
+
+
+def update_dataset_status(
+    table_name: str,
+    status: str,
+    environment: str = "prod",
+    execution_id: Optional[str] = None,
+) -> bool:
+    """
+    Update the dataset_status field in the metadata_catalog.
+
+    Used by layer-centric Dataset Jobs to track readiness for downstream jobs.
+
+    Args:
+        table_name: Name of the table in the catalog
+        status: New status (pending, running, ready, failed)
+        environment: Environment (dev, qa, uat, prod)
+        execution_id: Optional execution ID to track which run updated this
+
+    Returns:
+        True if update was successful, False if table not found
+    """
+    logger = _logger()
+
+    if status not in VALID_DATASET_STATUSES:
+        raise ValueError(f"Invalid status '{status}'. Must be one of: {VALID_DATASET_STATUSES}")
+
+    env = normalize_environment(environment)
+    conn = get_database_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check if entry exists
+        cursor.execute(
+            "SELECT id FROM metadata_catalog WHERE table_name = ? AND environment = ?",
+            (table_name, env)
+        )
+        existing = cursor.fetchone()
+
+        if not existing:
+            logger.warning(f"Dataset '{table_name}' not found in catalog for environment '{env}'")
+            return False
+
+        # Update status
+        now_ms = int(datetime.now().timestamp() * 1000)
+        if execution_id:
+            cursor.execute(
+                """
+                UPDATE metadata_catalog
+                SET dataset_status = ?, last_execution_id = ?, updated_at = ?
+                WHERE table_name = ? AND environment = ?
+                """,
+                (status, execution_id, now_ms, table_name, env)
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE metadata_catalog
+                SET dataset_status = ?, updated_at = ?
+                WHERE table_name = ? AND environment = ?
+                """,
+                (status, now_ms, table_name, env)
+            )
+
+        conn.commit()
+        logger.info(f"✅ Dataset status updated: {table_name} -> {status}")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Failed to update dataset status: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+def get_dataset_paths(
+    table_names: List[str],
+    environment: str = "prod",
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Resolve multiple table names to their S3 paths and metadata.
+
+    Used by layer-centric Dataset Jobs to resolve input datasets.
+
+    Args:
+        table_names: List of table names to resolve
+        environment: Environment (dev, qa, uat, prod)
+
+    Returns:
+        Dict mapping table_name -> {path, schema, row_count, status, layer}
+    """
+    logger = _logger()
+    env = normalize_environment(environment)
+    conn = get_database_connection()
+    cursor = conn.cursor()
+
+    try:
+        placeholders = ", ".join(["?" for _ in table_names])
+        cursor.execute(
+            f"""
+            SELECT table_name, layer, file_path, schema, row_count, file_size, dataset_status
+            FROM metadata_catalog
+            WHERE table_name IN ({placeholders}) AND environment = ?
+            """,
+            (*table_names, env)
+        )
+        rows = cursor.fetchall()
+
+        result = {}
+        for row in rows:
+            result[row["table_name"]] = {
+                "layer": row["layer"],
+                "path": row["file_path"],
+                "schema": json.loads(row["schema"]) if row["schema"] else [],
+                "row_count": row["row_count"] or 0,
+                "file_size": row["file_size"] or 0,
+                "status": row["dataset_status"] or DATASET_STATUS_READY,
+                "is_ready": (row["dataset_status"] or DATASET_STATUS_READY) == DATASET_STATUS_READY,
+            }
+
+        # Log warnings for not-found tables
+        found_tables = set(result.keys())
+        for table_name in table_names:
+            if table_name not in found_tables:
+                logger.warning(f"Dataset '{table_name}' not found in catalog")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"❌ Failed to get dataset paths: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+def check_datasets_ready(
+    table_names: List[str],
+    environment: str = "prod",
+) -> Dict[str, Any]:
+    """
+    Check if all specified datasets are ready.
+
+    Used by layer-centric Dataset Jobs before execution to ensure inputs are available.
+
+    Args:
+        table_names: List of table names to check
+        environment: Environment (dev, qa, uat, prod)
+
+    Returns:
+        Dict with:
+            - all_ready: bool
+            - ready: List of ready table names
+            - not_ready: List of {name, status} for tables not ready
+            - not_found: List of table names not in catalog
+    """
+    datasets = get_dataset_paths(table_names, environment)
+
+    ready = []
+    not_ready = []
+    not_found = []
+
+    for table_name in table_names:
+        if table_name not in datasets:
+            not_found.append(table_name)
+        elif datasets[table_name]["is_ready"]:
+            ready.append(table_name)
+        else:
+            not_ready.append({
+                "name": table_name,
+                "status": datasets[table_name]["status"]
+            })
+
+    return {
+        "all_ready": len(not_ready) == 0 and len(not_found) == 0,
+        "ready": ready,
+        "not_ready": not_ready,
+        "not_found": not_found,
+    }
+
+
+def catalog_dataset_job_output(
+    output_table_name: str,
+    layer: str,
+    s3_key: str,
+    row_count: int,
+    dataframe: Any,
+    parent_tables: List[str],
+    source_id: Optional[str] = None,
+    environment: str = "prod",
+    description: Optional[str] = None,
+    execution_id: Optional[str] = None,
+) -> str:
+    """
+    Catalog the output of a layer-centric Dataset Job.
+
+    Similar to catalog_bronze/silver/gold_asset but designed for Dataset Jobs
+    which may have multiple parent tables.
+
+    Args:
+        output_table_name: Name for the output table
+        layer: Target layer (bronze, silver, gold)
+        s3_key: S3 key for the output file
+        row_count: Number of rows
+        dataframe: Polars DataFrame to extract schema from
+        parent_tables: List of parent table names (for lineage)
+        source_id: Optional source ID (may be None for standalone Dataset Jobs)
+        environment: Environment
+        description: Optional description
+        execution_id: Optional execution ID
+
+    Returns:
+        Asset ID
+    """
+    logger = _logger()
+    schema = get_schema_from_dataframe(dataframe)
+    file_size = get_file_size_from_s3(s3_key)
+    env = normalize_environment(environment)
+
+    conn = get_database_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check if entry exists
+        cursor.execute(
+            "SELECT id FROM metadata_catalog WHERE layer = ? AND table_name = ? AND environment = ?",
+            (layer, output_table_name, env)
+        )
+        existing = cursor.fetchone()
+
+        now_ms = int(datetime.now().timestamp() * 1000)
+
+        if existing:
+            asset_id = existing[0]
+            logger.info(f"Updating existing {layer} catalog entry: {asset_id}")
+
+            cursor.execute(
+                """
+                UPDATE metadata_catalog
+                SET source_id = ?,
+                    schema = ?,
+                    row_count = ?,
+                    file_size = ?,
+                    file_path = ?,
+                    parent_tables = ?,
+                    description = ?,
+                    dataset_status = ?,
+                    last_execution_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    source_id,
+                    json.dumps(schema),
+                    row_count,
+                    file_size,
+                    f"s3://flowforge-data/{s3_key}",
+                    json.dumps(parent_tables) if parent_tables else None,
+                    description or f"Dataset Job output: {output_table_name}",
+                    DATASET_STATUS_READY,  # Mark as ready after successful write
+                    execution_id,
+                    now_ms,
+                    asset_id,
+                )
+            )
+        else:
+            asset_id = generate_asset_id(layer, output_table_name, source_id or "dataset_job")
+            logger.info(f"Creating new {layer} catalog entry: {asset_id}")
+
+            cursor.execute(
+                """
+                INSERT INTO metadata_catalog (
+                    id, layer, table_name, source_id, environment,
+                    schema, row_count, file_size, file_path,
+                    parent_tables, description, dataset_status, last_execution_id,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    asset_id,
+                    layer,
+                    output_table_name,
+                    source_id,
+                    env,
+                    json.dumps(schema),
+                    row_count,
+                    file_size,
+                    f"s3://flowforge-data/{s3_key}",
+                    json.dumps(parent_tables) if parent_tables else None,
+                    description or f"Dataset Job output: {output_table_name}",
+                    DATASET_STATUS_READY,
+                    execution_id,
+                    now_ms,
+                    now_ms,
+                )
+            )
+
+        conn.commit()
+        logger.info(f"✅ Dataset Job output cataloged: {asset_id} ({layer}/{output_table_name})")
+        return asset_id
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"❌ Failed to catalog Dataset Job output: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# ORIGINAL SOURCE-CENTRIC FUNCTIONS
+# =============================================================================
+
+
 def update_job_execution_metrics(
     job_id: str,
     bronze_records: Optional[int] = None,

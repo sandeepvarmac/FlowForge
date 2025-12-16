@@ -1,0 +1,49 @@
+###
+### A complete description of a Prefect Deployment for flow 'layer-centric-pipeline'
+###
+name: layer-centric-pipeline
+description: "Execute a full layer-centric pipeline:\n1) Run all ingest jobs (Landing\u2192\
+  Bronze)\n2) Wait for ingest jobs to finish\n3) Run all dataset jobs (Silver/Gold)"
+version: d2d23bd08263565c80feee64094d8989
+# The work queue that will handle this deployment's runs
+work_queue_name: default
+work_pool_name: default-pool
+tags: []
+parameters: {}
+schedule: null
+schedules: []
+is_schedule_active: null
+infra_overrides: {}
+infrastructure:
+  type: process
+  env: {}
+  labels: {}
+  name: null
+  command: null
+  stream_output: true
+  working_dir: null
+  block_type_slug: process
+  _block_type_slug: process
+
+###
+### DO NOT EDIT BELOW THIS LINE
+###
+flow_name: layer-centric-pipeline
+manifest_path: null
+storage: null
+path: C:\Dev\FlowForge\prefect-flows
+entrypoint: flows\layer_centric_pipeline.py:layer_centric_pipeline_flow
+parameter_openapi_schema:
+  title: Parameters
+  type: object
+  properties:
+    pipeline_id:
+      position: 0
+      title: pipeline_id
+      type: string
+  required:
+  - pipeline_id
+  definitions: null
+timestamp: '2025-12-15T01:44:55.178681+00:00'
+triggers: []
+enforce_parameter_schema: null

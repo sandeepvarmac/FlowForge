@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
         jobs: row.jobs ? JSON.parse(row.jobs) : [],
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
         nextRun: nextRunTimestamp ? new Date(nextRunTimestamp * 1000) : undefined,
+        pipelineMode: row.pipeline_mode || 'source-centric',
         createdAt: new Date(row.created_at),
         updatedAt: new Date(row.updated_at)
       }
@@ -201,8 +202,8 @@ export async function POST(request: NextRequest) {
       INSERT INTO pipelines (
         id, name, description, application, owner, status, type,
         team, notification_email, tags, environment, priority, data_classification,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        pipeline_mode, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       body.name,
@@ -217,6 +218,7 @@ export async function POST(request: NextRequest) {
       body.environment || 'development',
       body.priority || null,
       body.dataClassification || null,
+      body.pipelineMode || 'source-centric', // Default to source-centric
       now,
       now
     )

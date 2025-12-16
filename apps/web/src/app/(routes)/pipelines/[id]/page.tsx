@@ -12,7 +12,9 @@ import { MetadataCatalog } from '@/components/metadata'
 import { WorkflowTriggersSection } from '@/components/workflows/workflow-triggers-section'
 import { AddTriggerModal } from '@/components/workflows/add-trigger-modal'
 import { CreatePipelineModal } from '@/components/workflows/create-workflow-modal'
-import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil, ChevronDown } from 'lucide-react'
+import { CreateDatasetJobModal, DatasetJobCard, CreateIngestJobModal, IngestJobCard } from '@/components/layer-centric'
+import { useFeatureFlags } from '@/lib/config/feature-flags'
+import { ArrowLeft, Play, Pause, Settings, Activity, Clock, User, Building, CheckCircle, XCircle, Loader2, AlertCircle, Database, FileText, Cloud, ArrowRight, Layers, Pencil, ChevronDown, Plus, Download } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const getStatusVariant = (status: string) => {
@@ -56,14 +58,15 @@ interface WorkflowExecution {
   jobExecutions?: JobExecutionDetail[]
 }
 
-const formatDateTime = (value?: Date) => {
-  if (!value) return '—'
+const formatDateTime = (value?: Date | string | number) => {
+  const date = value instanceof Date ? value : value ? new Date(value) : null
+  if (!date || isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  }).format(value)
+  }).format(date)
 }
 
 const formatDuration = (durationMs?: number) => {
@@ -95,12 +98,19 @@ interface TimelineEvent {
   severity: TimelineEventSeverity
 }
 
-const formatTimeOnly = (value?: Date) => {
-  if (!value) return 'unknown time'
+const formatTimeOnly = (value?: Date | string | number) => {
+  const date = value instanceof Date ? value : value ? new Date(value) : null
+  if (!date || isNaN(date.getTime())) return 'unknown time'
   return new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
     minute: '2-digit'
-  }).format(value)
+  }).format(date)
+}
+
+const safeDistanceToNow = (value?: Date | string | number) => {
+  const date = value instanceof Date ? value : value ? new Date(value) : null
+  if (!date || isNaN(date.getTime())) return '—'
+  return formatDistanceToNow(date, { addSuffix: true })
 }
 
 const buildExecutionTimeline = (
@@ -296,6 +306,7 @@ export default function PipelineDetailPage() {
   const router = useRouter()
   const { state, dispatch } = useAppContext()
   const { toast } = useToast()
+  const { showLayerCentricMode } = useFeatureFlags()
   const { runWorkflow, pauseWorkflow, resumeWorkflow, isLoading } = useWorkflowActions()
   const { createJob, updateJob, uploadFile } = useJobActions()
   const [executions, setExecutions] = React.useState<WorkflowExecution[]>([])
@@ -313,9 +324,22 @@ export default function PipelineDetailPage() {
   const [triggerSectionKey, setTriggerSectionKey] = React.useState(0)
   const [editWorkflowModalOpen, setEditWorkflowModalOpen] = React.useState(false)
   const [editWorkflowData, setEditWorkflowData] = React.useState<any>(undefined)
+  // Dataset Jobs state (layer-centric mode)
+  const [datasetJobs, setDatasetJobs] = React.useState<any[]>([])
+  const [loadingDatasetJobs, setLoadingDatasetJobs] = React.useState(false)
+  const [createDatasetJobModalOpen, setCreateDatasetJobModalOpen] = React.useState(false)
+  const [runningDatasetJobs, setRunningDatasetJobs] = React.useState<Set<string>>(new Set())
+  // Ingest Jobs state (layer-centric mode - Landing -> Bronze)
+  const [ingestJobs, setIngestJobs] = React.useState<any[]>([])
+  const [loadingIngestJobs, setLoadingIngestJobs] = React.useState(false)
+  const [createIngestJobModalOpen, setCreateIngestJobModalOpen] = React.useState(false)
+  const [runningIngestJobs, setRunningIngestJobs] = React.useState<Set<string>>(new Set())
 
   const workflowId = params.id as string
   const workflow = state.workflows.find(w => w.id === workflowId)
+  const [workflowOverride, setWorkflowOverride] = React.useState<any>(null)
+  const effectiveWorkflow = workflowOverride || workflow
+  const isLayerCentric = effectiveWorkflow?.pipelineMode === 'layer-centric'
   const latestExecution = React.useMemo(() => (executions.length > 0 ? executions[0] : undefined), [executions])
   const jobExecutionLookup = React.useMemo(() => {
     if (!latestExecution?.jobExecutions) {
@@ -347,11 +371,27 @@ export default function PipelineDetailPage() {
   }, [latestExecution])
 
   React.useEffect(() => {
-    if (workflow) {
+    // If workflow is missing or missing pipelineMode, fetch a fresh copy
+    if (!workflow || !workflow.pipelineMode) {
+      fetch(`/api/workflows/${workflowId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.workflow) setWorkflowOverride(data.workflow)
+        })
+        .catch(() => {})
+    }
+
+    const wf = workflowOverride || workflow
+    if (wf) {
       loadExecutions()
       loadLandingFiles()
+      // Load dataset jobs and ingest jobs for layer-centric pipelines
+      if (wf.pipelineMode === 'layer-centric' || showLayerCentricMode) {
+        loadDatasetJobs()
+        loadIngestJobs()
+      }
     }
-  }, [workflow])
+  }, [workflow, workflowOverride])
 
   const loadExecutions = async () => {
     try {
@@ -378,6 +418,125 @@ export default function PipelineDetailPage() {
     } finally {
       setLoadingLandingFiles(false)
     }
+  }
+
+  const loadDatasetJobs = async () => {
+    try {
+      setLoadingDatasetJobs(true)
+      const response = await fetch(`/api/workflows/${workflowId}/dataset-jobs`)
+      if (response.ok) {
+        const data = await response.json()
+        setDatasetJobs(data.jobs || [])
+      }
+    } catch (error) {
+      console.error('Failed to load dataset jobs:', error)
+    } finally {
+      setLoadingDatasetJobs(false)
+    }
+  }
+
+  const handleRunDatasetJob = async (jobId: string) => {
+    try {
+      setRunningDatasetJobs(prev => new Set(prev).add(jobId))
+      const response = await fetch(`/api/workflows/${workflowId}/dataset-jobs/${jobId}/run`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        throw new Error('Failed to run dataset job')
+      }
+      const result = await response.json()
+      toast({
+        type: 'success',
+        title: 'Dataset Job Started',
+        description: `Execution ${result.executionId} has been triggered`
+      })
+      // Reload executions after a short delay
+      setTimeout(() => {
+        loadExecutions()
+        loadDatasetJobs()
+      }, 2000)
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Execution Failed',
+        description: error instanceof Error ? error.message : 'Failed to run dataset job'
+      })
+    } finally {
+      setRunningDatasetJobs(prev => {
+        const next = new Set(prev)
+        next.delete(jobId)
+        return next
+      })
+    }
+  }
+
+  const handleDatasetJobCreated = () => {
+    loadDatasetJobs()
+    toast({
+      type: 'success',
+      title: 'Dataset Job Created',
+      description: 'Your new Dataset Job has been added to the pipeline'
+    })
+  }
+
+  // Ingest Jobs handlers
+  const loadIngestJobs = async () => {
+    try {
+      setLoadingIngestJobs(true)
+      const response = await fetch(`/api/workflows/${workflowId}/ingest-jobs`)
+      if (response.ok) {
+        const data = await response.json()
+        setIngestJobs(data.jobs || [])
+      }
+    } catch (error) {
+      console.error('Failed to load ingest jobs:', error)
+    } finally {
+      setLoadingIngestJobs(false)
+    }
+  }
+
+  const handleRunIngestJob = async (jobId: string) => {
+    try {
+      setRunningIngestJobs(prev => new Set(prev).add(jobId))
+      const response = await fetch(`/api/workflows/${workflowId}/ingest-jobs/${jobId}/run`, {
+        method: 'POST'
+      })
+      if (!response.ok) {
+        throw new Error('Failed to run ingest job')
+      }
+      const result = await response.json()
+      toast({
+        type: 'success',
+        title: 'Ingest Job Started',
+        description: `Ingesting data to Bronze layer (run: ${result.runId?.slice(0, 8)})`
+      })
+      // Reload ingest jobs after a short delay
+      setTimeout(() => {
+        loadIngestJobs()
+        loadExecutions()
+      }, 2000)
+    } catch (error) {
+      toast({
+        type: 'error',
+        title: 'Execution Failed',
+        description: error instanceof Error ? error.message : 'Failed to run ingest job'
+      })
+    } finally {
+      setRunningIngestJobs(prev => {
+        const next = new Set(prev)
+        next.delete(jobId)
+        return next
+      })
+    }
+  }
+
+  const handleIngestJobCreated = () => {
+    loadIngestJobs()
+    toast({
+      type: 'success',
+      title: 'Ingest Job Created',
+      description: 'Your new Ingest Job has been added to the pipeline'
+    })
   }
 
   if (!workflow) {
@@ -648,59 +807,61 @@ export default function PipelineDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Data Sources */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Layers className="w-5 h-5" />
-              Data Sources ({workflow.jobs.length} sources)
-            </CardTitle>
-            <Button
-              variant="outline"
-              onClick={() => setCreateJobModalOpen(true)}
-            >
-              <span className="mr-2">+</span>
-              Add Source
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {workflow.jobs.length === 0 ? (
-              <div className="text-center py-8 text-foreground-muted">
-                <Activity className="w-8 h-8 mx-auto mb-3 opacity-50" />
-                <p>No sources configured</p>
-                <p className="text-sm">Add sources to define your data pipeline</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {workflow.jobs
-                  .slice()
-                  .sort((a, b) => a.order - b.order)
-                  .map((job, index) => {
-                    return (
-                      <React.Fragment key={job.id}>
-                        <JobCard
-                          job={job}
-                          workflowId={workflowId}
-                          onRunJob={handleRunJob}
-                          onEditJob={handleEditJob}
-                          onCloneJob={handleCloneJob}
-                          isRunning={runningJobs.has(job.id)}
-                        />
+        {/* Data Sources (Source-Centric Mode Only) */}
+        {!isLayerCentric && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="w-5 h-5" />
+                Data Sources ({workflow.jobs.length} sources)
+              </CardTitle>
+              <Button
+                variant="outline"
+                onClick={() => setCreateJobModalOpen(true)}
+              >
+                <span className="mr-2">+</span>
+                Add Source
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {workflow.jobs.length === 0 ? (
+                <div className="text-center py-8 text-foreground-muted">
+                  <Activity className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                  <p>No sources configured</p>
+                  <p className="text-sm">Add sources to define your data pipeline</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {workflow.jobs
+                    .slice()
+                    .sort((a, b) => a.order - b.order)
+                    .map((job, index) => {
+                      return (
+                        <React.Fragment key={job.id}>
+                          <JobCard
+                            job={job}
+                            workflowId={workflowId}
+                            onRunJob={handleRunJob}
+                            onEditJob={handleEditJob}
+                            onCloneJob={handleCloneJob}
+                            isRunning={runningJobs.has(job.id)}
+                          />
 
-                        {index < workflow.jobs.length - 1 && (
-                          <div className="flex justify-center my-2">
-                            <div className="w-6 h-6 bg-primary-50 rounded-full flex items-center justify-center">
-                              <ArrowRight className="w-4 h-4 text-primary" />
+                          {index < workflow.jobs.length - 1 && (
+                            <div className="flex justify-center my-2">
+                              <div className="w-6 h-6 bg-primary-50 rounded-full flex items-center justify-center">
+                                <ArrowRight className="w-4 h-4 text-primary" />
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </React.Fragment>
-                    )
-                  })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          )}
+                        </React.Fragment>
+                      )
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Landing Files */}
         <Card>
@@ -793,6 +954,100 @@ export default function PipelineDetailPage() {
           onAddTrigger={() => setAddTriggerModalOpen(true)}
         />
 
+        {/* Ingest Jobs Section (Layer-Centric Mode - Landing -> Bronze) */}
+        {showLayerCentricMode && isLayerCentric && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-accent-orange" />
+                Ingest Jobs (Landing → Bronze) ({ingestJobs.length})
+                <Badge variant="outline" className="ml-2 border-accent-orange/30 text-accent-orange">Layer-Centric</Badge>
+              </CardTitle>
+              <Button
+                variant="outline"
+                onClick={() => setCreateIngestJobModalOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Ingest Job
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingIngestJobs ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-6 h-6 mx-auto mb-3 animate-spin text-primary" />
+                  <p className="text-foreground-muted">Loading ingest jobs...</p>
+                </div>
+              ) : ingestJobs.length === 0 ? (
+                <div className="text-center py-8 text-foreground-muted">
+                  <Download className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                  <p>No Ingest Jobs configured</p>
+                  <p className="text-sm mt-1">
+                    Ingest jobs load files (CSV, Parquet, JSON) directly into the Bronze layer
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {ingestJobs.map((job) => (
+                    <IngestJobCard
+                      key={job.id}
+                      job={job}
+                      onRun={handleRunIngestJob}
+                      isRunning={runningIngestJobs.has(job.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Dataset Jobs Section (Layer-Centric Mode) */}
+        {showLayerCentricMode && isLayerCentric && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Layers className="w-5 h-5" />
+                Dataset Jobs (Silver / Gold) ({datasetJobs.length})
+                <Badge variant="secondary" className="ml-2">Layer-Centric</Badge>
+              </CardTitle>
+              <Button
+                variant="outline"
+                onClick={() => setCreateDatasetJobModalOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Dataset Job
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingDatasetJobs ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-6 h-6 mx-auto mb-3 animate-spin text-primary" />
+                  <p className="text-foreground-muted">Loading dataset jobs...</p>
+                </div>
+              ) : datasetJobs.length === 0 ? (
+                <div className="text-center py-8 text-foreground-muted">
+                  <Layers className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                  <p>No Dataset Jobs configured</p>
+                  <p className="text-sm mt-1">
+                    Dataset jobs transform Bronze → Silver or Silver → Gold
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {datasetJobs.map((job) => (
+                    <DatasetJobCard
+                      key={job.id}
+                      job={job}
+                      onRun={handleRunDatasetJob}
+                      isRunning={runningDatasetJobs.has(job.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Execution History */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -863,18 +1118,12 @@ export default function PipelineDetailPage() {
                               </Badge>
                             </div>
                             <span className="text-sm font-medium text-foreground">
-                              {execution.startTime && formatDistanceToNow(execution.startTime, { addSuffix: true })}
+                              {safeDistanceToNow(execution.startTime)}
                             </span>
                           </div>
                           <div className="text-right">
                             <p className="text-sm font-medium text-foreground">
-                              {execution.startTime && new Intl.DateTimeFormat('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit'
-                              }).format(execution.startTime)}
+                              {execution.startTime ? formatDateTime(execution.startTime) : '—'}
                             </p>
                             {execution.duration && execution.duration > 0 && (
                               <p className="text-xs text-foreground-muted">
@@ -1321,6 +1570,26 @@ export default function PipelineDetailPage() {
           setTriggerSectionKey(prev => prev + 1) // Force reload of triggers section
         }}
       />
+
+      {/* Create Dataset Job Modal (Layer-Centric Mode) */}
+      {showLayerCentricMode && isLayerCentric && (
+        <CreateDatasetJobModal
+          open={createDatasetJobModalOpen}
+          onOpenChange={setCreateDatasetJobModalOpen}
+          pipelineId={workflowId}
+          onSuccess={handleDatasetJobCreated}
+        />
+      )}
+
+      {/* Create Ingest Job Modal (Layer-Centric Mode - Landing -> Bronze) */}
+      {showLayerCentricMode && isLayerCentric && (
+        <CreateIngestJobModal
+          open={createIngestJobModalOpen}
+          onOpenChange={setCreateIngestJobModalOpen}
+          pipelineId={workflowId}
+          onSuccess={handleIngestJobCreated}
+        />
+      )}
     </div>
   )
 }

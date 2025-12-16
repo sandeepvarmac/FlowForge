@@ -57,6 +57,57 @@ interface PrefectRunResponse {
   state_id?: string
 }
 
+/**
+ * Try to trigger a Prefect deployment for a layer-centric pipeline.
+ * Returns the flow run ID if dispatched, otherwise null.
+ */
+async function triggerLayerCentricPrefectPipeline(pipelineId: string): Promise<string | null> {
+  try {
+    const deploymentsResponse = await fetch(`${PREFECT_API_URL}/deployments/filter`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deployments: { name: { any_: ['layer-centric-pipeline'] } },
+        limit: 1,
+      }),
+    })
+
+    if (!deploymentsResponse.ok) {
+      console.warn('⚠️ Could not reach Prefect API for layer-centric pipeline deployment')
+      return null
+    }
+
+    const deployments = await deploymentsResponse.json()
+    if (!deployments || deployments.length === 0) {
+      console.warn('⚠️ No layer-centric-pipeline deployment found')
+      return null
+    }
+
+    const deploymentId = deployments[0].id
+    const flowRunResponse = await fetch(`${PREFECT_API_URL}/deployments/${deploymentId}/create_flow_run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: `layer-centric-${pipelineId}-${Date.now()}`,
+        parameters: { pipeline_id: pipelineId },
+      }),
+    })
+
+    if (!flowRunResponse.ok) {
+      const detail = await flowRunResponse.text()
+      console.error('❌ Prefect layer-centric flow run creation failed:', detail)
+      return null
+    }
+
+    const flowRun = await flowRunResponse.json()
+    console.log(`✅ Triggered Prefect layer-centric pipeline run: ${flowRun.id}`)
+    return flowRun.id
+  } catch (error: any) {
+    console.warn('⚠️ Prefect layer-centric trigger error:', error?.message || error)
+    return null
+  }
+}
+
 async function triggerPrefectRun(
   deploymentId: string,
   parameters: Record<string, unknown>
@@ -95,6 +146,136 @@ export async function POST(
         { error: 'Workflow not found' },
         { status: 404 }
       )
+    }
+
+    // ----------------------------------------------------------------------
+    // Layer-Centric pipeline execution: orchestrate ingest -> dataset jobs
+    // ----------------------------------------------------------------------
+    if (workflow.pipeline_mode === 'layer-centric') {
+      const startTime = Date.now()
+      const executionId = `exec_${startTime}_${Math.random().toString(36).slice(2, 9)}`
+      const workflowEnv = (workflow.environment || 'production').toString().toLowerCase()
+
+      // Create execution record
+      db.prepare(`
+        INSERT INTO executions (id, pipeline_id, status, started_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(executionId, workflowId, 'running', startTime, startTime, startTime)
+
+      // First try Prefect deployment; fallback to inline if not available
+      const prefectFlowRunId = await triggerLayerCentricPrefectPipeline(workflowId)
+      if (prefectFlowRunId) {
+        db.prepare(`
+          UPDATE executions
+          SET status = ?, updated_at = ?, flow_run_id = ?
+          WHERE id = ?
+        `).run('running', Date.now(), prefectFlowRunId, executionId)
+
+        return NextResponse.json({
+          success: true,
+          executionId,
+          status: 'running',
+          prefectFlowRunId,
+          message: 'Layer-centric pipeline triggered via Prefect',
+        })
+      }
+
+      // If Prefect is required (production), fail fast rather than inline
+      if (workflowEnv in { production: true, prod: true }) {
+        db.prepare(`
+          UPDATE executions
+          SET status = ?, completed_at = ?, updated_at = ?
+          WHERE id = ?
+        `).run('failed', Date.now(), Date.now(), executionId)
+
+        return NextResponse.json(
+          {
+            success: false,
+            executionId,
+            status: 'failed',
+            error: 'Prefect deployment layer-centric-pipeline not available in production',
+          },
+          { status: 503 }
+        )
+      }
+
+      const origin = new URL(request.url).origin
+      const jobResults: Array<Record<string, unknown>> = []
+      let overallStatus: 'running' | 'failed' | 'completed' = 'running'
+
+      // Run ingest jobs (Landing -> Bronze) sequentially
+      const ingestJobs = db.prepare(`
+        SELECT id, name FROM layer_centric_ingest_jobs
+        WHERE pipeline_id = ?
+        ORDER BY created_at ASC
+      `).all(workflowId) as Array<{ id: string; name: string }>
+
+      for (const job of ingestJobs) {
+        const resp = await fetch(
+          `${origin}/api/workflows/${workflowId}/ingest-jobs/${job.id}/run`,
+          { method: 'POST' }
+        )
+        const body = await resp.json()
+        jobResults.push({
+          type: 'ingest',
+          jobId: job.id,
+          jobName: job.name,
+          status: resp.ok ? 'started' : 'failed',
+          details: body,
+        })
+        if (!resp.ok) {
+          overallStatus = 'failed'
+          break
+        }
+      }
+
+      // Run dataset jobs (Silver/Gold) only if ingest succeeded
+      if (overallStatus !== 'failed') {
+        const datasetJobs = db.prepare(`
+          SELECT id, name FROM sources
+          WHERE pipeline_id = ? AND is_dataset_job = 1
+          ORDER BY created_at ASC
+        `).all(workflowId) as Array<{ id: string; name: string }>
+
+        for (const job of datasetJobs) {
+          const resp = await fetch(
+            `${origin}/api/workflows/${workflowId}/dataset-jobs/${job.id}/run`,
+            { method: 'POST' }
+          )
+          const body = await resp.json()
+          jobResults.push({
+            type: 'dataset',
+            jobId: job.id,
+            jobName: job.name,
+            status: resp.ok ? 'started' : 'failed',
+            details: body,
+          })
+          if (!resp.ok) {
+            overallStatus = 'failed'
+            break
+          }
+        }
+      }
+
+      const finishTime = Date.now()
+      const finalStatus = overallStatus === 'failed' ? 'failed' : 'completed'
+
+      db.prepare(`
+        UPDATE executions
+        SET status = ?, completed_at = ?, duration_ms = ?, updated_at = ?
+        WHERE id = ?
+      `).run(finalStatus, finishTime, finishTime - startTime, finishTime, executionId)
+
+      db.prepare(`
+        UPDATE pipelines SET last_run = ?, updated_at = ? WHERE id = ?
+      `).run(startTime, finishTime, workflowId)
+
+      return NextResponse.json({
+        success: finalStatus === 'completed',
+        executionId,
+        status: finalStatus,
+        jobResults,
+      }, { status: finalStatus === 'completed' ? 200 : 500 })
     }
 
     const jobs = db.prepare(`
