@@ -120,3 +120,16 @@ docker-compose.override.yml
 .prefect/
 prefect-flows/.prefectignore
 
+# Archive and backup folders (local only)
+archive/
+backup/
+
+# Sample data (local testing)
+sample-data/
+
+# Prefect flow tests (local development)
+prefect-flows/tests/
+
+# Root-level database file (if accidentally placed outside data/)
+apps/web/flowforge.db
+
